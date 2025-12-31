@@ -21,3 +21,6 @@ export const deleteActivity = (id: string) => {
   return request.delete(`/activities/${id}`)
 }
 
+
+
+

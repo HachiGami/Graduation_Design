@@ -218,8 +218,27 @@ async def init_demo_data():
         }
     ]
     
-    await db.resources.insert_many(resources)
-    await db.personnel.insert_many(personnel)
+    resource_result = await db.resources.insert_many(resources)
+    personnel_result = await db.personnel.insert_many(personnel)
+    
+    resource_ids = [str(id) for id in resource_result.inserted_ids]
+    personnel_ids = [str(id) for id in personnel_result.inserted_ids]
+    
+    activities[0]["required_resources"] = [resource_ids[0], resource_ids[1]]
+    activities[0]["required_personnel"] = [personnel_ids[0]]
+    
+    activities[1]["required_resources"] = [resource_ids[0]]
+    activities[1]["required_personnel"] = [personnel_ids[0]]
+    
+    activities[2]["required_resources"] = [resource_ids[3]]
+    activities[2]["required_personnel"] = [personnel_ids[0]]
+    
+    activities[3]["required_resources"] = [resource_ids[2]]
+    activities[3]["required_personnel"] = [personnel_ids[2]]
+    
+    activities[4]["required_resources"] = []
+    activities[4]["required_personnel"] = [personnel_ids[1]]
+    
     await db.dependencies.insert_many(dependencies)
     await db.activities.insert_many(activities)
     

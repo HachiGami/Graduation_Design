@@ -21,3 +21,6 @@ export const deleteResource = (id: string) => {
   return request.delete(`/resources/${id}`)
 }
 
+
+
+

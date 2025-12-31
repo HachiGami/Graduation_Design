@@ -21,3 +21,6 @@ export const deleteDependency = (id: string) => {
   return request.delete(`/dependencies/${id}`)
 }
 
+
+
+

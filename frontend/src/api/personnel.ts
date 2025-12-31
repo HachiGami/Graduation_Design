@@ -21,3 +21,6 @@ export const deletePersonnel = (id: string) => {
   return request.delete(`/personnel/${id}`)
 }
 
+
+
+
