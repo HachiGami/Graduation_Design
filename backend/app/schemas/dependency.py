@@ -3,28 +3,25 @@ from typing import Optional
 from datetime import datetime
 
 class DependencyBase(BaseModel):
-    name: str = Field(..., description="依赖关系名称")
-    predecessor_stage: str = Field(..., description="前置环节")
-    successor_stage: str = Field(..., description="后置环节")
+    source_activity_id: str = Field(..., description="前置活动ID (MongoDB ID)")
+    target_activity_id: str = Field(..., description="后置活动ID (MongoDB ID)")
     dependency_type: str = Field(..., description="依赖类型：sequential/parallel/conditional")
-    time_constraint: Optional[int] = Field(None, description="时间约束（分钟）")
-    condition: Optional[str] = Field(None, description="条件描述")
+    time_constraint: Optional[int] = Field(0, description="时间约束（分钟），例如FS+lag")
+    status: Optional[str] = Field("active", description="依赖状态：active/inactive/pending")
+    description: Optional[str] = Field(None, description="依赖关系描述")
 
 class DependencyCreate(DependencyBase):
     pass
 
 class DependencyUpdate(BaseModel):
-    name: Optional[str] = None
-    predecessor_stage: Optional[str] = None
-    successor_stage: Optional[str] = None
     dependency_type: Optional[str] = None
     time_constraint: Optional[int] = None
-    condition: Optional[str] = None
+    status: Optional[str] = None
+    description: Optional[str] = None
 
 class DependencyResponse(DependencyBase):
-    id: str = Field(..., alias="_id")
-    created_at: datetime
-    updated_at: datetime
-
+    id: Optional[str] = Field(None, description="关系唯一标识（如有）")
+    created_at: Optional[datetime] = None
+    
     class Config:
         populate_by_name = True

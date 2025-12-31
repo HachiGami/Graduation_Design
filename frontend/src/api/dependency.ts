@@ -1,5 +1,5 @@
 import request from './request'
-import type { Dependency } from '@/types'
+import type { Dependency, GraphData } from '@/types'
 
 export const getDependencies = () => {
   return request.get<any, Dependency[]>('/dependencies')
@@ -20,6 +20,11 @@ export const updateDependency = (id: string, data: Partial<Dependency>) => {
 export const deleteDependency = (id: string) => {
   return request.delete(`/dependencies/${id}`)
 }
+
+export const getGraphData = () => {
+  return request.get<any, GraphData>('/dependencies/graph/data')
+}
+
 
 
 

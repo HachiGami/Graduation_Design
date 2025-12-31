@@ -27,14 +27,42 @@ export interface Personnel {
 
 export interface Dependency {
   id?: string
-  name: string
-  predecessor_stage: string
-  successor_stage: string
+  source_activity_id: string
+  target_activity_id: string
   dependency_type: string
   time_constraint?: number
-  condition?: string
+  status?: string
+  description?: string
   created_at?: string
-  updated_at?: string
+}
+
+export interface ResourceUsage {
+  id?: string
+  activity_id: string
+  resource_id: string
+  quantity: number
+  unit: string
+  stage?: string
+}
+
+export interface GraphNode {
+  id: string
+  name: string
+  type: string
+  status: string
+}
+
+export interface GraphEdge {
+  source: string
+  target: string
+  type: string
+  time_constraint?: number
+  description?: string
+}
+
+export interface GraphData {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
 }
 
 export interface SOPStep {

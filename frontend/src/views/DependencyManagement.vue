@@ -3,15 +3,24 @@
     <el-card>
       <template #header>
         <div class="card-header">
+          <span>依赖关系图</span>
+          <el-button @click="loadGraphData">刷新</el-button>
+        </div>
+      </template>
+      <DependencyGraph :data="graphData" />
+    </el-card>
+
+    <el-card style="margin-top: 20px;">
+      <template #header>
+        <div class="card-header">
           <span>依赖关系管理</span>
           <el-button type="primary" @click="handleAdd">添加依赖</el-button>
         </div>
       </template>
       
       <el-table :data="dependencies" stripe>
-        <el-table-column prop="name" label="名称" />
-        <el-table-column prop="predecessor_stage" label="前置环节" />
-        <el-table-column prop="successor_stage" label="后置环节" />
+        <el-table-column prop="source_activity_id" label="源活动ID" width="220" />
+        <el-table-column prop="target_activity_id" label="目标活动ID" width="220" />
         <el-table-column prop="dependency_type" label="依赖类型">
           <template #default="{ row }">
             <el-tag v-if="row.dependency_type === 'sequential'" type="primary">顺序</el-tag>
@@ -24,6 +33,14 @@
             {{ row.time_constraint ? row.time_constraint + '分钟' : '-' }}
           </template>
         </el-table-column>
+        <el-table-column prop="status" label="状态">
+          <template #default="{ row }">
+            <el-tag v-if="row.status === 'active'" type="success">生效中</el-tag>
+            <el-tag v-else-if="row.status === 'inactive'" type="info">未生效</el-tag>
+            <el-tag v-else type="warning">待确认</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="description" label="描述" show-overflow-tooltip />
         <el-table-column label="操作" width="180">
           <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
@@ -38,28 +55,25 @@
       :title="isEdit ? '编辑依赖关系' : '添加依赖关系'"
       width="600px"
     >
-      <el-form :model="form" label-width="100px">
-        <el-form-item label="名称">
-          <el-input v-model="form.name" />
-        </el-form-item>
-        <el-form-item label="前置环节">
-          <el-select v-model="form.predecessor_stage" placeholder="选择前置环节">
-            <el-option label="牛奶接收" value="牛奶接收" />
-            <el-option label="消毒处理" value="消毒处理" />
-            <el-option label="加热" value="加热" />
-            <el-option label="冷却" value="冷却" />
-            <el-option label="包装" value="包装" />
-            <el-option label="储存" value="储存" />
+      <el-form :model="form" label-width="120px">
+        <el-form-item label="源活动">
+          <el-select v-model="form.source_activity_id" placeholder="选择源活动" filterable>
+            <el-option 
+              v-for="activity in activities" 
+              :key="activity.id" 
+              :label="activity.name" 
+              :value="activity.id" 
+            />
           </el-select>
         </el-form-item>
-        <el-form-item label="后置环节">
-          <el-select v-model="form.successor_stage" placeholder="选择后置环节">
-            <el-option label="消毒处理" value="消毒处理" />
-            <el-option label="加热" value="加热" />
-            <el-option label="冷却" value="冷却" />
-            <el-option label="包装" value="包装" />
-            <el-option label="储存" value="储存" />
-            <el-option label="出库" value="出库" />
+        <el-form-item label="目标活动">
+          <el-select v-model="form.target_activity_id" placeholder="选择目标活动" filterable>
+            <el-option 
+              v-for="activity in activities" 
+              :key="activity.id" 
+              :label="activity.name" 
+              :value="activity.id" 
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="依赖类型">
@@ -72,8 +86,15 @@
         <el-form-item label="时间约束">
           <el-input-number v-model="form.time_constraint" :min="0" placeholder="分钟" />
         </el-form-item>
-        <el-form-item label="条件描述" v-if="form.dependency_type === 'conditional'">
-          <el-input v-model="form.condition" type="textarea" />
+        <el-form-item label="状态">
+          <el-select v-model="form.status">
+            <el-option label="生效中" value="active" />
+            <el-option label="未生效" value="inactive" />
+            <el-option label="待确认" value="pending" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="form.description" type="textarea" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -87,17 +108,21 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getDependencies, createDependency, updateDependency, deleteDependency } from '@/api/dependency'
-import type { Dependency } from '@/types'
+import { getDependencies, createDependency, updateDependency, deleteDependency, getGraphData } from '@/api/dependency'
+import { getActivities } from '@/api/activity'
+import type { Dependency, GraphData, Activity } from '@/types'
+import DependencyGraph from '@/components/DependencyGraph.vue'
 
 const dependencies = ref<Dependency[]>([])
+const activities = ref<Activity[]>([])
+const graphData = ref<GraphData>({ nodes: [], edges: [] })
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const form = ref<Dependency>({
-  name: '',
-  predecessor_stage: '',
-  successor_stage: '',
-  dependency_type: 'sequential'
+  source_activity_id: '',
+  target_activity_id: '',
+  dependency_type: 'sequential',
+  status: 'active'
 })
 
 const loadDependencies = async () => {
@@ -108,13 +133,29 @@ const loadDependencies = async () => {
   }
 }
 
+const loadActivities = async () => {
+  try {
+    activities.value = await getActivities()
+  } catch (error) {
+    ElMessage.error('加载活动失败')
+  }
+}
+
+const loadGraphData = async () => {
+  try {
+    graphData.value = await getGraphData()
+  } catch (error) {
+    ElMessage.error('加载图数据失败')
+  }
+}
+
 const handleAdd = () => {
   isEdit.value = false
   form.value = {
-    name: '',
-    predecessor_stage: '',
-    successor_stage: '',
-    dependency_type: 'sequential'
+    source_activity_id: '',
+    target_activity_id: '',
+    dependency_type: 'sequential',
+    status: 'active'
   }
   dialogVisible.value = true
 }
@@ -136,6 +177,7 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     loadDependencies()
+    loadGraphData()
   } catch (error) {
     ElMessage.error('操作失败')
   }
@@ -150,6 +192,7 @@ const handleDelete = async (row: Dependency) => {
       await deleteDependency(row.id)
       ElMessage.success('删除成功')
       loadDependencies()
+      loadGraphData()
     }
   } catch (error) {
     if (error !== 'cancel') {
@@ -159,7 +202,9 @@ const handleDelete = async (row: Dependency) => {
 }
 
 onMounted(() => {
+  loadActivities()
   loadDependencies()
+  loadGraphData()
 })
 </script>
 
@@ -170,6 +215,7 @@ onMounted(() => {
   align-items: center;
 }
 </style>
+
 
 
 
