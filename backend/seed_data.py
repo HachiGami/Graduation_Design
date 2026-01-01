@@ -257,9 +257,62 @@ async def create_production_p001(mongo_client, neo4j_driver):
         }
     ]
     
-    await db.resources.insert_many(resources)
+    result = await db.resources.insert_many(resources)
+    resource_ids = [str(id) for id in result.inserted_ids]
     
-    print(f"[OK] 生产流程P001: {len(activities)}个活动, {len(dependencies)}条依赖, {len(resources)}个资源")
+    # 同步资源到 Neo4j
+    for idx, resource in enumerate(resources):
+        async with neo4j_driver.session() as session:
+            await session.run(
+                """
+                MERGE (r:Resource {id: $id})
+                SET r.name = $name
+                """,
+                id=resource_ids[idx],
+                name=resource["name"]
+            )
+    
+    # 创建活动-资源使用关系（USES）
+    # 消毒设备 -> 牛奶消毒活动
+    async with neo4j_driver.session() as session:
+        await session.run(
+            """
+            MATCH (a:Activity {id: $activity_id})
+            MATCH (r:Resource {id: $resource_id})
+            MERGE (a)-[u:USES]->(r)
+            SET u.quantity = 1, u.unit = '台', u.stage = 'production'
+            """,
+            activity_id=activity_ids[2],  # 牛奶消毒
+            resource_id=resource_ids[0]   # 消毒设备
+        )
+    
+    # 灌装机 -> 灌装活动
+    async with neo4j_driver.session() as session:
+        await session.run(
+            """
+            MATCH (a:Activity {id: $activity_id})
+            MATCH (r:Resource {id: $resource_id})
+            MERGE (a)-[u:USES]->(r)
+            SET u.quantity = 1, u.unit = '台', u.stage = 'production'
+            """,
+            activity_id=activity_ids[3],  # 灌装
+            resource_id=resource_ids[1]   # 灌装机
+        )
+    
+    # 包装材料 -> 包装活动
+    async with neo4j_driver.session() as session:
+        await session.run(
+            """
+            MATCH (a:Activity {id: $activity_id})
+            MATCH (r:Resource {id: $resource_id})
+            MERGE (a)-[u:USES]->(r)
+            SET u.quantity = 1000, u.unit = '个', u.stage = 'production'
+            """,
+            activity_id=activity_ids[4],  # 包装
+            resource_id=resource_ids[2]   # 包装材料
+        )
+    
+    print(f"[OK] 生产流程P001: {len(activities)}个活动, {len(dependencies)}条依赖, {len(resources)}个资源, 3条USES关系")
     return activity_ids
 
 

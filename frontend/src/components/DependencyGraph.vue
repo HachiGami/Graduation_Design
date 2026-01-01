@@ -52,6 +52,9 @@ const expandedActivities = ref<Set<string>>(new Set())
 const detailDrawerVisible = ref(false)
 const selectedActivity = ref<any>(null)
 
+// T5: 高亮状态管理
+let currentHoverNode: string | null = null
+
 // 缓存布局结果
 let cachedNodePositions: Map<string, { x: number, y: number, isVirtual?: boolean }> | null = null
 let cachedVirtualNodes: string[] = []
@@ -82,10 +85,45 @@ const resetView = () => {
 const toggleActivityExpansion = (activityId: string) => {
   if (expandedActivities.value.has(activityId)) {
     expandedActivities.value.delete(activityId)
+    console.log('[CTX] collapse', activityId)
   } else {
     expandedActivities.value.add(activityId)
+    console.log('[CTX] expand', activityId)
   }
-  initChart()
+  initChart({ preserveView: true })
+}
+
+// 通过 id 查找当前 series 数据索引
+const getDataIndexById = (id: string): number => {
+  if (!chartInstance) return -1
+  const opt = chartInstance.getOption() as any
+  const seriesData: any[] = opt?.series?.[0]?.data || []
+  return seriesData.findIndex(d => d?.id === id)
+}
+
+// T5: 统一高亮控制（hover 状态）
+const setHoverFocus = (nodeId: string | null) => {
+  if (!chartInstance) return
+  console.log('[HOVER] set', nodeId ?? 'null')
+  
+  if (nodeId === null) {
+    if (currentHoverNode !== null) {
+      chartInstance.dispatchAction({ type: 'downplay', seriesIndex: 0 })
+      currentHoverNode = null
+    }
+    return
+  }
+
+  const idx = getDataIndexById(nodeId)
+  if (idx >= 0) {
+    chartInstance.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex: idx })
+    currentHoverNode = nodeId
+  }
+}
+
+// T5: pinned（如有点击固定高亮需求，可复用）
+const setPinnedFocus = (nodeId: string | null) => {
+  console.log('[PIN] set', nodeId ?? 'null')
 }
 
 const showActivityDetail = (activity: any) => {
@@ -96,6 +134,124 @@ const showActivityDetail = (activity: any) => {
 const truncateText = (text: string, maxLength: number = 6): string => {
   if (text.length <= maxLength) return text
   return text.substring(0, maxLength) + '...'
+}
+
+// T1+T2+T3: 局部展开节点布局（扇形+去重叠）
+const layoutExpandedNodes = (
+  hostX: number, 
+  hostY: number, 
+  expandNodes: Array<{id: string, name: string, category: string}>,
+  allNodes: Array<{id: string, x: number, y: number, category: string}>
+): Array<{id: string, x: number, y: number}> => {
+  if (expandNodes.length === 0) return []
+  
+  // T1: 确定性排序 + 扇形布局
+  const sorted = expandNodes.slice().sort((a, b) => a.id.localeCompare(b.id))
+  const R0 = 140
+  const deltaR = 90
+  const angleStart = 210 * Math.PI / 180
+  const angleEnd = 330 * Math.PI / 180
+  const angleRange = angleEnd - angleStart
+  
+  const initialPositions: Array<{id: string, x: number, y: number, category: string}> = []
+  sorted.forEach((node, idx) => {
+    const layer = Math.floor(idx / 3)
+    const posInLayer = idx % 3
+    const R = R0 + layer * deltaR
+    const angle = angleStart + (posInLayer / Math.max(1, Math.min(sorted.length, 3) - 1)) * angleRange
+    const x = hostX + R * Math.cos(angle)
+    const y = hostY + R * Math.sin(angle)
+    initialPositions.push({ id: node.id, x, y, category: node.category })
+  })
+  
+  // T2: 碰撞检测函数
+  const getCollisionRect = (x: number, y: number, category: string) => {
+    const r = category === 'Activity' ? 25 : 17.5
+    const fontSize = category === 'Activity' ? 12 : 10
+    const lineHeight = fontSize * 1.2
+    const labelW = 100
+    const labelMargin = 6
+    const padding = 8
+    const x1 = Math.min(x - r, x - labelW / 2) - padding
+    const y1 = y - r - padding
+    const x2 = Math.max(x + r, x + labelW / 2) + padding
+    const y2 = y + r + labelMargin + lineHeight + padding
+    return { x1, y1, x2, y2 }
+  }
+  
+  const rectsOverlap = (r1: any, r2: any) => !(r1.x2 <= r2.x1 || r2.x2 <= r1.x1 || r1.y2 <= r2.y1 || r2.y2 <= r1.y1)
+  
+  // T3: 局部去重叠（只移动展开节点）
+  const nearbyNodes = allNodes.filter(n => {
+    const dx = n.x - hostX
+    const dy = n.y - hostY
+    return Math.sqrt(dx * dx + dy * dy) < 400
+  })
+  
+  const finalPositions = initialPositions.map(node => ({ ...node }))
+  
+  // 迭代推开
+  for (let i = 0; i < finalPositions.length; i++) {
+    const node = finalPositions[i]
+    let iterations = 0
+    const maxIter = 50
+    const step = 20
+    
+    while (iterations < maxIter) {
+      iterations++
+      const rect = getCollisionRect(node.x, node.y, node.category)
+      let hasOverlap = false
+      
+      // 检查与宿主的碰撞
+      const hostRect = getCollisionRect(hostX, hostY, 'Activity')
+      if (rectsOverlap(rect, hostRect)) {
+        hasOverlap = true
+      }
+      
+      // 检查与附近节点的碰撞
+      if (!hasOverlap) {
+        for (const nearby of nearbyNodes) {
+          const nearbyRect = getCollisionRect(nearby.x, nearby.y, nearby.category)
+          if (rectsOverlap(rect, nearbyRect)) {
+            hasOverlap = true
+            break
+          }
+        }
+      }
+      
+      // 检查与已放置展开节点的碰撞
+      if (!hasOverlap) {
+        for (let j = 0; j < i; j++) {
+          const otherRect = getCollisionRect(finalPositions[j].x, finalPositions[j].y, finalPositions[j].category)
+          if (rectsOverlap(rect, otherRect)) {
+            hasOverlap = true
+            break
+          }
+        }
+      }
+      
+      if (!hasOverlap) break
+      
+      // 径向向外推
+      const dx = node.x - hostX
+      const dy = node.y - hostY
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      if (dist > 0) {
+        node.x += (dx / dist) * step
+        node.y += (dy / dist) * step
+      } else {
+        node.y += step
+      }
+    }
+  }
+  
+  // 网格吸附
+  finalPositions.forEach(node => {
+    node.x = Math.round(node.x / 20) * 20
+    node.y = Math.round(node.y / 20) * 20
+  })
+  
+  return finalPositions
 }
 
 // DAG 分层布局计算
@@ -876,26 +1032,24 @@ const computeDagreLayout = (nodes: any[], edges: any[]) => {
   return { nodePositions, virtualNodes: virtualNodes.map(v => v.id) }
 }
 
-const initChart = () => {
+const initChart = (options?: { preserveView?: boolean }) => {
+  const preserveView = options?.preserveView ?? false
   if (!chartRef.value) return
   
   if (!props.data || !props.data.nodes || props.data.nodes.length === 0) {
     return
   }
 
-  if (chartInstance) {
-    chartInstance.dispose()
+  if (!chartInstance) {
+    chartInstance = echarts.init(chartRef.value)
   }
-
-  chartInstance = echarts.init(chartRef.value)
 
   const displayNodes: any[] = []
   const displayEdges: any[] = []
 
   const dataHash = JSON.stringify({
     nodeIds: props.data.nodes.map((n: any) => n.id).sort(),
-    edgeIds: props.data.edges.map((e: any) => `${e.source}-${e.target}`).sort(),
-    expanded: Array.from(expandedActivities.value).sort()
+    edgeIds: props.data.edges.map((e: any) => `${e.source}-${e.target}`).sort()
   })
   
   let layoutResult: { nodePositions: Map<string, any>, virtualNodes: string[] }
@@ -1055,125 +1209,180 @@ const initChart = () => {
 
   displayEdges.push(...dependencyEdges)
 
-  // 资源节点
-  if (props.data.resource_nodes && props.data.resource_edges) {
-    const resourceNodeMap = new Map<string, any>()
+  // 资源+人员节点：使用局部布局（T1+T2+T3）
+  const resourceNodeMap = new Map<string, any>()
+  const personnelNodeMap = new Map<string, any>()
+  
+  expandedActivities.value.forEach(activityId => {
+    const activityNode = activityNodes.find(n => n.id === activityId)
+    if (!activityNode) return
     
-    expandedActivities.value.forEach(activityId => {
-      const activityNode = activityNodes.find(n => n.id === activityId)
-      if (!activityNode) return
-
-      const activityX = activityNode.x
-      const activityY = activityNode.y
-      const activityResources = props.data.resource_nodes!.filter(
-        (rn: any) => rn.parent_activity === activityId
-      )
-
-      activityResources.forEach((resourceNode: any, idx: number) => {
-        if (!resourceNodeMap.has(resourceNode.id)) {
-          resourceNodeMap.set(resourceNode.id, true)
-          displayNodes.push({
-            id: resourceNode.id,
-            name: truncateText(resourceNode.name),
-            fullName: resourceNode.name,
-            category: 'Resource',
-            symbolSize: 35,
-            symbol: 'rect',
-            x: activityX - 40 + idx * 40,
-            y: activityY + 120,
-            fixed: true,
-            itemStyle: {
-              color: getResourceColor(resourceNode.status),
-              borderWidth: 1,
-              borderColor: '#fff'
-            },
-            label: {
-              show: true,
-              fontSize: 10
-            }
-          })
-        }
-      })
-
-      const activityResourceEdges = props.data.resource_edges!.filter(
-        (re: any) => re.source === activityId
-      )
-      activityResourceEdges.forEach((edge: any) => {
-        displayEdges.push({
-          source: edge.source,
-          target: edge.target,
-          lineStyle: {
-            color: '#E6A23C',
-            type: 'dashed',
-            width: 1.5,
-            curveness: 0.1
-          },
-          label: { show: false },
-          edgeData: edge
+    const activityX = activityNode.x
+    const activityY = activityNode.y
+    
+    // 收集该活动的资源+人员
+    const toExpand: Array<{id: string, name: string, category: string, rawData: any}> = []
+    
+    if (props.data.resource_nodes) {
+      props.data.resource_nodes
+        .filter((rn: any) => rn.parent_activity === activityId && !resourceNodeMap.has(rn.id))
+        .forEach((rn: any) => {
+          toExpand.push({ id: rn.id, name: rn.name, category: 'Resource', rawData: rn })
+          resourceNodeMap.set(rn.id, true)
         })
+    }
+    
+    if (props.data.personnel_nodes) {
+      props.data.personnel_nodes
+        .filter((pn: any) => pn.parent_activity === activityId && !personnelNodeMap.has(pn.id))
+        .forEach((pn: any) => {
+          toExpand.push({ id: pn.id, name: pn.name, category: 'Personnel', rawData: pn })
+          personnelNodeMap.set(pn.id, true)
+        })
+    }
+    
+    if (toExpand.length === 0) return
+    
+    // T1+T2+T3: 局部布局
+    const existingNodes = displayNodes.map(n => ({ id: n.id, x: n.x, y: n.y, category: n.category }))
+    const positions = layoutExpandedNodes(activityX, activityY, toExpand, existingNodes)
+    
+    // T4: 统计重叠（局部验证，含宿主）
+    const localRects = [
+      { id: activityId, rect: ((x: number, y: number) => {
+        const r = 25, labelW = 100, fontSize = 12, lineHeight = fontSize * 1.2, labelMargin = 6, padding = 8
+        return {
+          x1: Math.min(x - r, x - labelW / 2) - padding,
+          y1: y - r - padding,
+          x2: Math.max(x + r, x + labelW / 2) + padding,
+          y2: y + r + labelMargin + lineHeight + padding
+        }
+      })(activityX, activityY) }
+    ]
+    positions.forEach(p => {
+      const r = p.category === 'Activity' ? 25 : 17.5
+      const fontSize = p.category === 'Activity' ? 12 : 10
+      const lineHeight = fontSize * 1.2
+      const labelW = 100
+      const labelMargin = 6
+      const padding = 8
+      localRects.push({
+        id: p.id,
+        rect: {
+          x1: Math.min(p.x - r, p.x - labelW / 2) - padding,
+          y1: p.y - r - padding,
+          x2: Math.max(p.x + r, p.x + labelW / 2) + padding,
+          y2: p.y + r + labelMargin + lineHeight + padding
+        }
       })
     })
-  }
-
-  // 人员节点
-  if (props.data.personnel_nodes && props.data.personnel_edges) {
-    const personnelNodeMap = new Map<string, any>()
-    
-    expandedActivities.value.forEach(activityId => {
-      const activityNode = activityNodes.find(n => n.id === activityId)
-      if (!activityNode) return
-
-      const activityX = activityNode.x
-      const activityY = activityNode.y
-      const activityPersonnel = props.data.personnel_nodes!.filter(
-        (pn: any) => pn.parent_activity === activityId
-      )
-
-      activityPersonnel.forEach((personnelNode: any, idx: number) => {
-        if (!personnelNodeMap.has(personnelNode.id)) {
-          personnelNodeMap.set(personnelNode.id, true)
-          displayNodes.push({
-            id: personnelNode.id,
-            name: truncateText(personnelNode.name),
-            fullName: personnelNode.name,
-            category: 'Personnel',
-            symbolSize: 35,
-            symbol: 'diamond',
-            x: activityX - 40 + idx * 40,
-            y: activityY - 120,
-            fixed: true,
-            itemStyle: {
-              color: '#67C23A',
-              borderWidth: 1,
-              borderColor: '#fff'
-            },
-            label: {
-              show: true,
-              fontSize: 10
-            }
-          })
+    let localOverlap = 0
+    for (let i = 0; i < localRects.length; i++) {
+      for (let j = i + 1; j < localRects.length; j++) {
+        const a = localRects[i].rect
+        const b = localRects[j].rect
+        if (!(a.x2 <= b.x1 || b.x2 <= a.x1 || a.y2 <= b.y1 || b.y2 <= a.y1)) {
+          localOverlap++
         }
-      })
-
-      const activityPersonnelEdges = props.data.personnel_edges!.filter(
-        (pe: any) => pe.source === activityId
-      )
-      activityPersonnelEdges.forEach((edge: any) => {
-        displayEdges.push({
-          source: edge.source,
-          target: edge.target,
-          lineStyle: {
+      }
+    }
+    
+    console.log('[EXPAND_LAYOUT] added', activityId, toExpand.length)
+    console.log('[EXPAND_LAYOUT] localOverlapAfter', localOverlap)
+    
+    // 添加节点（使用 layoutExpandedNodes 返回的 x/y）
+    positions.forEach(pos => {
+      const nodeData = toExpand.find(n => n.id === pos.id)!
+      if (nodeData.category === 'Resource') {
+        displayNodes.push({
+          id: nodeData.id,
+          name: truncateText(nodeData.name),
+          fullName: nodeData.name,
+          category: 'Resource',
+          symbolSize: 35,
+          symbol: 'rect',
+          x: pos.x,
+          y: pos.y,
+          fixed: true,
+          itemStyle: {
+            color: getResourceColor(nodeData.rawData.status),
+            borderWidth: 1,
+            borderColor: '#fff'
+          },
+          label: {
+            show: true,
+            fontSize: 10,
+            position: 'bottom',
+            width: 100,
+            overflow: 'truncate'
+          }
+        })
+      } else if (nodeData.category === 'Personnel') {
+        displayNodes.push({
+          id: nodeData.id,
+          name: truncateText(nodeData.name),
+          fullName: nodeData.name,
+          category: 'Personnel',
+          symbolSize: 35,
+          symbol: 'diamond',
+          x: pos.x,
+          y: pos.y,
+          fixed: true,
+          itemStyle: {
             color: '#67C23A',
-            type: 'dotted',
-            width: 1.5,
-            curveness: 0.1
+            borderWidth: 1,
+            borderColor: '#fff'
           },
-          label: { show: false },
-          edgeData: edge
+          label: {
+            show: true,
+            fontSize: 10,
+            position: 'bottom',
+            width: 100,
+            overflow: 'truncate'
+          }
         })
-      })
+      }
     })
-  }
+    
+    // 添加边
+    if (props.data.resource_edges) {
+      props.data.resource_edges
+        .filter((re: any) => re.source === activityId)
+        .forEach((edge: any) => {
+          displayEdges.push({
+            source: edge.source,
+            target: edge.target,
+            lineStyle: {
+              color: '#E6A23C',
+              type: 'dashed',
+              width: 1.5,
+              curveness: 0.1
+            },
+            label: { show: false },
+            edgeData: edge
+          })
+        })
+    }
+    
+    if (props.data.personnel_edges) {
+      props.data.personnel_edges
+        .filter((pe: any) => pe.source === activityId)
+        .forEach((edge: any) => {
+          displayEdges.push({
+            source: edge.source,
+            target: edge.target,
+            lineStyle: {
+              color: '#67C23A',
+              type: 'dotted',
+              width: 1.5,
+              curveness: 0.1
+            },
+            label: { show: false },
+            edgeData: edge
+          })
+        })
+    }
+  })
 
   const categories = [
     { name: 'Activity' },
@@ -1199,7 +1408,21 @@ const initChart = () => {
   const graphHeight = maxY - minY + 200
   const scaleX = containerWidth / graphWidth
   const scaleY = containerHeight / graphHeight
-  const zoom = Math.min(Math.max(Math.min(scaleX, scaleY), 0.2), 1.0)
+  let zoom = Math.min(Math.max(Math.min(scaleX, scaleY), 0.2), 1.0)
+  let centerValue: [number, number] = [(minX + maxX) / 2, (minY + maxY) / 2]
+
+  if (preserveView && chartInstance) {
+    const prevOption = chartInstance.getOption()
+    const prevSeries = Array.isArray(prevOption.series) ? prevOption.series[0] as any : undefined
+    if (prevSeries) {
+      if (prevSeries.zoom != null) {
+        zoom = Array.isArray(prevSeries.zoom) ? prevSeries.zoom[0] : prevSeries.zoom
+      }
+      if (prevSeries.center != null) {
+        centerValue = prevSeries.center as [number, number]
+      }
+    }
+  }
 
   const option: echarts.EChartsOption = {
     title: {
@@ -1256,7 +1479,7 @@ const initChart = () => {
         roam: true,
         draggable: false,
         zoom: zoom,
-        center: [(minX + maxX) / 2, (minY + maxY) / 2],
+        center: centerValue,
         edgeSymbol: ['none', 'arrow'],
         edgeSymbolSize: [0, 8],
         label: {
@@ -1278,8 +1501,13 @@ const initChart = () => {
     ]
   }
 
-  chartInstance.setOption(option)
-  
+  chartInstance.setOption(option, true)
+  bindChartEvents()
+}
+
+const bindChartEvents = () => {
+  if (!chartInstance) return
+
   chartInstance.off('click')
   chartInstance.on('click', (params: any) => {
     if (params.dataType === 'node') {
@@ -1290,7 +1518,30 @@ const initChart = () => {
         rawData: params.data.rawData
       }
       emit('nodeClick', nodeData)
+      setPinnedFocus(nodeData.id)
     }
+  })
+
+  chartInstance.off('contextmenu')
+  chartInstance.on('contextmenu', handleContextMenu)
+  
+  // T7: hover 进入/离开
+  chartInstance.off('mouseover')
+  chartInstance.on('mouseover', (params: any) => {
+    if (params.dataType === 'node') {
+      setHoverFocus(params.data.id)
+    }
+  })
+  chartInstance.off('mouseout')
+  chartInstance.on('mouseout', (params: any) => {
+    if (params.dataType === 'node') {
+      setHoverFocus(null)
+    }
+  })
+  
+  chartInstance.off('globalout')
+  chartInstance.on('globalout', () => {
+    setHoverFocus(null)
   })
 }
 
@@ -1315,35 +1566,19 @@ const getResourceColor = (status: string) => {
   return colorMap[status] || '#67C23A'
 }
 
-const handleContextMenu = (e: MouseEvent) => {
-  e.preventDefault()
+// T6: 右键处理（不造成 sticky 高亮）
+const handleContextMenu = (params: any) => {
+  params.event?.event?.preventDefault?.()
+  if (params.dataType !== 'node') return
+  if (params.data?.category !== 'Activity') return
   
-  if (!chartRef.value || !chartInstance) return
+  const activityId = params.data.id
+  toggleActivityExpansion(activityId)
   
-  const rect = chartRef.value.getBoundingClientRect()
-  const x = e.clientX - rect.left
-  const y = e.clientY - rect.top
-  
-  const currentOption = chartInstance.getOption()
-  const seriesData = currentOption.series?.[0]?.data || []
-  
-  for (const node of seriesData as any[]) {
-    if (node.category !== 'Activity') continue
-    
-    const nodeX = node.x
-    const nodeY = node.y
-    
-    const pixelPoint = chartInstance.convertToPixel({ seriesIndex: 0 }, [nodeX, nodeY])
-    
-    const distance = Math.sqrt(
-      Math.pow(pixelPoint[0] - x, 2) + Math.pow(pixelPoint[1] - y, 2)
-    )
-    
-    if (distance < 30) {
-      toggleActivityExpansion(node.id)
-      break
-    }
-  }
+  // 清理 hover
+  setHoverFocus(null)
+  // 若鼠标仍在节点上，重新设置 hover
+  setHoverFocus(activityId)
 }
 
 watch(() => props.data, () => {
@@ -1356,27 +1591,18 @@ watch(() => props.data, () => {
 
 watch(() => [props.highlightActive, props.highlightSet], () => {
   if (chartInstance && props.data && props.data.nodes && props.data.nodes.length > 0) {
-    initChart()
+    initChart({ preserveView: true })
   }
 }, { deep: true })
 
 onMounted(() => {
   initChart()
-  
-  if (chartRef.value) {
-    chartRef.value.addEventListener('contextmenu', handleContextMenu)
-  }
-  
   window.addEventListener('resize', () => {
     chartInstance?.resize()
   })
 })
 
 onUnmounted(() => {
-  if (chartRef.value) {
-    chartRef.value.removeEventListener('contextmenu', handleContextMenu)
-  }
-  
   if (chartInstance) {
     chartInstance.dispose()
     chartInstance = null
