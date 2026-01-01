@@ -6,7 +6,7 @@ from .database import (
     connect_to_neo4j,
     close_neo4j_connection
 )
-from .routers import resources, personnel, dependencies, activities, demo_data, resource_usage
+from .routers import resources, personnel, dependencies, activities, demo_data, resource_usage, personnel_assignment
 
 app = FastAPI(title="乳业生产建模系统API")
 
@@ -23,6 +23,7 @@ app.include_router(personnel.router)
 app.include_router(dependencies.router)
 app.include_router(activities.router)
 app.include_router(resource_usage.router)
+app.include_router(personnel_assignment.router)
 app.include_router(demo_data.router)
 
 @app.on_event("startup")

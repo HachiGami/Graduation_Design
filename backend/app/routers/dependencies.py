@@ -176,13 +176,13 @@ async def get_graph_data():
     
     try:
         edges = []
-        node_ids = set()
-        resource_ids = set()
+        activity_ids = set()
         
         # 获取活动依赖关系
         dependency_query = """
         MATCH (s:Activity)-[r:DEPENDS_ON]->(t:Activity)
-        RETURN s.id as source_id, t.id as target_id, 'DEPENDS_ON' as rel_type, r
+        RETURN DISTINCT s.id as source_id, t.id as target_id, r
+        ORDER BY s.id, t.id
         """
         
         async with driver.session() as session:
@@ -192,24 +192,29 @@ async def get_graph_data():
                 target_id = record["target_id"]
                 rel = record["r"]
                 
-                node_ids.add(source_id)
-                node_ids.add(target_id)
+                activity_ids.add(source_id)
+                activity_ids.add(target_id)
                 
                 edges.append({
                     "source": source_id,
                     "target": target_id,
                     "relation": "DEPENDS_ON",
-                    "type": rel.get("type", rel.get("dependency_type")),
+                    "type": rel.get("type", rel.get("dependency_type", "sequential")),
                     "time_constraint": rel.get("time_constraint"),
-                    "status": rel.get("status"),
+                    "status": rel.get("status", "active"),
                     "description": rel.get("description")
                 })
         
-        # 获取活动-资源使用关系
+        # 获取活动-资源使用关系（每个活动的资源单独一个节点）
         usage_query = """
         MATCH (a:Activity)-[u:USES]->(r:Resource)
         RETURN a.id as activity_id, r.id as resource_id, u
+        ORDER BY a.id, r.id
         """
+        
+        resource_nodes = []
+        resource_edges = []
+        resource_instance_counter = {}
         
         async with driver.session() as session:
             result = await session.run(usage_query)
@@ -218,46 +223,107 @@ async def get_graph_data():
                 resource_id = record["resource_id"]
                 rel = record["u"]
                 
-                node_ids.add(activity_id)
-                resource_ids.add(resource_id)
+                activity_ids.add(activity_id)
                 
-                edges.append({
+                # 为每个活动-资源组合创建唯一的资源实例ID
+                key = f"{activity_id}_{resource_id}"
+                if key not in resource_instance_counter:
+                    resource_instance_counter[key] = 0
+                resource_instance_counter[key] += 1
+                
+                resource_instance_id = f"{resource_id}_inst_{activity_id}"
+                
+                # 获取资源详情
+                resource = await db.resources.find_one({"_id": ObjectId(resource_id)})
+                if resource:
+                    resource_nodes.append({
+                        "id": resource_instance_id,
+                        "original_id": resource_id,
+                        "name": resource.get("name", "未知资源"),
+                        "category": "Resource",
+                        "type": resource.get("type", "material"),
+                        "status": resource.get("status", "available"),
+                        "parent_activity": activity_id
+                    })
+                
+                resource_edges.append({
                     "source": activity_id,
-                    "target": resource_id,
+                    "target": resource_instance_id,
                     "relation": "USES",
-                    "quantity": rel.get("quantity"),
-                    "unit": rel.get("unit"),
+                    "quantity": rel.get("quantity", 1),
+                    "unit": rel.get("unit", "unit"),
                     "stage": rel.get("stage")
                 })
         
-        # 构建节点列表
+        # 获取活动-人员分配关系（每个活动的人员单独一个节点）
+        personnel_query = """
+        MATCH (a:Activity)-[as:ASSIGNS]->(p:Personnel)
+        RETURN a.id as activity_id, p.id as personnel_id, as
+        ORDER BY a.id, p.id
+        """
+        
+        personnel_nodes = []
+        personnel_edges = []
+        
+        async with driver.session() as session:
+            result = await session.run(personnel_query)
+            async for record in result:
+                activity_id = record["activity_id"]
+                personnel_id = record["personnel_id"]
+                rel = record["as"]
+                
+                activity_ids.add(activity_id)
+                
+                # 为每个活动-人员组合创建唯一的人员实例ID
+                personnel_instance_id = f"{personnel_id}_inst_{activity_id}"
+                
+                # 获取人员详情
+                personnel = await db.personnel.find_one({"_id": ObjectId(personnel_id)})
+                if personnel:
+                    personnel_nodes.append({
+                        "id": personnel_instance_id,
+                        "original_id": personnel_id,
+                        "name": personnel.get("name", "未知人员"),
+                        "category": "Personnel",
+                        "role": rel.get("role", "操作员"),
+                        "status": personnel.get("status", "available"),
+                        "parent_activity": activity_id
+                    })
+                
+                personnel_edges.append({
+                    "source": activity_id,
+                    "target": personnel_instance_id,
+                    "relation": "ASSIGNS",
+                    "role": rel.get("role")
+                })
+        
+        # 构建活动节点列表
         nodes = []
+        seen_activity_ids = set()
         
-        # 添加活动节点
-        for node_id in node_ids:
-            activity = await db.activities.find_one({"_id": ObjectId(node_id)})
-            if activity:
-                nodes.append({
-                    "id": node_id,
-                    "name": activity.get("name", "未知活动"),
-                    "category": "Activity",
-                    "type": activity.get("activity_type", "unknown"),
-                    "status": activity.get("status", "pending")
-                })
+        for node_id in activity_ids:
+            if node_id not in seen_activity_ids:
+                activity = await db.activities.find_one({"_id": ObjectId(node_id)})
+                if activity:
+                    nodes.append({
+                        "id": node_id,
+                        "name": activity.get("name", "未知活动"),
+                        "category": "Activity",
+                        "type": activity.get("activity_type", "processing"),
+                        "status": activity.get("status", "pending"),
+                        "description": activity.get("description", ""),
+                        "estimated_duration": activity.get("estimated_duration", 0)
+                    })
+                    seen_activity_ids.add(node_id)
         
-        # 添加资源节点
-        for resource_id in resource_ids:
-            resource = await db.resources.find_one({"_id": ObjectId(resource_id)})
-            if resource:
-                nodes.append({
-                    "id": resource_id,
-                    "name": resource.get("name", "未知资源"),
-                    "category": "Resource",
-                    "type": resource.get("type", "unknown"),
-                    "status": resource.get("status", "available")
-                })
-        
-        return {"nodes": nodes, "edges": edges}
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "resource_nodes": resource_nodes,
+            "resource_edges": resource_edges,
+            "personnel_nodes": personnel_nodes,
+            "personnel_edges": personnel_edges
+        }
     except Exception as e:
         print(f"Neo4j Error: {e}")
         raise HTTPException(status_code=500, detail=f"获取图数据失败: {str(e)}")

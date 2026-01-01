@@ -76,7 +76,31 @@ async def migrate_data():
         
         print(f"[OK] 共迁移 {resource_count} 个资源节点")
         
-        # 3. 根据活动的required_resources字段创建USES关系
+        # 3. 迁移人员节点
+        print("\n开始迁移人员节点...")
+        personnel_count = 0
+        async for personnel in db.personnel.find():
+            personnel_id = str(personnel["_id"])
+            personnel_name = personnel.get("name", "未命名人员")
+            
+            query = """
+            MERGE (p:Personnel {id: $personnel_id})
+            SET p.name = $name
+            RETURN p
+            """
+            
+            async with neo4j_driver.session() as session:
+                await session.run(query, {
+                    "personnel_id": personnel_id,
+                    "name": personnel_name
+                })
+            
+            personnel_count += 1
+            print(f"  [OK] 迁移人员: {personnel_name} ({personnel_id})")
+        
+        print(f"[OK] 共迁移 {personnel_count} 个人员节点")
+        
+        # 4. 根据活动的required_resources字段创建USES关系
         print("\n开始创建活动-资源使用关系...")
         usage_count = 0
         async for activity in db.activities.find():
@@ -123,7 +147,52 @@ async def migrate_data():
         
         print(f"[OK] 共创建 {usage_count} 个资源使用关系")
         
-        # 4. 统计Neo4j中的数据
+        # 5. 根据活动的required_personnel字段创建ASSIGNS关系
+        print("\n开始创建活动-人员分配关系...")
+        assignment_count = 0
+        async for activity in db.activities.find():
+            activity_id = str(activity["_id"])
+            required_personnel = activity.get("required_personnel", [])
+            
+            for personnel_ref in required_personnel:
+                # 处理不同格式的人员ID（字符串或ObjectId）
+                if isinstance(personnel_ref, str):
+                    from bson import ObjectId
+                    try:
+                        personnel_oid = ObjectId(personnel_ref)
+                    except:
+                        personnel_oid = personnel_ref
+                else:
+                    personnel_oid = personnel_ref
+                
+                # 验证人员是否存在
+                personnel = await db.personnel.find_one({"_id": personnel_oid})
+                if not personnel:
+                    print(f"  [WARN] 警告: 人员 {personnel_ref} 不存在，跳过")
+                    continue
+                
+                personnel_id_str = str(personnel["_id"])
+                
+                query = """
+                MATCH (a:Activity {id: $activity_id})
+                MATCH (p:Personnel {id: $personnel_id})
+                MERGE (a)-[as:ASSIGNS]->(p)
+                SET as.role = 'operator'
+                RETURN as
+                """
+                
+                async with neo4j_driver.session() as session:
+                    await session.run(query, {
+                        "activity_id": activity_id,
+                        "personnel_id": personnel_id_str
+                    })
+                
+                assignment_count += 1
+                print(f"  [OK] 创建关系: {activity.get('name')} -> {personnel.get('name')}")
+        
+        print(f"[OK] 共创建 {assignment_count} 个人员分配关系")
+        
+        # 6. 统计Neo4j中的数据
         print("\n统计Neo4j数据...")
         async with neo4j_driver.session() as session:
             result = await session.run("""
@@ -141,6 +210,13 @@ async def migrate_data():
             print(f"  Resource节点数: {record['resource_count']}")
             
             result = await session.run("""
+                MATCH (p:Personnel) 
+                RETURN count(p) as personnel_count
+            """)
+            record = await result.single()
+            print(f"  Personnel节点数: {record['personnel_count']}")
+            
+            result = await session.run("""
                 MATCH ()-[d:DEPENDS_ON]->() 
                 RETURN count(d) as dep_count
             """)
@@ -153,6 +229,13 @@ async def migrate_data():
             """)
             record = await result.single()
             print(f"  USES关系数: {record['uses_count']}")
+            
+            result = await session.run("""
+                MATCH ()-[as:ASSIGNS]->() 
+                RETURN count(as) as assigns_count
+            """)
+            record = await result.single()
+            print(f"  ASSIGNS关系数: {record['assigns_count']}")
         
         print("\n[OK] 数据迁移完成！")
         

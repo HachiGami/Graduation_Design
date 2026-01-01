@@ -63,6 +63,10 @@ export interface GraphEdge {
 export interface GraphData {
   nodes: GraphNode[]
   edges: GraphEdge[]
+  resource_nodes?: GraphNode[]
+  resource_edges?: GraphEdge[]
+  personnel_nodes?: GraphNode[]
+  personnel_edges?: GraphEdge[]
 }
 
 export interface SOPStep {

@@ -3,8 +3,11 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>依赖关系图</span>
-          <el-button @click="loadGraphData">刷新</el-button>
+          <span>生产流程依赖图</span>
+          <div>
+            <el-button @click="loadGraphData" :icon="'Refresh'">刷新</el-button>
+            <el-button type="primary" @click="handleAdd" :icon="'Plus'">添加依赖</el-button>
+          </div>
         </div>
       </template>
       <DependencyGraph :data="graphData" />
@@ -13,14 +16,21 @@
     <el-card style="margin-top: 20px;">
       <template #header>
         <div class="card-header">
-          <span>依赖关系管理</span>
-          <el-button type="primary" @click="handleAdd">添加依赖</el-button>
+          <span>依赖关系列表</span>
         </div>
       </template>
       
-      <el-table :data="dependencies" stripe>
-        <el-table-column prop="source_activity_id" label="源活动ID" width="220" />
-        <el-table-column prop="target_activity_id" label="目标活动ID" width="220" />
+      <el-table :data="displayDependencies" stripe>
+        <el-table-column label="源活动" width="200">
+          <template #default="{ row }">
+            {{ getActivityName(row.source_activity_id) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="目标活动" width="200">
+          <template #default="{ row }">
+            {{ getActivityName(row.target_activity_id) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="dependency_type" label="依赖类型">
           <template #default="{ row }">
             <el-tag v-if="row.dependency_type === 'sequential'" type="primary">顺序</el-tag>
@@ -106,7 +116,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getDependencies, createDependency, updateDependency, deleteDependency, getGraphData } from '@/api/dependency'
 import { getActivities } from '@/api/activity'
@@ -124,6 +134,15 @@ const form = ref<Dependency>({
   dependency_type: 'sequential',
   status: 'active'
 })
+
+const displayDependencies = computed(() => {
+  return dependencies.value.filter(d => d.source_activity_id && d.target_activity_id)
+})
+
+const getActivityName = (activityId: string): string => {
+  const activity = activities.value.find(a => a.id === activityId)
+  return activity ? activity.name : activityId
+}
 
 const loadDependencies = async () => {
   try {
@@ -201,10 +220,10 @@ const handleDelete = async (row: Dependency) => {
   }
 }
 
-onMounted(() => {
-  loadActivities()
-  loadDependencies()
-  loadGraphData()
+onMounted(async () => {
+  await loadActivities()
+  await loadDependencies()
+  await loadGraphData()
 })
 </script>
 
