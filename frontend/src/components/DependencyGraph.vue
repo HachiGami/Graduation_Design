@@ -201,48 +201,651 @@ const computeDagreLayout = (nodes: any[], edges: any[]) => {
   
   dagre.layout(g2)
   
-  const optimizeLayerOrder = (iterations: number = 2) => {
-    for (let iter = 0; iter < iterations; iter++) {
-      const rankGroups = new Map<number, string[]>()
-      g2.nodes().forEach(nodeId => {
+  // 主干+泳道后处理
+  const nodeLaneInfo = new Map<string, {processId: string, isBackbone: boolean, laneIndex: number, sign: number, y0: number}>()
+  
+  const postProcessBackboneLanes = () => {
+    const allNodeIds = g2.nodes()
+    const realNodes = allNodeIds.filter(id => !nodeMetadata.get(id)?.isVirtual)
+    
+    // T1: 按流程分组（从 nodeMetadata 获取 process_id）
+    const processList = extractProcessSubgraphs(realNodes)
+    
+    const debugMode = (window as any).__debugBackboneLayout
+    
+    processList.forEach(({ processId, nodeIds, internalEdges }) => {
+      if (nodeIds.length === 0) return
+      
+      // T2: 找最长路径作为主干
+      const backbone = findLongestPathDAG(nodeIds, internalEdges)
+      
+      if (backbone.length === 0) return
+      
+      if (debugMode) {
+        console.log(`[Process ${processId}] Backbone (${backbone.length} nodes):`, 
+          backbone.map(id => ({ id, name: nodeMetadata.get(id)?.name })))
+      }
+      
+      // T3: 分配泳道
+      const laneInfo = assignLanes(nodeIds, internalEdges, backbone)
+      
+      // T4: 应用坐标
+      const backboneYs = backbone.map(id => g2.node(id).y)
+      backboneYs.sort((a, b) => a - b)
+      const y0 = backboneYs[Math.floor(backboneYs.length / 2)]
+      
+      const laneGap = 200
+      
+      // 先设置主干和支路坐标，并保存 lane 信息
+      nodeIds.forEach(nodeId => {
         const node = g2.node(nodeId)
-        const rank = node.rank || 0
-        if (!rankGroups.has(rank)) {
-          rankGroups.set(rank, [])
+        const info = laneInfo.get(nodeId)
+        if (!info) return
+        
+        if (info.isBackbone) {
+          node.y = y0
+        } else {
+          node.y = y0 + info.sign * info.laneIndex * laneGap
         }
-        rankGroups.get(rank)!.push(nodeId)
+        
+        // 保存到全局 lane 信息
+        nodeLaneInfo.set(nodeId, {
+          processId,
+          isBackbone: info.isBackbone,
+          laneIndex: info.laneIndex,
+          sign: info.sign,
+          y0
+        })
       })
       
-      rankGroups.forEach((nodeIds, rank) => {
-        const barycenters = nodeIds.map(nodeId => {
-          const edges = g2.nodeEdges(nodeId) || []
-          let sumY = 0
-          let count = 0
-          
-          edges.forEach(e => {
-            const other = e.v === nodeId ? e.w : e.v
-            const otherNode = g2.node(other)
-            if (otherNode && otherNode.rank !== rank) {
-              sumY += otherNode.y
-              count++
-            }
-          })
-          
-          return { nodeId, barycenter: count > 0 ? sumY / count : g2.node(nodeId).y }
-        })
+      // 按列分组，防重叠
+      const rankGroups = new Map<number, Array<{id: string, lane: number, topo: number}>>()
+      nodeIds.forEach(nodeId => {
+        const node = g2.node(nodeId)
+        const info = laneInfo.get(nodeId)
+        if (!info) return
         
-        barycenters.sort((a, b) => a.barycenter - b.barycenter)
-        
-        const spacing = 140
-        barycenters.forEach((item, idx) => {
-          const node = g2.node(item.nodeId)
-          node.y = idx * spacing
+        const rank = node.rank || 0
+        if (!rankGroups.has(rank)) rankGroups.set(rank, [])
+        rankGroups.get(rank)!.push({ 
+          id: nodeId, 
+          lane: info.isBackbone ? 0 : info.sign * info.laneIndex, 
+          topo: info.topoIndex 
         })
       })
+      
+      // 列内排序+防重叠
+      rankGroups.forEach(items => {
+        items.sort((a, b) => {
+          if (a.lane !== b.lane) return a.lane - b.lane
+          if (a.topo !== b.topo) return a.topo - b.topo
+          return a.id.localeCompare(b.id)
+        })
+        
+        const minSpacing = 80
+        const grouped = new Map<number, string[]>()
+        items.forEach(item => {
+          if (!grouped.has(item.lane)) grouped.set(item.lane, [])
+          grouped.get(item.lane)!.push(item.id)
+        })
+        
+        grouped.forEach((ids, lane) => {
+          if (ids.length <= 1) return
+          
+          const laneY = lane === 0 ? y0 : y0 + Math.sign(lane) * Math.abs(lane) * laneGap
+          ids.forEach((id, idx) => {
+            const offset = (idx - (ids.length - 1) / 2) * minSpacing
+            g2.node(id).y = laneY + offset
+          })
+        })
+      })
+      
+      if (debugMode) {
+        console.log(`[Process ${processId}] Node positions:`)
+        nodeIds.forEach(id => {
+          const node = g2.node(id)
+          const info = laneInfo.get(id)
+          if (info) {
+            console.log(`  ${id} (${nodeMetadata.get(id)?.name}): x=${Math.round(node.x)}, y=${Math.round(node.y)}, lane=${info.laneIndex}, sign=${info.sign > 0 ? '+' : '-'}, topo=${info.topoIndex}, backbone=${info.isBackbone}`)
+          }
+        })
+      }
+    })
+  }
+  
+  // T1: 提取流程子图
+  const extractProcessSubgraphs = (realNodes: string[]) => {
+    const processMap = new Map<string, Set<string>>()
+    
+    realNodes.forEach(nodeId => {
+      const meta = nodeMetadata.get(nodeId)
+      const pid = meta?.process_id || 'default'
+      if (!processMap.has(pid)) processMap.set(pid, new Set())
+      processMap.get(pid)!.add(nodeId)
+    })
+    
+    return Array.from(processMap.entries()).map(([processId, nodeSet]) => {
+      const nodeIds = Array.from(nodeSet)
+      const internalEdges: Array<{source: string, target: string}> = []
+      
+      newEdges.forEach(edge => {
+        if (nodeSet.has(edge.source) && nodeSet.has(edge.target)) {
+          internalEdges.push(edge)
+        }
+      })
+      
+      return { processId, nodeIds, internalEdges }
+    })
+  }
+  
+  // T2: 最长路径（拓扑DP）
+  const findLongestPathDAG = (nodeIds: string[], edges: Array<{source: string, target: string}>) => {
+    const nodeSet = new Set(nodeIds)
+    const inDegree = new Map<string, number>()
+    const outEdges = new Map<string, string[]>()
+    const dist = new Map<string, number>()
+    const prev = new Map<string, string | null>()
+    
+    nodeIds.forEach(id => {
+      inDegree.set(id, 0)
+      outEdges.set(id, [])
+      dist.set(id, 0)
+      prev.set(id, null)
+    })
+    
+    edges.forEach(edge => {
+      if (!nodeSet.has(edge.source) || !nodeSet.has(edge.target)) return
+      inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1)
+      outEdges.get(edge.source)!.push(edge.target)
+    })
+    
+    const queue: string[] = []
+    nodeIds.forEach(id => {
+      if (inDegree.get(id) === 0) queue.push(id)
+    })
+    
+    while (queue.length > 0) {
+      const u = queue.shift()!
+      const uDist = dist.get(u) || 0
+      
+      outEdges.get(u)!.forEach(v => {
+        const newDist = uDist + 1
+        if (newDist > (dist.get(v) || 0)) {
+          dist.set(v, newDist)
+          prev.set(v, u)
+        }
+        
+        inDegree.set(v, inDegree.get(v)! - 1)
+        if (inDegree.get(v) === 0) queue.push(v)
+      })
+    }
+    
+    let maxNode = nodeIds[0]
+    let maxDist = dist.get(maxNode) || 0
+    nodeIds.forEach(id => {
+      const d = dist.get(id) || 0
+      if (d > maxDist) {
+        maxDist = d
+        maxNode = id
+      }
+    })
+    
+    const path: string[] = []
+    let cur: string | null = maxNode
+    while (cur !== null) {
+      path.unshift(cur)
+      cur = prev.get(cur) || null
+    }
+    
+    return path
+  }
+  
+  // T3: 分配泳道
+  const assignLanes = (
+    nodeIds: string[], 
+    edges: Array<{source: string, target: string}>, 
+    backbone: string[]
+  ) => {
+    const backboneSet = new Set(backbone)
+    const result = new Map<string, {isBackbone: boolean, laneIndex: number, sign: number, topoIndex: number}>()
+    
+    // 计算拓扑序
+    const topoIndex = computeTopoIndex(nodeIds, edges)
+    
+    // 主干节点
+    backbone.forEach((id, idx) => {
+      result.set(id, { isBackbone: true, laneIndex: 0, sign: 1, topoIndex: topoIndex.get(id) || 0 })
+    })
+    
+    // BFS计算到主干的最短距离
+    const distance = new Map<string, number>()
+    const parent = new Map<string, string>()
+    const queue: string[] = [...backbone]
+    
+    backbone.forEach(id => distance.set(id, 0))
+    
+    const adjList = new Map<string, string[]>()
+    nodeIds.forEach(id => adjList.set(id, []))
+    edges.forEach(edge => {
+      adjList.get(edge.source)!.push(edge.target)
+      adjList.get(edge.target)!.push(edge.source)
+    })
+    
+    while (queue.length > 0) {
+      const u = queue.shift()!
+      const d = distance.get(u) || 0
+      
+      adjList.get(u)!.forEach(v => {
+        if (!distance.has(v)) {
+          distance.set(v, d + 1)
+          parent.set(v, u)
+          queue.push(v)
+        }
+      })
+    }
+    
+    // 支路节点分配泳道
+    nodeIds.forEach(id => {
+      if (backboneSet.has(id)) return
+      
+      const d = distance.get(id) || 1
+      const sign = determineSign(id, parent, backbone, nodeMetadata)
+      
+      result.set(id, { 
+        isBackbone: false, 
+        laneIndex: d, 
+        sign, 
+        topoIndex: topoIndex.get(id) || 0 
+      })
+    })
+    
+    return result
+  }
+  
+  // 计算拓扑序（用于稳定排序）
+  const computeTopoIndex = (nodeIds: string[], edges: Array<{source: string, target: string}>) => {
+    const nodeSet = new Set(nodeIds)
+    const inDegree = new Map<string, number>()
+    const outEdges = new Map<string, string[]>()
+    
+    nodeIds.forEach(id => {
+      inDegree.set(id, 0)
+      outEdges.set(id, [])
+    })
+    
+    edges.forEach(edge => {
+      if (!nodeSet.has(edge.source) || !nodeSet.has(edge.target)) return
+      inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1)
+      outEdges.get(edge.source)!.push(edge.target)
+    })
+    
+    const queue: string[] = []
+    nodeIds.forEach(id => {
+      if (inDegree.get(id) === 0) queue.push(id)
+    })
+    queue.sort()
+    
+    const topoIndex = new Map<string, number>()
+    let idx = 0
+    
+    while (queue.length > 0) {
+      queue.sort()
+      const u = queue.shift()!
+      topoIndex.set(u, idx++)
+      
+      const neighbors = outEdges.get(u)!
+      neighbors.forEach(v => {
+        inDegree.set(v, inDegree.get(v)! - 1)
+        if (inDegree.get(v) === 0) queue.push(v)
+      })
+    }
+    
+    return topoIndex
+  }
+  
+  // 确定性决定上下方向
+  const determineSign = (
+    nodeId: string, 
+    parent: Map<string, string>,
+    backbone: string[],
+    metadata: Map<string, any>
+  ) => {
+    const meta = metadata.get(nodeId)
+    const name = meta?.name || ''
+    
+    // 语义规则
+    if (/检验|采集|检测|报告|质检/.test(name)) return 1
+    if (/订单|计划|排产|调度/.test(name)) return -1
+    
+    // 找到支路根节点（从主干分叉的第一个节点）
+    let cur = nodeId
+    let root = cur
+    while (parent.has(cur)) {
+      const p = parent.get(cur)!
+      if (backbone.includes(p)) {
+        root = cur
+        break
+      }
+      cur = p
+    }
+    
+    // 根节点在主干中的索引
+    let rootIndex = 0
+    for (let i = 0; i < backbone.length; i++) {
+      const bbNode = backbone[i]
+      if (parent.get(root) === bbNode) {
+        rootIndex = i
+        break
+      }
+    }
+    
+    // 偶数下方，奇数上方
+    return rootIndex % 2 === 0 ? 1 : -1
+  }
+  
+  postProcessBackboneLanes()
+  
+  // ============ Label-aware 去重叠后处理 ============
+  
+  // T1: 计算碰撞包围盒（含 label）
+  const computeCollisionRect = (nodeId: string) => {
+    const node = g2.node(nodeId)
+    const meta = nodeMetadata.get(nodeId)
+    
+    if (meta?.isVirtual) {
+      return { x1: node.x, y1: node.y, x2: node.x, y2: node.y }
+    }
+    
+    const category = meta?.category || 'Activity'
+    const r = category === 'Activity' ? 25 : 17.5
+    const fontSize = category === 'Activity' ? 12 : 10
+    const lineHeight = fontSize * 1.2
+    const labelW = 100
+    const labelMargin = 6
+    const padding = 8
+    
+    // 节点圆形外接框
+    const nodeX1 = node.x - r
+    const nodeY1 = node.y - r
+    const nodeX2 = node.x + r
+    const nodeY2 = node.y + r
+    
+    // Label 在下方
+    const labelTop = node.y + r + labelMargin
+    const labelX1 = node.x - labelW / 2
+    const labelX2 = node.x + labelW / 2
+    const labelY1 = labelTop
+    const labelY2 = labelTop + lineHeight
+    
+    // Union + padding
+    const x1 = Math.min(nodeX1, labelX1) - padding
+    const y1 = Math.min(nodeY1, labelY1) - padding
+    const x2 = Math.max(nodeX2, labelX2) + padding
+    const y2 = Math.max(nodeY2, labelY2) + padding
+    
+    return { x1, y1, x2, y2 }
+  }
+  
+  // 检查两个矩形是否重叠
+  const rectsOverlap = (r1: any, r2: any) => {
+    return !(r1.x2 <= r2.x1 || r2.x2 <= r1.x1 || r1.y2 <= r2.y1 || r2.y2 <= r1.y1)
+  }
+  
+  // 计算重叠数量
+  const countOverlaps = () => {
+    const realNodes = g2.nodes().filter(id => !nodeMetadata.get(id)?.isVirtual)
+    let count = 0
+    
+    for (let i = 0; i < realNodes.length; i++) {
+      const r1 = computeCollisionRect(realNodes[i])
+      for (let j = i + 1; j < realNodes.length; j++) {
+        const r2 = computeCollisionRect(realNodes[j])
+        if (rectsOverlap(r1, r2)) count++
+      }
+    }
+    
+    return count
+  }
+  
+  const overlapCountBefore = countOverlaps()
+  const debugMode = (window as any).__debugBackboneLayout
+  
+  if (debugMode) {
+    console.log(`[Overlap Detection] Before: ${overlapCountBefore}`)
+  }
+  
+  // T2: 局部增大 laneGap（优先策略）
+  const expandLaneGapsPerProcess = () => {
+    const realNodes = g2.nodes().filter(id => !nodeMetadata.get(id)?.isVirtual)
+    
+    // 按流程分组
+    const processMap = new Map<string, string[]>()
+    realNodes.forEach(nodeId => {
+      const laneInfo = nodeLaneInfo.get(nodeId)
+      const pid = laneInfo?.processId || 'default'
+      if (!processMap.has(pid)) processMap.set(pid, [])
+      processMap.get(pid)!.push(nodeId)
+    })
+    
+    processMap.forEach((nodeIds, processId) => {
+      if (nodeIds.length === 0) return
+      
+      // 按 lane 分组（使用 sign * laneIndex 作为 lane key）
+      const laneGroups = new Map<number, string[]>()
+      nodeIds.forEach(id => {
+        const info = nodeLaneInfo.get(id)
+        if (!info) return
+        const laneKey = info.isBackbone ? 0 : info.sign * info.laneIndex
+        if (!laneGroups.has(laneKey)) laneGroups.set(laneKey, [])
+        laneGroups.get(laneKey)!.push(id)
+      })
+      
+      const sortedLanes = Array.from(laneGroups.keys()).sort((a, b) => {
+        // 负数（上方）在前，0（主干）中间，正数（下方）在后
+        const yA = g2.node(laneGroups.get(a)![0]).y
+        const yB = g2.node(laneGroups.get(b)![0]).y
+        return yA - yB
+      })
+      
+      // 检查相邻 lane 间距，分上下两个方向处理
+      const minLaneSeparation = 24
+      const backboneIdx = sortedLanes.indexOf(0)
+      
+      if (backboneIdx === -1) return // 没有主干，跳过
+      
+      // 向上处理（负 lane）
+      for (let i = backboneIdx - 1; i >= 0; i--) {
+        const laneUpper = sortedLanes[i]
+        const laneLower = sortedLanes[i + 1]
+        const nodesUpper = laneGroups.get(laneUpper)!
+        const nodesLower = laneGroups.get(laneLower)!
+        
+        // Upper 层最小 y1 和 Lower 层最大 y2
+        let minY1Upper = Infinity
+        nodesUpper.forEach(id => {
+          const rect = computeCollisionRect(id)
+          minY1Upper = Math.min(minY1Upper, rect.y1)
+        })
+        
+        let maxY2Lower = -Infinity
+        nodesLower.forEach(id => {
+          const rect = computeCollisionRect(id)
+          maxY2Lower = Math.max(maxY2Lower, rect.y2)
+        })
+        
+        const currentSep = minY1Upper - maxY2Lower
+        if (currentSep < minLaneSeparation) {
+          const needExtra = minLaneSeparation - currentSep
+          
+          // 向上推 Upper 层
+          nodesUpper.forEach(id => {
+            g2.node(id).y -= needExtra
+          })
+          
+          if (debugMode) {
+            console.log(`[Process ${processId}] Expanding gap above, lane=${laneUpper}, extra=${needExtra.toFixed(1)}`)
+          }
+        }
+      }
+      
+      // 向下处理（正 lane）
+      for (let i = backboneIdx; i < sortedLanes.length - 1; i++) {
+        const laneUpper = sortedLanes[i]
+        const laneLower = sortedLanes[i + 1]
+        const nodesUpper = laneGroups.get(laneUpper)!
+        const nodesLower = laneGroups.get(laneLower)!
+        
+        // Upper 层最大 y2 和 Lower 层最小 y1
+        let maxY2Upper = -Infinity
+        nodesUpper.forEach(id => {
+          const rect = computeCollisionRect(id)
+          maxY2Upper = Math.max(maxY2Upper, rect.y2)
+        })
+        
+        let minY1Lower = Infinity
+        nodesLower.forEach(id => {
+          const rect = computeCollisionRect(id)
+          minY1Lower = Math.min(minY1Lower, rect.y1)
+        })
+        
+        const currentSep = minY1Lower - maxY2Upper
+        if (currentSep < minLaneSeparation) {
+          const needExtra = minLaneSeparation - currentSep
+          
+          // 向下推 Lower 层
+          nodesLower.forEach(id => {
+            g2.node(id).y += needExtra
+          })
+          
+          if (debugMode) {
+            console.log(`[Process ${processId}] Expanding gap below, lane=${laneLower}, extra=${needExtra.toFixed(1)}`)
+          }
+        }
+      }
+    })
+  }
+  
+  expandLaneGapsPerProcess()
+  
+  // 更新虚拟节点位置（在去重叠过程中跟随）
+  const updateVirtualNodes = () => {
+    const allNodeIds = g2.nodes()
+    allNodeIds.forEach(nodeId => {
+      const meta = nodeMetadata.get(nodeId)
+      if (!meta?.isVirtual) return
+      
+      const edges = g2.nodeEdges(nodeId) || []
+      const neighbors = edges.map(e => e.v === nodeId ? e.w : e.v)
+        .filter(n => !nodeMetadata.get(n)?.isVirtual)
+      
+      if (neighbors.length > 0) {
+        const avgY = neighbors.reduce((sum, n) => sum + g2.node(n).y, 0) / neighbors.length
+        g2.node(nodeId).y = avgY
+      }
+    })
+  }
+  
+  updateVirtualNodes()
+  
+  // T3: 同 lane 内小幅 jitter（兜底）
+  const smallJitterInLaneIfNeeded = () => {
+    let overlaps = countOverlaps()
+    if (overlaps === 0) return
+    
+    const realNodes = g2.nodes().filter(id => !nodeMetadata.get(id)?.isVirtual)
+    const jitterMax = 20
+    
+    // 按 x 分组（同列）
+    const xGroups = new Map<number, string[]>()
+    realNodes.forEach(id => {
+      const node = g2.node(id)
+      const xRounded = Math.round(node.x / 100) * 100
+      if (!xGroups.has(xRounded)) xGroups.set(xRounded, [])
+      xGroups.get(xRounded)!.push(id)
+    })
+    
+    xGroups.forEach(nodeIds => {
+      // 按 y 排序
+      nodeIds.sort((a, b) => {
+        const ya = g2.node(a).y
+        const yb = g2.node(b).y
+        return ya - yb
+      })
+      
+      // 检测并推开
+      for (let i = 0; i < nodeIds.length - 1; i++) {
+        const idA = nodeIds[i]
+        const idB = nodeIds[i + 1]
+        const rectA = computeCollisionRect(idA)
+        const rectB = computeCollisionRect(idB)
+        
+        if (rectsOverlap(rectA, rectB)) {
+          const overlapAmount = rectA.y2 - rectB.y1
+          if (overlapAmount > 0 && overlapAmount < jitterMax) {
+            // 向下推 B
+            const nodeB = g2.node(idB)
+            nodeB.y += overlapAmount + 4
+          }
+        }
+      }
+    })
+  }
+  
+  smallJitterInLaneIfNeeded()
+  updateVirtualNodes()
+  
+  // T4: 局部 ranksep 扩展（X 方向兜底）
+  const expandRankSepsIfNeeded = () => {
+    let overlaps = countOverlaps()
+    if (overlaps === 0) return
+    
+    const realNodes = g2.nodes().filter(id => !nodeMetadata.get(id)?.isVirtual)
+    
+    // 找出重叠对
+    const overlapPairs: Array<{id1: string, id2: string}> = []
+    for (let i = 0; i < realNodes.length; i++) {
+      const r1 = computeCollisionRect(realNodes[i])
+      for (let j = i + 1; j < realNodes.length; j++) {
+        const r2 = computeCollisionRect(realNodes[j])
+        if (rectsOverlap(r1, r2)) {
+          overlapPairs.push({ id1: realNodes[i], id2: realNodes[j] })
+        }
+      }
+    }
+    
+    // 检查是否主要是 X 方向问题
+    overlapPairs.forEach(pair => {
+      const node1 = g2.node(pair.id1)
+      const node2 = g2.node(pair.id2)
+      const r1 = computeCollisionRect(pair.id1)
+      const r2 = computeCollisionRect(pair.id2)
+      
+      const overlapW = Math.min(r1.x2, r2.x2) - Math.max(r1.x1, r2.x1)
+      const overlapH = Math.min(r1.y2, r2.y2) - Math.max(r1.y1, r2.y1)
+      
+      if (overlapW > overlapH && Math.abs(node1.x - node2.x) < 150) {
+        // X 方向推开
+        const rightNode = node1.x > node2.x ? node1 : node2
+        rightNode.x += Math.min(overlapW + 20, 120)
+      }
+    })
+  }
+  
+  expandRankSepsIfNeeded()
+  updateVirtualNodes()
+  
+  const overlapCountAfter = countOverlaps()
+  
+  if (debugMode || overlapCountAfter > 0) {
+    console.log(`[Overlap Detection] After: ${overlapCountAfter} (before: ${overlapCountBefore})`)
+    if (overlapCountAfter === 0) {
+      console.log('✅ No overlaps detected!')
+    } else {
+      console.warn(`⚠️ Still have ${overlapCountAfter} overlaps`)
     }
   }
   
-  optimizeLayerOrder(2)
+  // ============ 去重叠后处理结束 ============
   
   const nodePositions = new Map<string, { x: number, y: number, isVirtual?: boolean }>()
   let minX = Infinity, minY = Infinity
