@@ -3,71 +3,42 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>生产流程依赖图</span>
+          <span>生产流程依赖与资源关联视图</span>
           <div>
             <el-button @click="loadGraphData" :icon="'Refresh'">刷新</el-button>
-            <el-button type="primary" @click="handleAdd" :icon="'Plus'">添加依赖</el-button>
+            <el-button type="primary" @click="handleAddDependency" :icon="'Plus'">添加依赖</el-button>
+            <el-button type="success" @click="handleAddActivity" :icon="'Plus'">添加活动</el-button>
+            <el-button type="warning" @click="handleAddResource" :icon="'Plus'">添加资源</el-button>
+            <el-button type="info" @click="handleAddPersonnel" :icon="'Plus'">添加人员</el-button>
           </div>
         </div>
       </template>
-      <DependencyGraph :data="graphData" />
-    </el-card>
-
-    <el-card style="margin-top: 20px;">
-      <template #header>
-        <div class="card-header">
-          <span>依赖关系列表</span>
-        </div>
-      </template>
       
-      <el-table :data="displayDependencies" stripe>
-        <el-table-column label="源活动" width="200">
-          <template #default="{ row }">
-            {{ getActivityName(row.source_activity_id) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="目标活动" width="200">
-          <template #default="{ row }">
-            {{ getActivityName(row.target_activity_id) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="dependency_type" label="依赖类型">
-          <template #default="{ row }">
-            <el-tag v-if="row.dependency_type === 'sequential'" type="primary">顺序</el-tag>
-            <el-tag v-else-if="row.dependency_type === 'parallel'" type="success">并行</el-tag>
-            <el-tag v-else type="warning">条件</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="time_constraint" label="时间约束">
-          <template #default="{ row }">
-            {{ row.time_constraint ? row.time_constraint + '分钟' : '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态">
-          <template #default="{ row }">
-            <el-tag v-if="row.status === 'active'" type="success">生效中</el-tag>
-            <el-tag v-else-if="row.status === 'inactive'" type="info">未生效</el-tag>
-            <el-tag v-else type="warning">待确认</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="description" label="描述" show-overflow-tooltip />
-        <el-table-column label="操作" width="180">
-          <template #default="{ row }">
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <!-- 流程选择器 -->
+      <ProcessSelector
+        :domain="currentDomain"
+        :process-id="currentProcessId"
+        @change="handleProcessChange"
+        @clear="clearHighlight"
+      />
+      
+      <DependencyGraph 
+        :data="graphData" 
+        :highlight-active="highlightActive"
+        :highlight-set="highlightSet"
+        @node-click="handleNodeClick" 
+      />
     </el-card>
 
+    <!-- 依赖关系对话框 -->
     <el-dialog 
-      v-model="dialogVisible" 
-      :title="isEdit ? '编辑依赖关系' : '添加依赖关系'"
+      v-model="dependencyDialogVisible" 
+      :title="isEditDependency ? '编辑依赖关系' : '添加依赖关系'"
       width="600px"
     >
-      <el-form :model="form" label-width="120px">
+      <el-form :model="dependencyForm" label-width="120px">
         <el-form-item label="源活动">
-          <el-select v-model="form.source_activity_id" placeholder="选择源活动" filterable>
+          <el-select v-model="dependencyForm.source_activity_id" placeholder="选择源活动" filterable>
             <el-option 
               v-for="activity in activities" 
               :key="activity.id" 
@@ -77,7 +48,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="目标活动">
-          <el-select v-model="form.target_activity_id" placeholder="选择目标活动" filterable>
+          <el-select v-model="dependencyForm.target_activity_id" placeholder="选择目标活动" filterable>
             <el-option 
               v-for="activity in activities" 
               :key="activity.id" 
@@ -87,131 +58,696 @@
           </el-select>
         </el-form-item>
         <el-form-item label="依赖类型">
-          <el-select v-model="form.dependency_type">
+          <el-select v-model="dependencyForm.dependency_type">
             <el-option label="顺序" value="sequential" />
             <el-option label="并行" value="parallel" />
             <el-option label="条件" value="conditional" />
           </el-select>
         </el-form-item>
         <el-form-item label="时间约束">
-          <el-input-number v-model="form.time_constraint" :min="0" placeholder="分钟" />
+          <el-input-number v-model="dependencyForm.time_constraint" :min="0" placeholder="分钟" />
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="form.status">
+          <el-select v-model="dependencyForm.status">
             <el-option label="生效中" value="active" />
             <el-option label="未生效" value="inactive" />
             <el-option label="待确认" value="pending" />
           </el-select>
         </el-form-item>
         <el-form-item label="描述">
-          <el-input v-model="form.description" type="textarea" />
+          <el-input v-model="dependencyForm.description" type="textarea" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit">确定</el-button>
+        <el-button @click="dependencyDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleDependencySubmit">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 活动详情对话框 -->
+    <el-dialog 
+      v-model="activityDialogVisible" 
+      :title="isEditActivity ? '编辑活动' : (currentActivity?.id ? '活动详情' : '添加活动')"
+      width="800px"
+    >
+      <!-- 详情展示模式 -->
+      <div v-if="currentActivity?.id && !isEditActivity">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="活动名称" :span="2">{{ activityForm.name }}</el-descriptions-item>
+          <el-descriptions-item label="活动类型">{{ activityForm.activity_type }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag v-if="activityForm.status === 'pending'" type="info">待开始</el-tag>
+            <el-tag v-else-if="activityForm.status === 'in_progress'" type="warning">进行中</el-tag>
+            <el-tag v-else-if="activityForm.status === 'completed'" type="success">已完成</el-tag>
+            <el-tag v-else-if="activityForm.status === 'paused'" type="warning">已暂停</el-tag>
+            <el-tag v-else type="danger">已取消</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="预计时长">{{ activityForm.estimated_duration }} 分钟</el-descriptions-item>
+          <el-descriptions-item label="截止日期">{{ activityForm.deadline || '未设置' }}</el-descriptions-item>
+          <el-descriptions-item label="描述" :span="2">{{ activityForm.description || '无' }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
+
+      <!-- 编辑/添加模式 -->
+      <el-form v-else :model="activityForm" label-width="120px">
+        <el-form-item label="活动名称">
+          <el-input v-model="activityForm.name" />
+        </el-form-item>
+        <el-form-item label="活动类型">
+          <el-input v-model="activityForm.activity_type" />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="activityForm.description" type="textarea" />
+        </el-form-item>
+        <el-form-item label="预计时长">
+          <el-input-number v-model="activityForm.estimated_duration" :min="0" />
+          <span style="margin-left: 10px;">分钟</span>
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="activityForm.status">
+            <el-option label="待开始" value="pending" />
+            <el-option label="进行中" value="in_progress" />
+            <el-option label="已完成" value="completed" />
+            <el-option label="已暂停" value="paused" />
+            <el-option label="已取消" value="cancelled" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <div style="display: flex; justify-content: space-between;">
+          <div>
+            <el-button v-if="currentActivity?.id && !isEditActivity" type="primary" @click="isEditActivity = true">编辑</el-button>
+            <el-button v-if="currentActivity?.id" type="danger" @click="handleDeleteActivity">删除</el-button>
+          </div>
+          <div>
+            <el-button @click="closeActivityDialog">{{ currentActivity?.id && !isEditActivity ? '关闭' : '取消' }}</el-button>
+            <el-button v-if="!currentActivity?.id || isEditActivity" type="primary" @click="handleActivitySubmit">确定</el-button>
+          </div>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 资源详情对话框 -->
+    <el-dialog 
+      v-model="resourceDialogVisible" 
+      :title="isEditResource ? '编辑资源' : (currentResource?.id ? '资源详情' : '添加资源')"
+      width="600px"
+    >
+      <!-- 详情展示模式 -->
+      <div v-if="currentResource?.id && !isEditResource">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="资源名称" :span="2">{{ resourceForm.name }}</el-descriptions-item>
+          <el-descriptions-item label="资源类型">{{ resourceForm.type }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag v-if="resourceForm.status === 'available'" type="success">可用</el-tag>
+            <el-tag v-else-if="resourceForm.status === 'in_use'" type="warning">使用中</el-tag>
+            <el-tag v-else-if="resourceForm.status === 'maintenance'" type="info">维护中</el-tag>
+            <el-tag v-else type="danger">不可用</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="规格" :span="2">{{ resourceForm.specification }}</el-descriptions-item>
+          <el-descriptions-item label="供应商">{{ resourceForm.supplier }}</el-descriptions-item>
+          <el-descriptions-item label="单位">{{ resourceForm.unit }}</el-descriptions-item>
+          <el-descriptions-item label="数量">{{ resourceForm.quantity }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
+
+      <!-- 编辑/添加模式 -->
+      <el-form v-else :model="resourceForm" label-width="120px">
+        <el-form-item label="资源名称">
+          <el-input v-model="resourceForm.name" />
+        </el-form-item>
+        <el-form-item label="资源类型">
+          <el-input v-model="resourceForm.type" />
+        </el-form-item>
+        <el-form-item label="规格">
+          <el-input v-model="resourceForm.specification" />
+        </el-form-item>
+        <el-form-item label="供应商">
+          <el-input v-model="resourceForm.supplier" />
+        </el-form-item>
+        <el-form-item label="数量">
+          <el-input-number v-model="resourceForm.quantity" :min="0" />
+        </el-form-item>
+        <el-form-item label="单位">
+          <el-input v-model="resourceForm.unit" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="resourceForm.status">
+            <el-option label="可用" value="available" />
+            <el-option label="使用中" value="in_use" />
+            <el-option label="维护中" value="maintenance" />
+            <el-option label="不可用" value="unavailable" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <div style="display: flex; justify-content: space-between;">
+          <div>
+            <el-button v-if="currentResource?.id && !isEditResource" type="primary" @click="isEditResource = true">编辑</el-button>
+            <el-button v-if="currentResource?.id" type="danger" @click="handleDeleteResource">删除</el-button>
+          </div>
+          <div>
+            <el-button @click="closeResourceDialog">{{ currentResource?.id && !isEditResource ? '关闭' : '取消' }}</el-button>
+            <el-button v-if="!currentResource?.id || isEditResource" type="primary" @click="handleResourceSubmit">确定</el-button>
+          </div>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 人员详情对话框 -->
+    <el-dialog 
+      v-model="personnelDialogVisible" 
+      :title="isEditPersonnel ? '编辑人员' : (currentPersonnel?.id ? '人员详情' : '添加人员')"
+      width="600px"
+    >
+      <!-- 详情展示模式 -->
+      <div v-if="currentPersonnel?.id && !isEditPersonnel">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="姓名" :span="2">{{ personnelForm.name }}</el-descriptions-item>
+          <el-descriptions-item label="角色">{{ personnelForm.role }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag v-if="personnelForm.status === 'available'" type="success">可用</el-tag>
+            <el-tag v-else-if="personnelForm.status === 'busy'" type="warning">忙碌</el-tag>
+            <el-tag v-else-if="personnelForm.status === 'on_leave'" type="info">休假</el-tag>
+            <el-tag v-else type="danger">离职</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="职责" :span="2">{{ personnelForm.responsibility }}</el-descriptions-item>
+          <el-descriptions-item label="工作时间" :span="2">{{ personnelForm.work_hours }}</el-descriptions-item>
+          <el-descriptions-item label="技能" :span="2">
+            <el-tag v-for="skill in personnelForm.skills" :key="skill" style="margin-right: 5px;">{{ skill }}</el-tag>
+            <span v-if="!personnelForm.skills || personnelForm.skills.length === 0">无</span>
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+
+      <!-- 编辑/添加模式 -->
+      <el-form v-else :model="personnelForm" label-width="120px">
+        <el-form-item label="姓名">
+          <el-input v-model="personnelForm.name" />
+        </el-form-item>
+        <el-form-item label="角色">
+          <el-input v-model="personnelForm.role" />
+        </el-form-item>
+        <el-form-item label="职责">
+          <el-input v-model="personnelForm.responsibility" type="textarea" />
+        </el-form-item>
+        <el-form-item label="技能">
+          <el-select v-model="personnelForm.skills" multiple filterable allow-create placeholder="输入技能">
+            <el-option 
+              v-for="skill in personnelForm.skills" 
+              :key="skill" 
+              :label="skill" 
+              :value="skill" 
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="工作时间">
+          <el-input v-model="personnelForm.work_hours" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="personnelForm.status">
+            <el-option label="可用" value="available" />
+            <el-option label="忙碌" value="busy" />
+            <el-option label="休假" value="on_leave" />
+            <el-option label="离职" value="resigned" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <div style="display: flex; justify-content: space-between;">
+          <div>
+            <el-button v-if="currentPersonnel?.id && !isEditPersonnel" type="primary" @click="isEditPersonnel = true">编辑</el-button>
+            <el-button v-if="currentPersonnel?.id" type="danger" @click="handleDeletePersonnel">删除</el-button>
+          </div>
+          <div>
+            <el-button @click="closePersonnelDialog">{{ currentPersonnel?.id && !isEditPersonnel ? '关闭' : '取消' }}</el-button>
+            <el-button v-if="!currentPersonnel?.id || isEditPersonnel" type="primary" @click="handlePersonnelSubmit">确定</el-button>
+          </div>
+        </div>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getDependencies, createDependency, updateDependency, deleteDependency, getGraphData } from '@/api/dependency'
-import { getActivities } from '@/api/activity'
-import type { Dependency, GraphData, Activity } from '@/types'
+import { useRoute, useRouter } from 'vue-router'
+import { createDependency, updateDependency, getGraphData } from '@/api/dependency'
+import { getActivities, getActivity, createActivity, updateActivity, deleteActivity } from '@/api/activity'
+import { getResources, getResource, createResource, updateResource, deleteResource } from '@/api/resource'
+import { getPersonnel, getPersonnelById, createPersonnel, updatePersonnel, deletePersonnel } from '@/api/personnel'
+import type { Dependency, GraphData, Activity, Resource, Personnel } from '@/types'
 import DependencyGraph from '@/components/DependencyGraph.vue'
+import ProcessSelector from '@/components/ProcessSelector.vue'
 
-const dependencies = ref<Dependency[]>([])
-const activities = ref<Activity[]>([])
-const graphData = ref<GraphData>({ nodes: [], edges: [] })
-const dialogVisible = ref(false)
-const isEdit = ref(false)
-const form = ref<Dependency>({
-  source_activity_id: '',
-  target_activity_id: '',
-  dependency_type: 'sequential',
-  status: 'active'
-})
+const route = useRoute()
+const router = useRouter()
 
-const displayDependencies = computed(() => {
-  return dependencies.value.filter(d => d.source_activity_id && d.target_activity_id)
-})
+// 当前选择的流程
+const currentDomain = ref<string>('')
+const currentProcessId = ref<string>('')
 
-const getActivityName = (activityId: string): string => {
-  const activity = activities.value.find(a => a.id === activityId)
-  return activity ? activity.name : activityId
-}
-
-const loadDependencies = async () => {
-  try {
-    dependencies.value = await getDependencies()
-  } catch (error) {
-    ElMessage.error('加载依赖关系失败')
+// 从URL读取初始值
+const initFromUrl = () => {
+  const domain = route.query.domain as string
+  const processId = route.query.process_id as string
+  
+  if (domain) {
+    currentDomain.value = domain
+  }
+  if (processId) {
+    currentProcessId.value = processId
   }
 }
 
+// 更新URL参数
+const updateUrl = () => {
+  router.replace({
+    query: {
+      domain: currentDomain.value,
+      process_id: currentProcessId.value
+    }
+  })
+}
+
+// 处理流程切换
+const handleProcessChange = (domain: string, processId: string) => {
+  currentDomain.value = domain
+  currentProcessId.value = processId
+  updateUrl()
+  
+  loadActivities()
+  loadResources()
+  
+  applyProcessHighlight()
+}
+
+const activities = ref<Activity[]>([])
+const resources = ref<Resource[]>([])
+const personnel = ref<Personnel[]>([])
+const graphData = ref<GraphData>({ nodes: [], edges: [] })
+
+// 高亮状态
+const highlightActive = ref(false)
+const highlightSet = ref<{nodeIds: Set<string>, edgeIds: Set<string>}>({
+  nodeIds: new Set(),
+  edgeIds: new Set()
+})
+
 const loadActivities = async () => {
   try {
-    activities.value = await getActivities()
+    activities.value = await getActivities({ 
+      domain: currentDomain.value, 
+      process_id: currentProcessId.value 
+    })
   } catch (error) {
     ElMessage.error('加载活动失败')
   }
 }
 
-const loadGraphData = async () => {
+const loadResources = async () => {
   try {
-    graphData.value = await getGraphData()
+    resources.value = await getResources({
+      domain: currentDomain.value,
+      process_id: currentProcessId.value
+    })
+  } catch (error) {
+    ElMessage.error('加载资源失败')
+  }
+}
+
+const loadPersonnel = async () => {
+  try {
+    personnel.value = await getPersonnel()
+  } catch (error) {
+    ElMessage.error('加载人员失败')
+  }
+}
+
+// 加载全局图数据
+const loadGlobalGraphData = async () => {
+  try {
+    graphData.value = await getGraphData({ scope: 'global' })
   } catch (error) {
     ElMessage.error('加载图数据失败')
   }
 }
 
-const handleAdd = () => {
-  isEdit.value = false
-  form.value = {
+// 应用流程高亮
+const applyProcessHighlight = () => {
+  if (!currentDomain.value || !currentProcessId.value) {
+    ElMessage.warning('请先选择流程域和流程ID')
+    return
+  }
+  
+  const nodeIds = new Set<string>()
+  const edgeIds = new Set<string>()
+  
+  graphData.value.nodes?.forEach((node: any) => {
+    if (node.domain === currentDomain.value && node.process_id === currentProcessId.value) {
+      nodeIds.add(node.id)
+    }
+  })
+  
+  graphData.value.edges?.forEach((edge: any, index: number) => {
+    if (edge.domain === currentDomain.value && edge.process_id === currentProcessId.value) {
+      edgeIds.add(`${edge.source}-${edge.target}-${index}`)
+    }
+  })
+  
+  if (nodeIds.size === 0) {
+    ElMessage.warning(`未找到 ${currentDomain.value}/${currentProcessId.value} 相关节点`)
+    return
+  }
+  
+  highlightSet.value = { nodeIds, edgeIds }
+  highlightActive.value = true
+  
+  ElMessage.success(`已定位到 ${currentDomain.value}/${currentProcessId.value}（${nodeIds.size}个节点）`)
+}
+
+// 清除高亮
+const clearHighlight = () => {
+  currentDomain.value = ''
+  currentProcessId.value = ''
+  highlightActive.value = false
+  highlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+  updateUrl()
+  ElMessage.success('已恢复全局视图')
+}
+
+// 刷新图数据
+const loadGraphData = async () => {
+  await loadGlobalGraphData()
+  if (highlightActive.value && currentDomain.value && currentProcessId.value) {
+    applyProcessHighlight()
+  }
+}
+
+// 依赖关系对话框
+const dependencyDialogVisible = ref(false)
+const isEditDependency = ref(false)
+const dependencyForm = ref<Dependency>({
+  source_activity_id: '',
+  target_activity_id: '',
+  dependency_type: 'sequential',
+  status: 'active',
+  domain: 'production',
+  process_id: 'P001'
+})
+
+// 活动对话框
+const activityDialogVisible = ref(false)
+const isEditActivity = ref(false)
+const currentActivity = ref<Activity | null>(null)
+const activityForm = ref<Activity>({
+  name: '',
+  description: '',
+  activity_type: '',
+  sop_steps: [],
+  estimated_duration: 0,
+  required_resources: [],
+  required_personnel: [],
+  status: 'pending',
+  domain: 'production',
+  process_id: 'P001'
+})
+
+// 资源对话框
+const resourceDialogVisible = ref(false)
+const isEditResource = ref(false)
+const currentResource = ref<Resource | null>(null)
+const resourceForm = ref<Resource>({
+  name: '',
+  type: '',
+  specification: '',
+  supplier: '',
+  quantity: 0,
+  unit: '',
+  status: 'available'
+})
+
+// 人员对话框
+const personnelDialogVisible = ref(false)
+const isEditPersonnel = ref(false)
+const currentPersonnel = ref<Personnel | null>(null)
+const personnelForm = ref<Personnel>({
+  name: '',
+  role: '',
+  responsibility: '',
+  skills: [],
+  work_hours: '',
+  assigned_tasks: [],
+  status: 'available'
+})
+
+// 节点点击处理
+const handleNodeClick = async (node: any) => {
+  if (node.category === 'Activity') {
+    try {
+      const activity = await getActivity(node.id)
+      if ((activity as any)._id && !activity.id) {
+        activity.id = (activity as any)._id
+      }
+      currentActivity.value = activity
+      activityForm.value = { ...activity }
+      isEditActivity.value = false
+      activityDialogVisible.value = true
+    } catch (error) {
+      ElMessage.error('加载活动详情失败')
+    }
+  } else if (node.category === 'Resource') {
+    try {
+      const resource = await getResource(node.id)
+      if ((resource as any)._id && !resource.id) {
+        resource.id = (resource as any)._id
+      }
+      currentResource.value = resource
+      resourceForm.value = { ...resource }
+      isEditResource.value = false
+      resourceDialogVisible.value = true
+    } catch (error) {
+      ElMessage.error('加载资源详情失败')
+    }
+  } else if (node.category === 'Personnel') {
+    try {
+      const person = await getPersonnelById(node.id)
+      if ((person as any)._id && !person.id) {
+        person.id = (person as any)._id
+      }
+      currentPersonnel.value = person
+      personnelForm.value = { ...person }
+      isEditPersonnel.value = false
+      personnelDialogVisible.value = true
+    } catch (error) {
+      ElMessage.error('加载人员详情失败')
+    }
+  }
+}
+
+// 依赖关系操作
+const handleAddDependency = () => {
+  isEditDependency.value = false
+  dependencyForm.value = {
     source_activity_id: '',
     target_activity_id: '',
     dependency_type: 'sequential',
-    status: 'active'
+    status: 'active',
+    domain: currentDomain.value || 'production',
+    process_id: currentProcessId.value || 'P001'
   }
-  dialogVisible.value = true
+  dependencyDialogVisible.value = true
 }
 
-const handleEdit = (row: Dependency) => {
-  isEdit.value = true
-  form.value = { ...row }
-  dialogVisible.value = true
-}
-
-const handleSubmit = async () => {
+const handleDependencySubmit = async () => {
   try {
-    if (isEdit.value && form.value.id) {
-      await updateDependency(form.value.id, form.value)
+    if (isEditDependency.value && dependencyForm.value.id) {
+      await updateDependency(dependencyForm.value.id, dependencyForm.value)
       ElMessage.success('更新成功')
     } else {
-      await createDependency(form.value)
+      await createDependency(dependencyForm.value)
       ElMessage.success('创建成功')
     }
-    dialogVisible.value = false
-    loadDependencies()
-    loadGraphData()
+    dependencyDialogVisible.value = false
+    await loadGraphData()
   } catch (error) {
     ElMessage.error('操作失败')
   }
 }
 
-const handleDelete = async (row: Dependency) => {
+// 活动操作
+const handleAddActivity = () => {
+  currentActivity.value = null
+  isEditActivity.value = true
+  activityForm.value = {
+    name: '',
+    description: '',
+    activity_type: '',
+    sop_steps: [],
+    estimated_duration: 0,
+    required_resources: [],
+    required_personnel: [],
+    status: 'pending',
+    domain: currentDomain.value || 'production',
+    process_id: currentProcessId.value || 'P001'
+  }
+  activityDialogVisible.value = true
+}
+
+const handleActivitySubmit = async () => {
   try {
-    await ElMessageBox.confirm('确定删除该依赖关系?', '提示', {
+    if (currentActivity.value?.id) {
+      await updateActivity(currentActivity.value.id, activityForm.value)
+      ElMessage.success('更新成功')
+    } else {
+      await createActivity(activityForm.value)
+      ElMessage.success('创建成功')
+    }
+    activityDialogVisible.value = false
+    isEditActivity.value = false
+    await loadActivities()
+    await loadGraphData()
+  } catch (error) {
+    ElMessage.error('操作失败')
+  }
+}
+
+const closeActivityDialog = () => {
+  activityDialogVisible.value = false
+  isEditActivity.value = false
+}
+
+const handleDeleteActivity = async () => {
+  try {
+    await ElMessageBox.confirm('确定删除该活动?', '提示', {
       type: 'warning'
     })
-    if (row.id) {
-      await deleteDependency(row.id)
+    if (currentActivity.value?.id) {
+      await deleteActivity(currentActivity.value.id)
       ElMessage.success('删除成功')
-      loadDependencies()
-      loadGraphData()
+      activityDialogVisible.value = false
+      await loadActivities()
+      await loadGraphData()
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+// 资源操作
+const handleAddResource = () => {
+  currentResource.value = null
+  isEditResource.value = true
+  resourceForm.value = {
+    name: '',
+    type: '',
+    specification: '',
+    supplier: '',
+    quantity: 0,
+    unit: '',
+    status: 'available'
+  }
+  resourceDialogVisible.value = true
+}
+
+const handleResourceSubmit = async () => {
+  try {
+    if (currentResource.value?.id) {
+      await updateResource(currentResource.value.id, resourceForm.value)
+      ElMessage.success('更新成功')
+    } else {
+      await createResource(resourceForm.value)
+      ElMessage.success('创建成功')
+    }
+    resourceDialogVisible.value = false
+    isEditResource.value = false
+    await loadResources()
+    await loadGraphData()
+  } catch (error) {
+    ElMessage.error('操作失败')
+  }
+}
+
+const closeResourceDialog = () => {
+  resourceDialogVisible.value = false
+  isEditResource.value = false
+}
+
+const handleDeleteResource = async () => {
+  try {
+    await ElMessageBox.confirm('确定删除该资源?', '提示', {
+      type: 'warning'
+    })
+    if (currentResource.value?.id) {
+      await deleteResource(currentResource.value.id)
+      ElMessage.success('删除成功')
+      resourceDialogVisible.value = false
+      await loadResources()
+      await loadGraphData()
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+// 人员操作
+const handleAddPersonnel = () => {
+  currentPersonnel.value = null
+  isEditPersonnel.value = true
+  personnelForm.value = {
+    name: '',
+    role: '',
+    responsibility: '',
+    skills: [],
+    work_hours: '',
+    assigned_tasks: [],
+    status: 'available'
+  }
+  personnelDialogVisible.value = true
+}
+
+const handlePersonnelSubmit = async () => {
+  try {
+    if (currentPersonnel.value?.id) {
+      await updatePersonnel(currentPersonnel.value.id, personnelForm.value)
+      ElMessage.success('更新成功')
+    } else {
+      await createPersonnel(personnelForm.value)
+      ElMessage.success('创建成功')
+    }
+    personnelDialogVisible.value = false
+    isEditPersonnel.value = false
+    await loadPersonnel()
+    await loadGraphData()
+  } catch (error) {
+    ElMessage.error('操作失败')
+  }
+}
+
+const closePersonnelDialog = () => {
+  personnelDialogVisible.value = false
+  isEditPersonnel.value = false
+}
+
+const handleDeletePersonnel = async () => {
+  try {
+    await ElMessageBox.confirm('确定删除该人员?', '提示', {
+      type: 'warning'
+    })
+    if (currentPersonnel.value?.id) {
+      await deletePersonnel(currentPersonnel.value.id)
+      ElMessage.success('删除成功')
+      personnelDialogVisible.value = false
+      await loadPersonnel()
+      await loadGraphData()
     }
   } catch (error) {
     if (error !== 'cancel') {
@@ -221,9 +757,15 @@ const handleDelete = async (row: Dependency) => {
 }
 
 onMounted(async () => {
-  await loadActivities()
-  await loadDependencies()
-  await loadGraphData()
+  initFromUrl()
+  
+  await loadGlobalGraphData()
+  
+  if (currentDomain.value && currentProcessId.value) {
+    await loadActivities()
+    await loadResources()
+  }
+  await loadPersonnel()
 })
 </script>
 
@@ -234,8 +776,3 @@ onMounted(async () => {
   align-items: center;
 }
 </style>
-
-
-
-
-

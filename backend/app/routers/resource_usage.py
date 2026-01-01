@@ -40,6 +40,8 @@ async def create_resource_usage(usage: ResourceUsageCreate):
     SET u.quantity = $quantity,
         u.unit = $unit,
         u.stage = $stage,
+        u.domain = $domain,
+        u.process_id = $process_id,
         u.created_at = datetime()
     RETURN elementId(u) as id, u
     """
@@ -51,7 +53,9 @@ async def create_resource_usage(usage: ResourceUsageCreate):
                 "resource_id": usage.resource_id,
                 "quantity": usage.quantity,
                 "unit": usage.unit,
-                "stage": usage.stage
+                "stage": usage.stage,
+                "domain": usage.domain,
+                "process_id": usage.process_id
             })
             record = await result.single()
             if not record:
@@ -64,7 +68,9 @@ async def create_resource_usage(usage: ResourceUsageCreate):
                 resource_id=usage.resource_id,
                 quantity=usage.quantity,
                 unit=usage.unit,
-                stage=usage.stage
+                stage=usage.stage,
+                domain=usage.domain,
+                process_id=usage.process_id
             )
     except Exception as e:
         print(f"Neo4j Error: {e}")
@@ -73,34 +79,38 @@ async def create_resource_usage(usage: ResourceUsageCreate):
 @router.get("", response_model=List[ResourceUsageResponse])
 async def get_resource_usages(
     activity_id: Optional[str] = Query(None, description="按活动ID筛选"),
-    resource_id: Optional[str] = Query(None, description="按资源ID筛选")
+    resource_id: Optional[str] = Query(None, description="按资源ID筛选"),
+    domain: Optional[str] = Query(None, description="按流程域筛选"),
+    process_id: Optional[str] = Query(None, description="按流程实例ID筛选")
 ):
     driver = get_neo4j_driver()
     
-    if activity_id and resource_id:
-        query = """
-        MATCH (a:Activity {id: $aid})-[u:USES]->(r:Resource {id: $rid})
-        RETURN elementId(u) as id, a.id as activity_id, r.id as resource_id, u
-        """
-        params = {"aid": activity_id, "rid": resource_id}
-    elif activity_id:
-        query = """
-        MATCH (a:Activity {id: $aid})-[u:USES]->(r:Resource)
-        RETURN elementId(u) as id, a.id as activity_id, r.id as resource_id, u
-        """
-        params = {"aid": activity_id}
-    elif resource_id:
-        query = """
-        MATCH (a:Activity)-[u:USES]->(r:Resource {id: $rid})
-        RETURN elementId(u) as id, a.id as activity_id, r.id as resource_id, u
-        """
-        params = {"rid": resource_id}
-    else:
-        query = """
-        MATCH (a:Activity)-[u:USES]->(r:Resource)
-        RETURN elementId(u) as id, a.id as activity_id, r.id as resource_id, u
-        """
-        params = {}
+    where_clauses = []
+    params = {}
+    
+    if activity_id:
+        where_clauses.append("a.id = $aid")
+        params["aid"] = activity_id
+    
+    if resource_id:
+        where_clauses.append("r.id = $rid")
+        params["rid"] = resource_id
+    
+    if domain:
+        where_clauses.append("u.domain = $domain")
+        params["domain"] = domain
+    
+    if process_id:
+        where_clauses.append("u.process_id = $process_id")
+        params["process_id"] = process_id
+    
+    where_clause = " AND ".join(where_clauses) if where_clauses else ""
+    
+    query = f"""
+    MATCH (a:Activity)-[u:USES]->(r:Resource)
+    {("WHERE " + where_clause) if where_clause else ""}
+    RETURN elementId(u) as id, a.id as activity_id, r.id as resource_id, u
+    """
 
     try:
         usages = []
@@ -114,7 +124,9 @@ async def get_resource_usages(
                     resource_id=record["resource_id"],
                     quantity=rel.get("quantity"),
                     unit=rel.get("unit"),
-                    stage=rel.get("stage")
+                    stage=rel.get("stage"),
+                    domain=rel.get("domain"),
+                    process_id=rel.get("process_id")
                 ))
         return usages
     except Exception as e:
@@ -150,7 +162,9 @@ async def update_resource_usage(usage_id: str, usage: ResourceUsageUpdate):
                 resource_id=record["resource_id"],
                 quantity=rel.get("quantity"),
                 unit=rel.get("unit"),
-                stage=rel.get("stage")
+                stage=rel.get("stage"),
+                domain=rel.get("domain"),
+                process_id=rel.get("process_id")
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新失败: {str(e)}")

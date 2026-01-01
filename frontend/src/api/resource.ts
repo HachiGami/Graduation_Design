@@ -1,8 +1,8 @@
 import request from './request'
 import type { Resource } from '@/types'
 
-export const getResources = () => {
-  return request.get<any, Resource[]>('/resources')
+export const getResources = (params?: { domain?: string; process_id?: string }) => {
+  return request.get<any, Resource[]>('/resources', { params })
 }
 
 export const getResource = (id: string) => {

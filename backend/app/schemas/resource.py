@@ -11,6 +11,10 @@ class ResourceBase(BaseModel):
     unit: str = Field(..., description="单位")
     expiry_date: Optional[datetime] = Field(None, description="使用期限")
     status: str = Field(default="available", description="状态")
+    domain: Optional[str] = Field(None, description="流程域")
+    process_id: Optional[str] = Field(None, description="流程实例ID")
+    version: Optional[int] = Field(1, description="版本号")
+    is_active: Optional[bool] = Field(True, description="是否启用")
 
 class ResourceCreate(ResourceBase):
     pass
@@ -24,6 +28,10 @@ class ResourceUpdate(BaseModel):
     unit: Optional[str] = None
     expiry_date: Optional[datetime] = None
     status: Optional[str] = None
+    domain: Optional[str] = None
+    process_id: Optional[str] = None
+    version: Optional[int] = None
+    is_active: Optional[bool] = None
 
 class ResourceResponse(ResourceBase):
     id: str = Field(..., alias="_id")

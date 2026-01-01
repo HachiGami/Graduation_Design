@@ -32,8 +32,11 @@ async def create_dependency(dependency: DependencyCreate):
     MERGE (a)-[r:DEPENDS_ON]->(b)
     SET r.type = $type,
         r.time_constraint = $time,
+        r.lag_minutes = $lag,
         r.status = $status,
         r.description = $desc,
+        r.domain = $domain,
+        r.process_id = $process_id,
         r.created_at = datetime()
     RETURN elementId(r) as id, r
     """
@@ -45,8 +48,11 @@ async def create_dependency(dependency: DependencyCreate):
                 "target_id": dependency.target_activity_id,
                 "type": dependency.dependency_type,
                 "time": dependency.time_constraint,
+                "lag": dependency.lag_minutes or 0,
                 "status": dependency.status or "active",
-                "desc": dependency.description
+                "desc": dependency.description,
+                "domain": dependency.domain,
+                "process_id": dependency.process_id
             })
             record = await result.single()
             if not record:
@@ -69,24 +75,31 @@ async def create_dependency(dependency: DependencyCreate):
         raise HTTPException(status_code=500, detail=f"图数据库操作失败: {str(e)}")
 
 @router.get("", response_model=List[DependencyResponse])
-async def get_dependencies(activity_id: Optional[str] = Query(None, description="按活动ID筛选")):
+async def get_dependencies(
+    domain: str = Query(..., description="流程域（必填）"),
+    process_id: Optional[str] = Query(None, description="流程实例ID"),
+    activity_id: Optional[str] = Query(None, description="按活动ID筛选")
+):
     driver = get_neo4j_driver()
     
+    where_clauses = ["r.domain = $domain"]
+    params = {"domain": domain}
+    
+    if process_id:
+        where_clauses.append("r.process_id = $process_id")
+        params["process_id"] = process_id
+    
     if activity_id:
-        # Check specific activity dependencies (both incoming and outgoing)
-        query = """
-        MATCH (s:Activity)-[r:DEPENDS_ON]->(t:Activity)
-        WHERE s.id = $aid OR t.id = $aid
-        RETURN elementId(r) as id, s.id as source, t.id as target, r
-        """
-        params = {"aid": activity_id}
-    else:
-        # Get all dependencies
-        query = """
-        MATCH (s:Activity)-[r:DEPENDS_ON]->(t:Activity)
-        RETURN elementId(r) as id, s.id as source, t.id as target, r
-        """
-        params = {}
+        where_clauses.append("(s.id = $aid OR t.id = $aid)")
+        params["aid"] = activity_id
+    
+    where_clause = " AND ".join(where_clauses)
+    
+    query = f"""
+    MATCH (s:Activity)-[r:DEPENDS_ON]->(t:Activity)
+    WHERE {where_clause}
+    RETURN elementId(r) as id, s.id as source, t.id as target, r
+    """
 
     try:
         dependencies = []
@@ -105,6 +118,8 @@ async def get_dependencies(activity_id: Optional[str] = Query(None, description=
                     time_constraint=rel.get("time_constraint"),
                     status=rel.get("status", "active"),
                     description=rel.get("description"),
+                    domain=rel.get("domain"),
+                    process_id=rel.get("process_id"),
                     created_at=None 
                 ))
         return dependencies
@@ -170,7 +185,19 @@ async def delete_dependency(dependency_id: str):
         raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
 
 @router.get("/graph/data")
-async def get_graph_data():
+@router.get("/graph/data")
+async def get_graph_data(
+    scope: str = Query("global", description="查询范围: global/domain/process"),
+    domain: Optional[str] = Query(None, description="流程域（scope=domain或process时必填）"),
+    process_id: Optional[str] = Query(None, description="流程实例ID（scope=process时必填）"),
+    include_cross: bool = Query(False, description="是否包含跨流程关联")
+):
+    """
+    获取图数据
+    - scope=global: 返回全部数据（默认）
+    - scope=domain: 返回指定domain的所有process
+    - scope=process: 返回指定domain+process_id的数据
+    """
     driver = get_neo4j_driver()
     db = get_database()
     
@@ -178,19 +205,68 @@ async def get_graph_data():
         edges = []
         activity_ids = set()
         
-        # 获取活动依赖关系
-        dependency_query = """
-        MATCH (s:Activity)-[r:DEPENDS_ON]->(t:Activity)
-        RETURN DISTINCT s.id as source_id, t.id as target_id, r
-        ORDER BY s.id, t.id
-        """
+        # 根据scope构建查询
+        if scope == "global":
+            # 全局：返回所有数据
+            dependency_query = """
+            MATCH (s:Activity)-[r:DEPENDS_ON]->(t:Activity)
+            RETURN DISTINCT s.id as source_id, t.id as target_id, r,
+                   s.domain as s_domain, s.process_id as s_pid,
+                   t.domain as t_domain, t.process_id as t_pid
+            ORDER BY s.id, t.id
+            """
+            params = {}
+        elif scope == "domain":
+            # 域级：返回某个domain的所有process
+            if not domain:
+                raise HTTPException(status_code=400, detail="scope=domain时必须提供domain参数")
+            dependency_query = """
+            MATCH (s:Activity)-[r:DEPENDS_ON]->(t:Activity)
+            WHERE s.domain = $domain OR t.domain = $domain
+            RETURN DISTINCT s.id as source_id, t.id as target_id, r,
+                   s.domain as s_domain, s.process_id as s_pid,
+                   t.domain as t_domain, t.process_id as t_pid
+            ORDER BY s.id, t.id
+            """
+            params = {"domain": domain}
+        else:  # scope == "process"
+            # 流程级：返回指定domain+process_id的数据
+            if not domain or not process_id:
+                raise HTTPException(status_code=400, detail="scope=process时必须提供domain和process_id参数")
+            
+            if include_cross:
+                dependency_query = """
+                MATCH (s:Activity)-[r:DEPENDS_ON]->(t:Activity)
+                WHERE (s.domain = $domain AND s.process_id = $process_id) 
+                   OR (t.domain = $domain AND t.process_id = $process_id)
+                RETURN DISTINCT s.id as source_id, t.id as target_id, r,
+                       s.domain as s_domain, s.process_id as s_pid,
+                       t.domain as t_domain, t.process_id as t_pid
+                ORDER BY s.id, t.id
+                """
+            else:
+                dependency_query = """
+                MATCH (s:Activity)-[r:DEPENDS_ON]->(t:Activity)
+                WHERE r.domain = $domain AND r.process_id = $process_id
+                RETURN DISTINCT s.id as source_id, t.id as target_id, r,
+                       s.domain as s_domain, s.process_id as s_pid,
+                       t.domain as t_domain, t.process_id as t_pid
+                ORDER BY s.id, t.id
+                """
+            params = {"domain": domain, "process_id": process_id}
         
         async with driver.session() as session:
-            result = await session.run(dependency_query)
+            result = await session.run(dependency_query, params)
             async for record in result:
                 source_id = record["source_id"]
                 target_id = record["target_id"]
                 rel = record["r"]
+                
+                # 获取source和target的domain/process_id
+                s_domain = record.get("s_domain")
+                s_pid = record.get("s_pid")
+                t_domain = record.get("t_domain")
+                t_pid = record.get("t_pid")
                 
                 activity_ids.add(source_id)
                 activity_ids.add(target_id)
@@ -202,7 +278,9 @@ async def get_graph_data():
                     "type": rel.get("type", rel.get("dependency_type", "sequential")),
                     "time_constraint": rel.get("time_constraint"),
                     "status": rel.get("status", "active"),
-                    "description": rel.get("description")
+                    "description": rel.get("description"),
+                    "domain": rel.get("domain", s_domain),  # 边的domain（优先用关系属性，否则用源节点）
+                    "process_id": rel.get("process_id", s_pid)  # 边的process_id
                 })
         
         # 获取活动-资源使用关系（每个活动的资源单独一个节点）
@@ -304,6 +382,7 @@ async def get_graph_data():
         for node_id in activity_ids:
             if node_id not in seen_activity_ids:
                 activity = await db.activities.find_one({"_id": ObjectId(node_id)})
+                
                 if activity:
                     nodes.append({
                         "id": node_id,
@@ -312,7 +391,9 @@ async def get_graph_data():
                         "type": activity.get("activity_type", "processing"),
                         "status": activity.get("status", "pending"),
                         "description": activity.get("description", ""),
-                        "estimated_duration": activity.get("estimated_duration", 0)
+                        "estimated_duration": activity.get("estimated_duration", 0),
+                        "domain": activity.get("domain", "unknown"),
+                        "process_id": activity.get("process_id", "unknown")
                     })
                     seen_activity_ids.add(node_id)
         

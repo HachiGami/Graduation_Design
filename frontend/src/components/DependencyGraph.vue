@@ -16,6 +16,8 @@
       <div v-if="selectedActivity" class="activity-detail">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="活动名称">{{ selectedActivity.name }}</el-descriptions-item>
+          <el-descriptions-item label="流程域">{{ selectedActivity.domain || '未知' }}</el-descriptions-item>
+          <el-descriptions-item label="流程ID">{{ selectedActivity.process_id || '未知' }}</el-descriptions-item>
           <el-descriptions-item label="活动类型">{{ selectedActivity.type }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="getStatusType(selectedActivity.status)">{{ selectedActivity.status }}</el-tag>
@@ -31,10 +33,17 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import * as echarts from 'echarts'
+import dagre from 'dagre'
 import type { GraphData } from '@/types'
 
 const props = defineProps<{
   data: GraphData
+  highlightActive?: boolean
+  highlightSet?: {nodeIds: Set<string>, edgeIds: Set<string>}
+}>()
+
+const emit = defineEmits<{
+  nodeClick: [node: any]
 }>()
 
 const chartRef = ref<HTMLElement>()
@@ -42,6 +51,11 @@ let chartInstance: echarts.ECharts | null = null
 const expandedActivities = ref<Set<string>>(new Set())
 const detailDrawerVisible = ref(false)
 const selectedActivity = ref<any>(null)
+
+// 缓存布局结果
+let cachedNodePositions: Map<string, { x: number, y: number, isVirtual?: boolean }> | null = null
+let cachedVirtualNodes: string[] = []
+let cachedDataHash = ''
 
 const getStatusType = (status: string) => {
   const typeMap: Record<string, string> = {
@@ -56,6 +70,9 @@ const getStatusType = (status: string) => {
 
 const resetView = () => {
   expandedActivities.value.clear()
+  cachedNodePositions = null
+  cachedVirtualNodes = []
+  cachedDataHash = ''
   if (chartInstance) {
     chartInstance.resize()
     initChart()
@@ -81,70 +98,187 @@ const truncateText = (text: string, maxLength: number = 6): string => {
   return text.substring(0, maxLength) + '...'
 }
 
-// 拓扑排序计算节点层级
-const calculateNodeLayers = (nodes: any[], edges: any[]): Map<string, number> => {
-  const layers = new Map<string, number>()
-  const inDegree = new Map<string, number>()
-  const adjacencyList = new Map<string, string[]>()
+// DAG 分层布局计算
+const computeDagreLayout = (nodes: any[], edges: any[]) => {
+  const g = new dagre.graphlib.Graph()
   
-  // 初始化：所有节点入度为0，层级为0
+  g.setGraph({
+    rankdir: 'LR',
+    ranksep: 280,
+    nodesep: 140,
+    edgesep: 30,
+    marginx: 50,
+    marginy: 50,
+    ranker: 'longest-path'
+  })
+  
+  g.setDefaultEdgeLabel(() => ({}))
+  
+  const nodeMetadata = new Map<string, any>()
   nodes.forEach(node => {
-    layers.set(node.id, 0)
-    inDegree.set(node.id, 0)
-    adjacencyList.set(node.id, [])
-  })
-  
-  // 构建图：计算入度和邻接表
-  edges.forEach(edge => {
-    if (edge.source && edge.target) {
-      const currentInDegree = inDegree.get(edge.target) || 0
-      inDegree.set(edge.target, currentInDegree + 1)
-      
-      const neighbors = adjacencyList.get(edge.source) || []
-      neighbors.push(edge.target)
-      adjacencyList.set(edge.source, neighbors)
-    }
-  })
-  
-  // BFS拓扑排序
-  const queue: string[] = []
-  
-  // 入度为0的节点放入队列（起始节点）
-  nodes.forEach(node => {
-    if (inDegree.get(node.id) === 0) {
-      queue.push(node.id)
-      layers.set(node.id, 0)
-    }
-  })
-  
-  // 处理队列
-  while (queue.length > 0) {
-    const current = queue.shift()!
-    const currentLayer = layers.get(current) || 0
+    const labelWidth = Math.max(80, (node.name?.length || 6) * 14 + 40)
+    const labelHeight = 70
     
-    const neighbors = adjacencyList.get(current) || []
-    neighbors.forEach(neighbor => {
-      // 更新后继节点的层级：取所有前驱节点层级+1的最大值
-      const newLayer = currentLayer + 1
-      const existingLayer = layers.get(neighbor) || 0
-      layers.set(neighbor, Math.max(existingLayer, newLayer))
-      
-      // 减少入度
-      const degree = (inDegree.get(neighbor) || 0) - 1
-      inDegree.set(neighbor, degree)
-      
-      // 入度为0时加入队列
-      if (degree === 0) {
-        queue.push(neighbor)
-      }
+    g.setNode(node.id, {
+      label: node.name,
+      width: labelWidth,
+      height: labelHeight
     })
+    nodeMetadata.set(node.id, { ...node, width: labelWidth, height: labelHeight })
+  })
+  
+  const edgeList: Array<{source: string, target: string}> = []
+  const edgeSet = new Set<string>()
+  edges.forEach(edge => {
+    const edgeKey = `${edge.source}-${edge.target}`
+    if (!edgeSet.has(edgeKey)) {
+      edgeSet.add(edgeKey)
+      edgeList.push({ source: edge.source, target: edge.target })
+      g.setEdge(edge.source, edge.target)
+    }
+  })
+  
+  dagre.layout(g)
+  
+  const nodeRanks = new Map<string, number>()
+  g.nodes().forEach(nodeId => {
+    const node = g.node(nodeId)
+    nodeRanks.set(nodeId, node.rank || 0)
+  })
+  
+  const virtualNodes: Array<{id: string, rank: number}> = []
+  const newEdges: Array<{source: string, target: string}> = []
+  
+  edgeList.forEach(edge => {
+    const srcRank = nodeRanks.get(edge.source) || 0
+    const tgtRank = nodeRanks.get(edge.target) || 0
+    const rankDiff = tgtRank - srcRank
+    
+    if (rankDiff > 1) {
+      let prevNode = edge.source
+      for (let r = srcRank + 1; r < tgtRank; r++) {
+        const vNodeId = `__v_${edge.source}_${edge.target}_${r}`
+        virtualNodes.push({ id: vNodeId, rank: r })
+        
+        if (!g.hasNode(vNodeId)) {
+          g.setNode(vNodeId, {
+            label: '',
+            width: 1,
+            height: 1
+          })
+          nodeMetadata.set(vNodeId, { id: vNodeId, isVirtual: true })
+        }
+        
+        newEdges.push({ source: prevNode, target: vNodeId })
+        prevNode = vNodeId
+      }
+      newEdges.push({ source: prevNode, target: edge.target })
+    } else {
+      newEdges.push(edge)
+    }
+  })
+  
+  const g2 = new dagre.graphlib.Graph()
+  g2.setGraph({
+    rankdir: 'LR',
+    ranksep: 280,
+    nodesep: 140,
+    edgesep: 30,
+    marginx: 50,
+    marginy: 50,
+    ranker: 'longest-path'
+  })
+  g2.setDefaultEdgeLabel(() => ({}))
+  
+  g.nodes().forEach(nodeId => {
+    const node = g.node(nodeId)
+    g2.setNode(nodeId, node)
+  })
+  
+  newEdges.forEach(edge => {
+    g2.setEdge(edge.source, edge.target)
+  })
+  
+  dagre.layout(g2)
+  
+  const optimizeLayerOrder = (iterations: number = 2) => {
+    for (let iter = 0; iter < iterations; iter++) {
+      const rankGroups = new Map<number, string[]>()
+      g2.nodes().forEach(nodeId => {
+        const node = g2.node(nodeId)
+        const rank = node.rank || 0
+        if (!rankGroups.has(rank)) {
+          rankGroups.set(rank, [])
+        }
+        rankGroups.get(rank)!.push(nodeId)
+      })
+      
+      rankGroups.forEach((nodeIds, rank) => {
+        const barycenters = nodeIds.map(nodeId => {
+          const edges = g2.nodeEdges(nodeId) || []
+          let sumY = 0
+          let count = 0
+          
+          edges.forEach(e => {
+            const other = e.v === nodeId ? e.w : e.v
+            const otherNode = g2.node(other)
+            if (otherNode && otherNode.rank !== rank) {
+              sumY += otherNode.y
+              count++
+            }
+          })
+          
+          return { nodeId, barycenter: count > 0 ? sumY / count : g2.node(nodeId).y }
+        })
+        
+        barycenters.sort((a, b) => a.barycenter - b.barycenter)
+        
+        const spacing = 140
+        barycenters.forEach((item, idx) => {
+          const node = g2.node(item.nodeId)
+          node.y = idx * spacing
+        })
+      })
+    }
   }
   
-  return layers
+  optimizeLayerOrder(2)
+  
+  const nodePositions = new Map<string, { x: number, y: number, isVirtual?: boolean }>()
+  let minX = Infinity, minY = Infinity
+  
+  g2.nodes().forEach(nodeId => {
+    const node = g2.node(nodeId)
+    const meta = nodeMetadata.get(nodeId)
+    
+    const x = Math.round(node.x / 20) * 20
+    const y = Math.round(node.y / 20) * 20
+    
+    nodePositions.set(nodeId, { 
+      x, 
+      y, 
+      isVirtual: meta?.isVirtual || false 
+    })
+    
+    minX = Math.min(minX, x)
+    minY = Math.min(minY, y)
+  })
+  
+  const padding = 100
+  nodePositions.forEach((pos) => {
+    pos.x = pos.x - minX + padding
+    pos.y = pos.y - minY + padding
+  })
+  
+  return { nodePositions, virtualNodes: virtualNodes.map(v => v.id) }
 }
 
 const initChart = () => {
   if (!chartRef.value) return
+  
+  if (!props.data || !props.data.nodes || props.data.nodes.length === 0) {
+    return
+  }
 
   if (chartInstance) {
     chartInstance.dispose()
@@ -152,44 +286,41 @@ const initChart = () => {
 
   chartInstance = echarts.init(chartRef.value)
 
-  // 构建显示的节点和边
   const displayNodes: any[] = []
   const displayEdges: any[] = []
 
-  // 1. 计算活动节点的层级（拓扑排序）
-  const nodeLayers = calculateNodeLayers(props.data.nodes, props.data.edges)
-  
-  // 按层级分组节点
-  const layerGroups = new Map<number, any[]>()
-  const nodeMap = new Map<string, any>() // 用于节点去重
-  
-  props.data.nodes.forEach(node => {
-    // 确保每个节点只处理一次（去重）
-    if (!nodeMap.has(node.id)) {
-      nodeMap.set(node.id, node)
-      const layer = nodeLayers.get(node.id) || 0
-      if (!layerGroups.has(layer)) {
-        layerGroups.set(layer, [])
-      }
-      layerGroups.get(layer)!.push(node)
-    }
+  const dataHash = JSON.stringify({
+    nodeIds: props.data.nodes.map((n: any) => n.id).sort(),
+    edgeIds: props.data.edges.map((e: any) => `${e.source}-${e.target}`).sort(),
+    expanded: Array.from(expandedActivities.value).sort()
   })
   
-  // 2. 根据层级生成节点坐标
-  const gapX = 220 // 层级间距
-  const gapY = 80  // 同层节点间距
-  const startX = 100
-  const startY = 200
+  let layoutResult: { nodePositions: Map<string, any>, virtualNodes: string[] }
+  if (dataHash !== cachedDataHash || !cachedNodePositions) {
+    layoutResult = computeDagreLayout(props.data.nodes, props.data.edges)
+    cachedNodePositions = layoutResult.nodePositions
+    cachedVirtualNodes = layoutResult.virtualNodes
+    cachedDataHash = dataHash
+  } else {
+    layoutResult = { nodePositions: cachedNodePositions, virtualNodes: cachedVirtualNodes }
+  }
   
+  const nodePositions = layoutResult.nodePositions
+  const virtualNodeIds = new Set(layoutResult.virtualNodes)
+  
+  const nodeMap = new Map<string, any>()
   const activityNodes: any[] = []
   
-  // 按层级处理节点
-  Array.from(layerGroups.keys()).sort((a, b) => a - b).forEach(layer => {
-    const nodesInLayer = layerGroups.get(layer)!
-    const layerHeight = (nodesInLayer.length - 1) * gapY
-    const layerStartY = startY - layerHeight / 2
-    
-    nodesInLayer.forEach((node, indexInLayer) => {
+  props.data.nodes.forEach(node => {
+    if (!nodeMap.has(node.id)) {
+      nodeMap.set(node.id, node)
+      
+      const pos = nodePositions.get(node.id)
+      if (!pos) return
+      
+      const isHighlighted = !props.highlightActive || (props.highlightSet?.nodeIds.has(node.id) ?? false)
+      const opacity = props.highlightActive && !isHighlighted ? 0.3 : 1
+      
       activityNodes.push({
         id: node.id,
         name: truncateText(node.name),
@@ -197,46 +328,133 @@ const initChart = () => {
         category: 'Activity',
         symbolSize: 50,
         symbol: 'circle',
-        x: startX + layer * gapX,
-        y: layerStartY + indexInLayer * gapY,
+        x: pos.x,
+        y: pos.y,
         fixed: true,
         itemStyle: {
           color: getNodeColor(node.status),
-          borderWidth: 2,
-          borderColor: '#fff'
+          borderWidth: isHighlighted && props.highlightActive ? 3 : 2,
+          borderColor: isHighlighted && props.highlightActive ? '#ff6b00' : '#fff',
+          opacity: opacity
         },
         label: {
           show: true,
           fontSize: 12,
-          fontWeight: 'bold'
+          fontWeight: isHighlighted && props.highlightActive ? 'bold' : 'normal',
+          opacity: opacity,
+          position: 'bottom',
+          width: 100,
+          overflow: 'truncate'
         },
-        rawData: node,
-        layer: layer
+        rawData: node
       })
-    })
+    }
   })
 
   displayNodes.push(...activityNodes)
+  
+  virtualNodeIds.forEach(vNodeId => {
+    const pos = nodePositions.get(vNodeId)
+    if (pos) {
+      displayNodes.push({
+        id: vNodeId,
+        name: '',
+        category: 'Virtual',
+        symbolSize: 1,
+        symbol: 'circle',
+        x: pos.x,
+        y: pos.y,
+        fixed: true,
+        itemStyle: {
+          color: 'transparent',
+          opacity: 0
+        },
+        label: {
+          show: false
+        },
+        silent: true
+      })
+    }
+  })
 
-  // 2. 添加活动依赖关系
-  const dependencyEdges = props.data.edges.map(edge => ({
-    source: edge.source,
-    target: edge.target,
-    lineStyle: {
-      color: '#409EFF',
-      type: 'solid',
-      width: 3,
-      curveness: 0.15
-    },
-    label: { show: false },
-    edgeData: edge
-  }))
+  const edgeMap = new Map<string, any>()
+  props.data.edges.forEach((edge, index) => {
+    edgeMap.set(`${edge.source}-${edge.target}`, { ...edge, index })
+  })
+  
+  const finalEdges: any[] = []
+  
+  const buildEdgesWithVirtual = (source: string, target: string, originalEdge: any) => {
+    const srcPos = nodePositions.get(source)
+    const tgtPos = nodePositions.get(target)
+    
+    if (!srcPos || !tgtPos) return
+    
+    const virtualPath: string[] = []
+    
+    virtualNodeIds.forEach(vNodeId => {
+      if (vNodeId.includes(`__v_${originalEdge.source}_${originalEdge.target}_`)) {
+        virtualPath.push(vNodeId)
+      }
+    })
+    
+    if (virtualPath.length === 0) {
+      finalEdges.push({
+        source,
+        target,
+        originalSource: originalEdge.source,
+        originalTarget: originalEdge.target,
+        edgeData: originalEdge
+      })
+    } else {
+      virtualPath.sort((a, b) => {
+        const aPos = nodePositions.get(a)!
+        const bPos = nodePositions.get(b)!
+        return aPos.x - bPos.x
+      })
+      
+      const chain = [originalEdge.source, ...virtualPath, originalEdge.target]
+      for (let i = 0; i < chain.length - 1; i++) {
+        finalEdges.push({
+          source: chain[i],
+          target: chain[i + 1],
+          originalSource: originalEdge.source,
+          originalTarget: originalEdge.target,
+          edgeData: originalEdge
+        })
+      }
+    }
+  }
+  
+  props.data.edges.forEach((edge, index) => {
+    buildEdgesWithVirtual(edge.source, edge.target, edge)
+  })
+  
+  const dependencyEdges = finalEdges.map((edge, index) => {
+    const edgeKey = `${edge.originalSource}-${edge.originalTarget}-${edge.edgeData.index || index}`
+    const isHighlighted = !props.highlightActive || (props.highlightSet?.edgeIds.has(edgeKey) ?? false)
+    const opacity = props.highlightActive && !isHighlighted ? 0.2 : 1
+    
+    return {
+      source: edge.source,
+      target: edge.target,
+      lineStyle: {
+        color: isHighlighted && props.highlightActive ? '#ff6b00' : '#409EFF',
+        type: 'solid',
+        width: isHighlighted && props.highlightActive ? 3 : 2,
+        curveness: 0,
+        opacity: opacity
+      },
+      label: { show: false },
+      edgeData: edge.edgeData
+    }
+  })
 
   displayEdges.push(...dependencyEdges)
 
-  // 3. 为展开的活动添加资源节点和边
+  // 资源节点
   if (props.data.resource_nodes && props.data.resource_edges) {
-    const resourceNodeMap = new Map<string, any>() // 资源节点去重
+    const resourceNodeMap = new Map<string, any>()
     
     expandedActivities.value.forEach(activityId => {
       const activityNode = activityNodes.find(n => n.id === activityId)
@@ -249,7 +467,6 @@ const initChart = () => {
       )
 
       activityResources.forEach((resourceNode: any, idx: number) => {
-        // 确保资源节点不重复
         if (!resourceNodeMap.has(resourceNode.id)) {
           resourceNodeMap.set(resourceNode.id, true)
           displayNodes.push({
@@ -295,9 +512,9 @@ const initChart = () => {
     })
   }
 
-  // 4. 为展开的活动添加人员节点和边
+  // 人员节点
   if (props.data.personnel_nodes && props.data.personnel_edges) {
-    const personnelNodeMap = new Map<string, any>() // 人员节点去重
+    const personnelNodeMap = new Map<string, any>()
     
     expandedActivities.value.forEach(activityId => {
       const activityNode = activityNodes.find(n => n.id === activityId)
@@ -310,7 +527,6 @@ const initChart = () => {
       )
 
       activityPersonnel.forEach((personnelNode: any, idx: number) => {
-        // 确保人员节点不重复
         if (!personnelNodeMap.has(personnelNode.id)) {
           personnelNodeMap.set(personnelNode.id, true)
           displayNodes.push({
@@ -359,12 +575,32 @@ const initChart = () => {
   const categories = [
     { name: 'Activity' },
     { name: 'Resource' },
-    { name: 'Personnel' }
+    { name: 'Personnel' },
+    { name: 'Virtual' }
   ]
+
+  // FitView
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  displayNodes.forEach(node => {
+    if (node.x != null && node.y != null) {
+      minX = Math.min(minX, node.x)
+      maxX = Math.max(maxX, node.x)
+      minY = Math.min(minY, node.y)
+      maxY = Math.max(maxY, node.y)
+    }
+  })
+  
+  const containerWidth = chartRef.value?.clientWidth || 800
+  const containerHeight = chartRef.value?.clientHeight || 650
+  const graphWidth = maxX - minX + 200
+  const graphHeight = maxY - minY + 200
+  const scaleX = containerWidth / graphWidth
+  const scaleY = containerHeight / graphHeight
+  const zoom = Math.min(Math.max(Math.min(scaleX, scaleY), 0.2), 1.0)
 
   const option: echarts.EChartsOption = {
     title: {
-      text: '生产流程依赖图',
+      text: '生产流程依赖与资源关联视图',
       left: 'center',
       textStyle: {
         fontSize: 16,
@@ -380,9 +616,9 @@ const initChart = () => {
           if (category === 'Activity') {
             return `<b>${params.data.fullName}</b><br/>左键: 查看详情<br/>右键: 展开/折叠资源人员`
           } else if (category === 'Resource') {
-            return `<b>资源: ${params.data.fullName}</b>`
+            return `<b>资源: ${params.data.fullName}</b><br/>左键: 查看详情`
           } else if (category === 'Personnel') {
-            return `<b>人员: ${params.data.fullName}</b>`
+            return `<b>人员: ${params.data.fullName}</b><br/>左键: 查看详情`
           }
         } else if (params.dataType === 'edge') {
           const edge = params.data.edgeData
@@ -416,16 +652,18 @@ const initChart = () => {
         categories: categories,
         roam: true,
         draggable: false,
+        zoom: zoom,
+        center: [(minX + maxX) / 2, (minY + maxY) / 2],
         edgeSymbol: ['none', 'arrow'],
-        edgeSymbolSize: [0, 10],
+        edgeSymbolSize: [0, 8],
         label: {
           show: true,
           position: 'bottom',
           formatter: '{b}'
         },
         lineStyle: {
-          color: 'source',
-          curveness: 0.15
+          width: 2,
+          curveness: 0
         },
         emphasis: {
           focus: 'adjacency',
@@ -439,11 +677,16 @@ const initChart = () => {
 
   chartInstance.setOption(option)
   
-  // 左键点击：显示活动详情（移除旧监听器后重新绑定）
   chartInstance.off('click')
   chartInstance.on('click', (params: any) => {
-    if (params.dataType === 'node' && params.data.category === 'Activity') {
-      showActivityDetail(params.data.rawData)
+    if (params.dataType === 'node') {
+      const nodeData = {
+        id: params.data.id,
+        name: params.data.fullName || params.data.name,
+        category: params.data.category,
+        rawData: params.data.rawData
+      }
+      emit('nodeClick', nodeData)
     }
   })
 }
@@ -469,7 +712,6 @@ const getResourceColor = (status: string) => {
   return colorMap[status] || '#67C23A'
 }
 
-// 右键点击处理函数（只绑定一次）
 const handleContextMenu = (e: MouseEvent) => {
   e.preventDefault()
   
@@ -479,18 +721,15 @@ const handleContextMenu = (e: MouseEvent) => {
   const x = e.clientX - rect.left
   const y = e.clientY - rect.top
   
-  // 获取当前的节点列表
   const currentOption = chartInstance.getOption()
   const seriesData = currentOption.series?.[0]?.data || []
   
-  // 遍历节点查找被点击的节点
   for (const node of seriesData as any[]) {
     if (node.category !== 'Activity') continue
     
     const nodeX = node.x
     const nodeY = node.y
     
-    // 将图表坐标转换为像素坐标
     const pixelPoint = chartInstance.convertToPixel({ seriesIndex: 0 }, [nodeX, nodeY])
     
     const distance = Math.sqrt(
@@ -506,13 +745,21 @@ const handleContextMenu = (e: MouseEvent) => {
 
 watch(() => props.data, () => {
   expandedActivities.value.clear()
+  cachedNodePositions = null
+  cachedVirtualNodes = []
+  cachedDataHash = ''
   initChart()
+}, { deep: true })
+
+watch(() => [props.highlightActive, props.highlightSet], () => {
+  if (chartInstance && props.data && props.data.nodes && props.data.nodes.length > 0) {
+    initChart()
+  }
 }, { deep: true })
 
 onMounted(() => {
   initChart()
   
-  // 添加右键事件监听器（只添加一次）
   if (chartRef.value) {
     chartRef.value.addEventListener('contextmenu', handleContextMenu)
   }
@@ -523,7 +770,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  // 清理事件监听器
   if (chartRef.value) {
     chartRef.value.removeEventListener('contextmenu', handleContextMenu)
   }
@@ -560,4 +806,3 @@ onUnmounted(() => {
   padding: 10px;
 }
 </style>
-

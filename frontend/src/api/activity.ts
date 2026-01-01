@@ -1,8 +1,8 @@
 import request from './request'
 import type { Activity } from '@/types'
 
-export const getActivities = () => {
-  return request.get<any, Activity[]>('/activities')
+export const getActivities = (params: { domain: string, process_id?: string }) => {
+  return request.get<any, Activity[]>('/activities', { params })
 }
 
 export const getActivity = (id: string) => {

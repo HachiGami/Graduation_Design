@@ -1,8 +1,8 @@
 import request from './request'
 import type { Dependency, GraphData } from '@/types'
 
-export const getDependencies = () => {
-  return request.get<any, Dependency[]>('/dependencies')
+export const getDependencies = (params: { domain: string, process_id?: string, activity_id?: string }) => {
+  return request.get<any, Dependency[]>('/dependencies', { params })
 }
 
 export const getDependency = (id: string) => {
@@ -21,8 +21,8 @@ export const deleteDependency = (id: string) => {
   return request.delete(`/dependencies/${id}`)
 }
 
-export const getGraphData = () => {
-  return request.get<any, GraphData>('/dependencies/graph/data')
+export const getGraphData = (params?: { scope?: string; domain?: string; process_id?: string; include_cross?: boolean }) => {
+  return request.get<any, GraphData>('/dependencies/graph/data', { params })
 }
 
 

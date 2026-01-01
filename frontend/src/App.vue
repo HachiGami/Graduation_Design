@@ -12,17 +12,8 @@
           <el-menu-item index="/">
             <span>数据面板</span>
           </el-menu-item>
-          <el-menu-item index="/resources">
-            <span>资源管理</span>
-          </el-menu-item>
-          <el-menu-item index="/personnel">
-            <span>人员管理</span>
-          </el-menu-item>
           <el-menu-item index="/dependencies">
-            <span>依赖关系</span>
-          </el-menu-item>
-          <el-menu-item index="/activities">
-            <span>生产活动</span>
+            <span>生产流程依赖与资源关联视图</span>
           </el-menu-item>
         </el-menu>
       </el-aside>

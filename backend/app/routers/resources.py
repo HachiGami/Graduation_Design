@@ -1,5 +1,5 @@
-from fastapi import APIRouter, HTTPException
-from typing import List
+from fastapi import APIRouter, HTTPException, Query
+from typing import List, Optional
 from datetime import datetime
 from ..database import get_database, get_neo4j_driver
 from ..schemas.resource import ResourceCreate, ResourceUpdate, ResourceResponse
@@ -23,14 +23,15 @@ async def create_resource(resource: ResourceCreate):
     # 同步到Neo4j：只存resource_id和name
     neo4j_query = """
     MERGE (r:Resource {id: $resource_id})
-    SET r.name = $name
+    SET r.name = $name, r.domain = $domain
     RETURN r
     """
     try:
         async with driver.session() as session:
             await session.run(neo4j_query, {
                 "resource_id": resource_id,
-                "name": resource.name
+                "name": resource.name,
+                "domain": resource.domain
             })
     except Exception as e:
         print(f"Neo4j同步失败: {e}")
@@ -38,10 +39,20 @@ async def create_resource(resource: ResourceCreate):
     return resource_dict
 
 @router.get("", response_model=List[ResourceResponse])
-async def get_resources():
+async def get_resources(
+    domain: Optional[str] = Query(None, description="按流程域筛选"),
+    process_id: Optional[str] = Query(None, description="按流程实例ID筛选")
+):
     db = get_database()
+    
+    query_filter = {}
+    if domain:
+        query_filter["domain"] = domain
+    if process_id:
+        query_filter["process_id"] = process_id
+    
     resources = []
-    async for resource in db.resources.find():
+    async for resource in db.resources.find(query_filter):
         resource["_id"] = str(resource["_id"])
         resources.append(resource)
     return resources
@@ -75,17 +86,19 @@ async def update_resource(resource_id: str, resource: ResourceUpdate):
     updated_resource["_id"] = str(updated_resource["_id"])
     
     # 同步到Neo4j：如果name更新了，同步更新
-    if resource.name:
+    if resource.name or resource.domain:
         neo4j_query = """
         MATCH (r:Resource {id: $resource_id})
-        SET r.name = $name
+        SET r.name = COALESCE($name, r.name),
+            r.domain = COALESCE($domain, r.domain)
         RETURN r
         """
         try:
             async with driver.session() as session:
                 await session.run(neo4j_query, {
                     "resource_id": resource_id,
-                    "name": resource.name
+                    "name": resource.name,
+                    "domain": resource.domain
                 })
         except Exception as e:
             print(f"Neo4j同步失败: {e}")

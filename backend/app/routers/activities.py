@@ -1,5 +1,5 @@
-from fastapi import APIRouter, HTTPException
-from typing import List
+from fastapi import APIRouter, HTTPException, Query
+from typing import List, Optional
 from datetime import datetime
 from ..database import get_database, get_neo4j_driver
 from ..schemas.activity import ActivityCreate, ActivityUpdate, ActivityResponse
@@ -23,14 +23,16 @@ async def create_activity(activity: ActivityCreate):
     # 同步到Neo4j：只存activity_id和name
     neo4j_query = """
     MERGE (a:Activity {id: $activity_id})
-    SET a.name = $name
+    SET a.name = $name, a.domain = $domain, a.process_id = $process_id
     RETURN a
     """
     try:
         async with driver.session() as session:
             await session.run(neo4j_query, {
                 "activity_id": activity_id,
-                "name": activity.name
+                "name": activity.name,
+                "domain": activity.domain,
+                "process_id": activity.process_id
             })
     except Exception as e:
         print(f"Neo4j同步失败: {e}")
@@ -38,10 +40,18 @@ async def create_activity(activity: ActivityCreate):
     return activity_dict
 
 @router.get("", response_model=List[ActivityResponse])
-async def get_activities():
+async def get_activities(
+    domain: str = Query(..., description="流程域（必填）"),
+    process_id: Optional[str] = Query(None, description="流程实例ID")
+):
     db = get_database()
+    
+    query_filter = {"domain": domain}
+    if process_id:
+        query_filter["process_id"] = process_id
+    
     activities = []
-    async for activity in db.activities.find():
+    async for activity in db.activities.find(query_filter):
         activity["_id"] = str(activity["_id"])
         activities.append(activity)
     return activities
@@ -75,17 +85,21 @@ async def update_activity(activity_id: str, activity: ActivityUpdate):
     updated_activity["_id"] = str(updated_activity["_id"])
     
     # 同步到Neo4j：如果name更新了，同步更新
-    if activity.name:
+    if activity.name or activity.domain or activity.process_id:
         neo4j_query = """
         MATCH (a:Activity {id: $activity_id})
-        SET a.name = $name
+        SET a.name = COALESCE($name, a.name),
+            a.domain = COALESCE($domain, a.domain),
+            a.process_id = COALESCE($process_id, a.process_id)
         RETURN a
         """
         try:
             async with driver.session() as session:
                 await session.run(neo4j_query, {
                     "activity_id": activity_id,
-                    "name": activity.name
+                    "name": activity.name,
+                    "domain": activity.domain,
+                    "process_id": activity.process_id
                 })
         except Exception as e:
             print(f"Neo4j同步失败: {e}")

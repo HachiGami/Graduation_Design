@@ -7,8 +7,11 @@ class DependencyBase(BaseModel):
     target_activity_id: str = Field(..., description="后置活动ID (MongoDB ID)")
     dependency_type: str = Field(..., description="依赖类型：sequential/parallel/conditional")
     time_constraint: Optional[int] = Field(0, description="时间约束（分钟），例如FS+lag")
+    lag_minutes: Optional[int] = Field(0, description="滞后时间（分钟）")
     status: Optional[str] = Field("active", description="依赖状态：active/inactive/pending")
     description: Optional[str] = Field(None, description="依赖关系描述")
+    domain: str = Field(..., description="流程域")
+    process_id: str = Field(..., description="流程实例ID")
 
 class DependencyCreate(DependencyBase):
     pass
@@ -16,8 +19,11 @@ class DependencyCreate(DependencyBase):
 class DependencyUpdate(BaseModel):
     dependency_type: Optional[str] = None
     time_constraint: Optional[int] = None
+    lag_minutes: Optional[int] = None
     status: Optional[str] = None
     description: Optional[str] = None
+    domain: Optional[str] = None
+    process_id: Optional[str] = None
 
 class DependencyResponse(DependencyBase):
     id: Optional[str] = Field(None, description="关系唯一标识（如有）")
