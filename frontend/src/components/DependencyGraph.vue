@@ -53,7 +53,7 @@ const detailDrawerVisible = ref(false)
 const selectedActivity = ref<any>(null)
 
 // T5: 高亮状态管理
-let currentHoverNode: string | null = null
+// let currentHoverNode: string | null = null
 
 // 缓存布局结果
 let cachedNodePositions: Map<string, { x: number, y: number, isVirtual?: boolean }> | null = null
@@ -104,20 +104,17 @@ const getDataIndexById = (id: string): number => {
 // T5: 统一高亮控制（hover 状态）
 const setHoverFocus = (nodeId: string | null) => {
   if (!chartInstance) return
-  console.log('[HOVER] set', nodeId ?? 'null')
+  // console.log('[HOVER] set', nodeId ?? 'null')
   
   if (nodeId === null) {
-    if (currentHoverNode !== null) {
-      chartInstance.dispatchAction({ type: 'downplay', seriesIndex: 0 })
-      currentHoverNode = null
-    }
+    // 强制 downplay 全局，确保无残留
+    chartInstance.dispatchAction({ type: 'downplay', seriesIndex: 0 })
     return
   }
 
   const idx = getDataIndexById(nodeId)
   if (idx >= 0) {
     chartInstance.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex: idx })
-    currentHoverNode = nodeId
   }
 }
 
@@ -126,10 +123,10 @@ const setPinnedFocus = (nodeId: string | null) => {
   console.log('[PIN] set', nodeId ?? 'null')
 }
 
-const showActivityDetail = (activity: any) => {
-  selectedActivity.value = activity
-  detailDrawerVisible.value = true
-}
+// const showActivityDetail = (activity: any) => {
+//   selectedActivity.value = activity
+//   detailDrawerVisible.value = true
+// }
 
 const truncateText = (text: string, maxLength: number = 6): string => {
   if (text.length <= maxLength) return text
@@ -141,28 +138,13 @@ const layoutExpandedNodes = (
   hostX: number, 
   hostY: number, 
   expandNodes: Array<{id: string, name: string, category: string}>,
-  allNodes: Array<{id: string, x: number, y: number, category: string}>
+  allNodes: Array<{id: string, x: number, y: number, category: string}>,
+  allEdges: Array<{source: string, target: string}>
 ): Array<{id: string, x: number, y: number}> => {
   if (expandNodes.length === 0) return []
   
-  // T1: 确定性排序 + 扇形布局
+  // T1: 确定性排序
   const sorted = expandNodes.slice().sort((a, b) => a.id.localeCompare(b.id))
-  const R0 = 140
-  const deltaR = 90
-  const angleStart = 210 * Math.PI / 180
-  const angleEnd = 330 * Math.PI / 180
-  const angleRange = angleEnd - angleStart
-  
-  const initialPositions: Array<{id: string, x: number, y: number, category: string}> = []
-  sorted.forEach((node, idx) => {
-    const layer = Math.floor(idx / 3)
-    const posInLayer = idx % 3
-    const R = R0 + layer * deltaR
-    const angle = angleStart + (posInLayer / Math.max(1, Math.min(sorted.length, 3) - 1)) * angleRange
-    const x = hostX + R * Math.cos(angle)
-    const y = hostY + R * Math.sin(angle)
-    initialPositions.push({ id: node.id, x, y, category: node.category })
-  })
   
   // T2: 碰撞检测函数
   const getCollisionRect = (x: number, y: number, category: string) => {
@@ -171,7 +153,7 @@ const layoutExpandedNodes = (
     const lineHeight = fontSize * 1.2
     const labelW = 100
     const labelMargin = 6
-    const padding = 8
+    const padding = 60  // 参考活动节点间距，确保视觉清晰度
     const x1 = Math.min(x - r, x - labelW / 2) - padding
     const y1 = y - r - padding
     const x2 = Math.max(x + r, x + labelW / 2) + padding
@@ -181,69 +163,187 @@ const layoutExpandedNodes = (
   
   const rectsOverlap = (r1: any, r2: any) => !(r1.x2 <= r2.x1 || r2.x2 <= r1.x1 || r1.y2 <= r2.y1 || r2.y2 <= r1.y1)
   
-  // T3: 局部去重叠（只移动展开节点）
-  const nearbyNodes = allNodes.filter(n => {
-    const dx = n.x - hostX
-    const dy = n.y - hostY
-    return Math.sqrt(dx * dx + dy * dy) < 400
-  })
-  
-  const finalPositions = initialPositions.map(node => ({ ...node }))
-  
-  // 迭代推开
-  for (let i = 0; i < finalPositions.length; i++) {
-    const node = finalPositions[i]
-    let iterations = 0
-    const maxIter = 50
-    const step = 20
+  // 点到线段的最短距离
+  const pointToSegmentDistance = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
+    const dx = x2 - x1
+    const dy = y2 - y1
+    const len2 = dx * dx + dy * dy
+    if (len2 === 0) return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2)
     
-    while (iterations < maxIter) {
-      iterations++
-      const rect = getCollisionRect(node.x, node.y, node.category)
-      let hasOverlap = false
-      
-      // 检查与宿主的碰撞
-      const hostRect = getCollisionRect(hostX, hostY, 'Activity')
-      if (rectsOverlap(rect, hostRect)) {
-        hasOverlap = true
-      }
-      
-      // 检查与附近节点的碰撞
-      if (!hasOverlap) {
-        for (const nearby of nearbyNodes) {
-          const nearbyRect = getCollisionRect(nearby.x, nearby.y, nearby.category)
-          if (rectsOverlap(rect, nearbyRect)) {
-            hasOverlap = true
-            break
-          }
-        }
-      }
-      
-      // 检查与已放置展开节点的碰撞
-      if (!hasOverlap) {
-        for (let j = 0; j < i; j++) {
-          const otherRect = getCollisionRect(finalPositions[j].x, finalPositions[j].y, finalPositions[j].category)
-          if (rectsOverlap(rect, otherRect)) {
-            hasOverlap = true
-            break
-          }
-        }
-      }
-      
-      if (!hasOverlap) break
-      
-      // 径向向外推
-      const dx = node.x - hostX
-      const dy = node.y - hostY
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      if (dist > 0) {
-        node.x += (dx / dist) * step
-        node.y += (dy / dist) * step
-      } else {
-        node.y += step
+    const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2))
+    const projX = x1 + t * dx
+    const projY = y1 + t * dy
+    return Math.sqrt((px - projX) ** 2 + (py - projY) ** 2)
+  }
+  
+  // 矩形与线段相交检测（考虑 clearance 距离）
+  const rectIntersectsEdge = (rect: any, x1: number, y1: number, x2: number, y2: number, clearance: number = 15) => {
+    // 检查矩形中心点到线段的距离
+    const cx = (rect.x1 + rect.x2) / 2
+    const cy = (rect.y1 + rect.y2) / 2
+    const dist = pointToSegmentDistance(cx, cy, x1, y1, x2, y2)
+    
+    // 矩形半对角线长度
+    const halfDiag = Math.sqrt(
+      ((rect.x2 - rect.x1) / 2) ** 2 + ((rect.y2 - rect.y1) / 2) ** 2
+    )
+    
+    return dist < halfDiag + clearance
+  }
+  
+  // T3: 智能采样布局（Sampling Scoring）
+  // 1. 分析边方向，确定首选扇区
+  let preferredAngleStart = 210 * Math.PI / 180
+  let preferredAngleEnd = 330 * Math.PI / 180
+  
+  const hostEdges = allEdges.filter(e => 
+    allNodes.find(n => n.id === e.source)?.id === allNodes.find(n => Math.abs(n.x - hostX) < 5 && Math.abs(n.y - hostY) < 5)?.id ||
+    allNodes.find(n => n.id === e.target)?.id === allNodes.find(n => Math.abs(n.x - hostX) < 5 && Math.abs(n.y - hostY) < 5)?.id
+  )
+  
+  let hasRightEdge = false
+  let hasLeftEdge = false
+  
+  for (const edge of hostEdges) {
+    const sourceNode = allNodes.find(n => n.id === edge.source)
+    const targetNode = allNodes.find(n => n.id === edge.target)
+    if (sourceNode && targetNode) {
+      if (Math.abs(sourceNode.x - hostX) < 5 && Math.abs(sourceNode.y - hostY) < 5) {
+        if (targetNode.x > hostX) hasRightEdge = true
+        else if (targetNode.x < hostX) hasLeftEdge = true
+      } else if (Math.abs(targetNode.x - hostX) < 5 && Math.abs(targetNode.y - hostY) < 5) {
+        if (sourceNode.x > hostX) hasRightEdge = true
+        else if (sourceNode.x < hostX) hasLeftEdge = true
       }
     }
   }
+  
+  if (hasRightEdge && !hasLeftEdge) {
+    preferredAngleStart = 150 * Math.PI / 180
+    preferredAngleEnd = 270 * Math.PI / 180
+  } else if (hasLeftEdge && !hasRightEdge) {
+    preferredAngleStart = 270 * Math.PI / 180
+    preferredAngleEnd = 390 * Math.PI / 180
+  }
+  
+  // 2. 准备碰撞检测集合（所有节点 + 边）
+  const obstacles = allNodes
+  const hostRect = getCollisionRect(hostX, hostY, 'Activity')
+  
+  const finalPositions: Array<{id: string, x: number, y: number, category: string}> = []
+  
+  // 3. 为每个新节点寻找最佳位置
+  sorted.forEach(node => {
+    let bestPos = { x: hostX, y: hostY + 100, score: -Infinity }
+    let foundValid = false
+    
+    // 采样参数：参考活动节点间距（~440px），从300px开始
+    const radii = [300, 340, 380, 420, 460, 500, 540, 580]
+    const angleStep = 15 * Math.PI / 180
+    
+    for (const R of radii) {
+      // 优化：如果已找到很好的位置，且当前半径远大于该位置（分数差距大），停止搜索
+      if (foundValid && -R < bestPos.score - 200) break 
+      
+      for (let angle = 0; angle < 360 * Math.PI / 180; angle += angleStep) {
+        const x = hostX + R * Math.cos(angle)
+        const y = hostY + R * Math.sin(angle)
+        
+        // 碰撞检测
+        const rect = getCollisionRect(x, y, node.category)
+        let collision = false
+        
+        // 检查宿主
+        if (rectsOverlap(rect, hostRect)) collision = true
+        
+        // 检查现有障碍物
+        if (!collision) {
+          for (const obs of obstacles) {
+            const obsRect = getCollisionRect(obs.x, obs.y, obs.category)
+            if (rectsOverlap(rect, obsRect)) {
+              collision = true
+              break
+            }
+          }
+        }
+        
+        // 检查已放置的新节点
+        if (!collision) {
+          for (const placed of finalPositions) {
+            const placedRect = getCollisionRect(placed.x, placed.y, placed.category)
+            if (rectsOverlap(rect, placedRect)) {
+              collision = true
+              break
+            }
+          }
+        }
+        
+        // 检查边
+        if (!collision) {
+          for (const edge of allEdges) {
+            const sourceNode = allNodes.find(n => n.id === edge.source)
+            const targetNode = allNodes.find(n => n.id === edge.target)
+            if (sourceNode && targetNode) {
+              if (rectIntersectsEdge(rect, sourceNode.x, sourceNode.y, targetNode.x, targetNode.y, 15)) {
+                collision = true
+                break
+              }
+            }
+          }
+        }
+        
+        if (!collision) {
+          // 强制最小距离检查（参考活动节点间距~440px，设为300px）
+          const distToHost = Math.sqrt((x - hostX) ** 2 + (y - hostY) ** 2)
+          if (distToHost < 300) {
+            continue // 跳过太近的位置
+          }
+          
+          // 评分系统
+          let score = -R // 距离越小越好（基础分）
+          
+          // 惩罚x坐标过于接近母节点的位置（避免垂直对齐造成视觉拥挤）
+          const xDist = Math.abs(x - hostX)
+          if (xDist < 150) {
+            score -= 250 // 大惩罚：避免x轴接近
+          } else if (xDist < 250) {
+            score -= 100 // 中惩罚
+          }
+          
+          // 角度偏好奖励
+          let normalizedAngle = angle
+          while (normalizedAngle < preferredAngleStart) normalizedAngle += 2 * Math.PI
+          while (normalizedAngle > preferredAngleEnd + 2 * Math.PI) normalizedAngle -= 2 * Math.PI
+          
+          if (normalizedAngle >= preferredAngleStart && normalizedAngle <= preferredAngleEnd) {
+            score += 200 // 优先扇区奖励
+          } else {
+            // 距离优先扇区的惩罚
+            const dist1 = Math.abs(normalizedAngle - preferredAngleStart)
+            const dist2 = Math.abs(normalizedAngle - preferredAngleEnd)
+            const minDist = Math.min(dist1, dist2)
+            score -= minDist * 50
+          }
+          
+          // 下方偏好（符合人类直觉）
+          const sinAngle = Math.sin(angle)
+          if (sinAngle > 0) score += 50 // y > hostY (下方)
+          
+          if (score > bestPos.score) {
+            bestPos = { x, y, score }
+            foundValid = true
+          }
+        }
+      }
+    }
+    
+    if (foundValid) {
+      finalPositions.push({ id: node.id, x: bestPos.x, y: bestPos.y, category: node.category })
+    } else {
+      // 兜底：如果没有合法位置，尝试放在默认位置
+      finalPositions.push({ id: node.id, x: hostX + 100, y: hostY + 100, category: node.category })
+    }
+  })
   
   // 网格吸附
   finalPositions.forEach(node => {
@@ -298,7 +398,7 @@ const computeDagreLayout = (nodes: any[], edges: any[]) => {
   
   const nodeRanks = new Map<string, number>()
   g.nodes().forEach(nodeId => {
-    const node = g.node(nodeId)
+    const node = g.node(nodeId) as any
     nodeRanks.set(nodeId, node.rank || 0)
   })
   
@@ -417,7 +517,7 @@ const computeDagreLayout = (nodes: any[], edges: any[]) => {
       // 按列分组，防重叠
       const rankGroups = new Map<number, Array<{id: string, lane: number, topo: number}>>()
       nodeIds.forEach(nodeId => {
-        const node = g2.node(nodeId)
+        const node = g2.node(nodeId) as any
         const info = laneInfo.get(nodeId)
         if (!info) return
         
@@ -438,7 +538,8 @@ const computeDagreLayout = (nodes: any[], edges: any[]) => {
           return a.id.localeCompare(b.id)
         })
         
-        const minSpacing = 80
+        // 超大间距确保label不重叠：节点50 + label可能60 + 安全边距140
+        const minSpacing = 250
         const grouped = new Map<number, string[]>()
         items.forEach(item => {
           if (!grouped.has(item.lane)) grouped.set(item.lane, [])
@@ -569,7 +670,7 @@ const computeDagreLayout = (nodes: any[], edges: any[]) => {
     const topoIndex = computeTopoIndex(nodeIds, edges)
     
     // 主干节点
-    backbone.forEach((id, idx) => {
+    backbone.forEach((id) => {
       result.set(id, { isBackbone: true, laneIndex: 0, sign: 1, topoIndex: topoIndex.get(id) || 0 })
     })
     
@@ -718,7 +819,7 @@ const computeDagreLayout = (nodes: any[], edges: any[]) => {
     const lineHeight = fontSize * 1.2
     const labelW = 100
     const labelMargin = 6
-    const padding = 8
+    const padding = 25  // 增大 padding 确保标签不遮挡其他节点
     
     // 节点圆形外接框
     const nodeX1 = node.x - r
@@ -804,7 +905,8 @@ const computeDagreLayout = (nodes: any[], edges: any[]) => {
       })
       
       // 检查相邻 lane 间距，分上下两个方向处理
-      const minLaneSeparation = 24
+      // 超大间距确保label不重叠
+      const minLaneSeparation = 250
       const backboneIdx = sortedLanes.indexOf(0)
       
       if (backboneIdx === -1) return // 没有主干，跳过
@@ -890,12 +992,14 @@ const computeDagreLayout = (nodes: any[], edges: any[]) => {
       const meta = nodeMetadata.get(nodeId)
       if (!meta?.isVirtual) return
       
-      const edges = g2.nodeEdges(nodeId) || []
-      const neighbors = edges.map(e => e.v === nodeId ? e.w : e.v)
-        .filter(n => !nodeMetadata.get(n)?.isVirtual)
+      const inEdges = g2.inEdges(nodeId) || []
+      const outEdges = g2.outEdges(nodeId) || []
+      const allEdges = [...inEdges, ...outEdges]
+      const neighbors = allEdges.map((e: any) => e.v === nodeId ? e.w : e.v)
+        .filter((n: string) => !nodeMetadata.get(n)?.isVirtual)
       
       if (neighbors.length > 0) {
-        const avgY = neighbors.reduce((sum, n) => sum + g2.node(n).y, 0) / neighbors.length
+        const avgY = neighbors.reduce((sum: number, n: string) => sum + g2.node(n).y, 0) / neighbors.length
         g2.node(nodeId).y = avgY
       }
     })
@@ -909,7 +1013,8 @@ const computeDagreLayout = (nodes: any[], edges: any[]) => {
     if (overlaps === 0) return
     
     const realNodes = g2.nodes().filter(id => !nodeMetadata.get(id)?.isVirtual)
-    const jitterMax = 20
+    // 大幅增大jitter幅度以处理label重叠
+    const jitterMax = 150
     
     // 按 x 分组（同列）
     const xGroups = new Map<number, string[]>()
@@ -988,6 +1093,163 @@ const computeDagreLayout = (nodes: any[], edges: any[]) => {
   }
   
   expandRankSepsIfNeeded()
+  updateVirtualNodes()
+  
+  // 强制去重叠：确保同列节点的垂直间距足够大
+  const forceMinimumVerticalSpacing = () => {
+    const realNodes = g2.nodes().filter(id => !nodeMetadata.get(id)?.isVirtual)
+    
+    // 按x坐标分组（容差50px）
+    const xGroups = new Map<number, string[]>()
+    realNodes.forEach(id => {
+      const node = g2.node(id)
+      const xRounded = Math.round(node.x / 50) * 50
+      if (!xGroups.has(xRounded)) xGroups.set(xRounded, [])
+      xGroups.get(xRounded)!.push(id)
+    })
+    
+    xGroups.forEach(nodeIds => {
+      if (nodeIds.length <= 1) return
+      
+      // 按y排序
+      nodeIds.sort((a, b) => g2.node(a).y - g2.node(b).y)
+      
+      // 强制最小间距：必须足够大以防止label重叠
+      const minVerticalGap = 250
+      
+      for (let i = 1; i < nodeIds.length; i++) {
+        const prevNode = g2.node(nodeIds[i - 1])
+        const currNode = g2.node(nodeIds[i])
+        const gap = currNode.y - prevNode.y
+        
+        if (gap < minVerticalGap) {
+          const needPush = minVerticalGap - gap
+          // 向下推当前节点及之后所有节点
+          for (let j = i; j < nodeIds.length; j++) {
+            g2.node(nodeIds[j]).y += needPush
+          }
+        }
+      }
+    })
+  }
+  
+  forceMinimumVerticalSpacing()
+  updateVirtualNodes()
+  
+  const snapGraphToGrid = () => {
+    g2.nodes().forEach(nodeId => {
+      const node = g2.node(nodeId)
+      node.x = Math.round(node.x / 20) * 20
+      node.y = Math.round(node.y / 20) * 20
+    })
+  }
+  
+  snapGraphToGrid()
+  
+  const getProcessId = (meta: any) => meta?.process_id ?? meta?.processId ?? meta?.process ?? 'default'
+  const getDomain = (meta: any) => meta?.domain ?? meta?.domain_name ?? meta?.domainName ?? 'default'
+  
+  const computeBlockBoundingBoxes = () => {
+    const blocks = new Map<string, { nodes: string[], bbox: { x1: number, y1: number, x2: number, y2: number } }>()
+    const realNodes = g2.nodes().filter(id => !nodeMetadata.get(id)?.isVirtual)
+    realNodes.forEach(id => {
+      const meta = nodeMetadata.get(id) || {}
+      const key = `${getDomain(meta)}:${getProcessId(meta)}`
+      const rect = computeCollisionRect(id)
+      if (!blocks.has(key)) {
+        blocks.set(key, { nodes: [], bbox: { ...rect } })
+      }
+      const entry = blocks.get(key)!
+      entry.nodes.push(id)
+      entry.bbox.x1 = Math.min(entry.bbox.x1, rect.x1)
+      entry.bbox.y1 = Math.min(entry.bbox.y1, rect.y1)
+      entry.bbox.x2 = Math.max(entry.bbox.x2, rect.x2)
+      entry.bbox.y2 = Math.max(entry.bbox.y2, rect.y2)
+    })
+    return blocks
+  }
+  
+  const resolveBlockOverlaps = () => {
+    let iteration = 0
+    let prevOverlapCount = Infinity
+    const maxIteration = 20
+    while (iteration < maxIteration) {
+      iteration++
+      const blocks = computeBlockBoundingBoxes()
+      const keys = Array.from(blocks.keys()).sort()
+      const overlaps: Array<{ a: string, b: string, overlapY: number }> = []
+      for (let i = 0; i < keys.length; i++) {
+        for (let j = i + 1; j < keys.length; j++) {
+          const boxA = blocks.get(keys[i])!.bbox
+          const boxB = blocks.get(keys[j])!.bbox
+          if (rectsOverlap(boxA, boxB)) {
+            const overlapY = Math.min(boxA.y2, boxB.y2) - Math.max(boxA.y1, boxB.y1)
+            overlaps.push({ a: keys[i], b: keys[j], overlapY })
+          }
+        }
+      }
+      if (overlaps.length === 0) break
+      if (overlaps.length >= prevOverlapCount) {
+        console.warn('blockShift_stalled', overlaps.length)
+        break
+      }
+      prevOverlapCount = overlaps.length
+      const target = overlaps[0]
+      const moverKey = target.b
+      const mover = blocks.get(moverKey)!
+      const anchor = blocks.get(target.a)!
+      const anchorCenter = (anchor.bbox.y1 + anchor.bbox.y2) / 2
+      const moverCenter = (mover.bbox.y1 + mover.bbox.y2) / 2
+      const direction = moverCenter >= anchorCenter ? 1 : -1
+      const push = Math.ceil((Math.max(target.overlapY, 0) + 20) / 20) * 20
+      mover.nodes.forEach(id => {
+        const node = g2.node(id)
+        node.y += direction * push
+      })
+    }
+  }
+  
+  resolveBlockOverlaps()
+  updateVirtualNodes()
+  
+  const jitterWithinBlockIfNeeded = () => {
+    let overlaps = countOverlaps()
+    let guard = 20
+    while (overlaps > 0 && guard > 0) {
+      const realNodes = g2.nodes().filter(id => !nodeMetadata.get(id)?.isVirtual)
+      let moved = false
+      for (let i = 0; i < realNodes.length - 1; i++) {
+        for (let j = i + 1; j < realNodes.length; j++) {
+          const rect1 = computeCollisionRect(realNodes[i])
+          const rect2 = computeCollisionRect(realNodes[j])
+          if (rectsOverlap(rect1, rect2)) {
+            const meta1 = nodeMetadata.get(realNodes[i]) || {}
+            const meta2 = nodeMetadata.get(realNodes[j]) || {}
+            const block1 = `${getDomain(meta1)}:${getProcessId(meta1)}`
+            const block2 = `${getDomain(meta2)}:${getProcessId(meta2)}`
+            if (block1 !== block2) {
+              resolveBlockOverlaps()
+              updateVirtualNodes()
+              moved = true
+              break
+            } else {
+              const overlapY = Math.min(rect1.y2, rect2.y2) - Math.max(rect1.y1, rect2.y1)
+              const shift = Math.min(Math.ceil((overlapY + 4) / 20) * 20, 20)
+              g2.node(realNodes[j]).y += shift
+              moved = true
+            }
+          }
+        }
+        if (moved) break
+      }
+      guard--
+      updateVirtualNodes()
+      overlaps = countOverlaps()
+    }
+  }
+  
+  jitterWithinBlockIfNeeded()
+  snapGraphToGrid()
   updateVirtualNodes()
   
   const overlapCountAfter = countOverlaps()
@@ -1183,7 +1445,7 @@ const initChart = (options?: { preserveView?: boolean }) => {
     }
   }
   
-  props.data.edges.forEach((edge, index) => {
+  props.data.edges.forEach((edge) => {
     buildEdgesWithVirtual(edge.source, edge.target, edge)
   })
   
@@ -1243,14 +1505,16 @@ const initChart = (options?: { preserveView?: boolean }) => {
     
     if (toExpand.length === 0) return
     
-    // T1+T2+T3: 局部布局
+    // T1+T2+T3: 局部布局（包含边碰撞检测）
     const existingNodes = displayNodes.map(n => ({ id: n.id, x: n.x, y: n.y, category: n.category }))
-    const positions = layoutExpandedNodes(activityX, activityY, toExpand, existingNodes)
+    const allEdges = dependencyEdges.map(e => ({ source: e.source, target: e.target }))
+    
+    const positions = layoutExpandedNodes(activityX, activityY, toExpand, existingNodes, allEdges)
     
     // T4: 统计重叠（局部验证，含宿主）
     const localRects = [
       { id: activityId, rect: ((x: number, y: number) => {
-        const r = 25, labelW = 100, fontSize = 12, lineHeight = fontSize * 1.2, labelMargin = 6, padding = 8
+        const r = 25, labelW = 100, fontSize = 12, lineHeight = fontSize * 1.2, labelMargin = 6, padding = 25
         return {
           x1: Math.min(x - r, x - labelW / 2) - padding,
           y1: y - r - padding,
@@ -1260,12 +1524,13 @@ const initChart = (options?: { preserveView?: boolean }) => {
       })(activityX, activityY) }
     ]
     positions.forEach(p => {
-      const r = p.category === 'Activity' ? 25 : 17.5
-      const fontSize = p.category === 'Activity' ? 12 : 10
+      const nodeData = toExpand.find(n => n.id === p.id)!
+      const r = nodeData.category === 'Activity' ? 25 : 17.5
+      const fontSize = nodeData.category === 'Activity' ? 12 : 10
       const lineHeight = fontSize * 1.2
       const labelW = 100
       const labelMargin = 6
-      const padding = 8
+      const padding = 25  // 增大 padding 确保标签不遮挡其他节点
       localRects.push({
         id: p.id,
         rect: {
@@ -1291,7 +1556,7 @@ const initChart = (options?: { preserveView?: boolean }) => {
     console.log('[EXPAND_LAYOUT] localOverlapAfter', localOverlap)
     
     // 添加节点（使用 layoutExpandedNodes 返回的 x/y）
-    positions.forEach(pos => {
+    positions.forEach((pos: {id: string, x: number, y: number}) => {
       const nodeData = toExpand.find(n => n.id === pos.id)!
       if (nodeData.category === 'Resource') {
         displayNodes.push({
@@ -1533,10 +1798,8 @@ const bindChartEvents = () => {
     }
   })
   chartInstance.off('mouseout')
-  chartInstance.on('mouseout', (params: any) => {
-    if (params.dataType === 'node') {
-      setHoverFocus(null)
-    }
+  chartInstance.on('mouseout', () => {
+    setHoverFocus(null)
   })
   
   chartInstance.off('globalout')
@@ -1572,13 +1835,11 @@ const handleContextMenu = (params: any) => {
   if (params.dataType !== 'node') return
   if (params.data?.category !== 'Activity') return
   
+  // T6: 清理 hover，让 mouseout 事件自然触发（在图表更新前先清理）
+  setHoverFocus(null)
+  
   const activityId = params.data.id
   toggleActivityExpansion(activityId)
-  
-  // 清理 hover
-  setHoverFocus(null)
-  // 若鼠标仍在节点上，重新设置 hover
-  setHoverFocus(activityId)
 }
 
 watch(() => props.data, () => {
