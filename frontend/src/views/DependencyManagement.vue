@@ -522,7 +522,17 @@ const handleNodeClick = async (node: any) => {
     }
   } else if (node.category === 'Resource') {
     try {
-      const resource = await getResource(node.id)
+      // 优先从 rawData 获取原始ID，否则使用节点ID
+      // 注意：节点ID可能是组合ID（如 id_inst_parent），需要解析或使用 rawData.original_id
+      const resourceId = node.rawData?.original_id || node.id
+      
+      // 如果依然是组合ID，尝试从字符串解析
+      let finalResourceId = resourceId;
+      if (finalResourceId && finalResourceId.includes('_inst_')) {
+          finalResourceId = finalResourceId.split('_inst_')[0];
+      }
+
+      const resource = await getResource(finalResourceId)
       if ((resource as any)._id && !resource.id) {
         resource.id = (resource as any)._id
       }
@@ -535,7 +545,15 @@ const handleNodeClick = async (node: any) => {
     }
   } else if (node.category === 'Personnel') {
     try {
-      const person = await getPersonnelById(node.id)
+      const personnelId = node.rawData?.original_id || node.id
+      
+      // 如果依然是组合ID，尝试从字符串解析
+      let finalPersonnelId = personnelId;
+      if (finalPersonnelId && finalPersonnelId.includes('_inst_')) {
+          finalPersonnelId = finalPersonnelId.split('_inst_')[0];
+      }
+
+      const person = await getPersonnelById(finalPersonnelId)
       if ((person as any)._id && !person.id) {
         person.id = (person as any)._id
       }

@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from motor.motor_asyncio import AsyncIOMotorClient
 from neo4j import AsyncGraphDatabase
 from bson import ObjectId
+import random
 
 # 数据库配置
 MONGODB_URL = "mongodb://localhost:27017"
@@ -31,6 +32,134 @@ async def clear_all_data(mongo_client, neo4j_driver):
         await session.run("MATCH (n) DETACH DELETE n")
     
     print("[OK] 数据清空完成")
+
+
+async def create_and_link_personnel(db, neo4j_driver, personnel_list, activity_ids, process_id, domain):
+    """创建人员并关联到活动"""
+    if not personnel_list:
+        return
+
+    # MongoDB 插入
+    for p in personnel_list:
+        p.update({
+            "process_id": process_id,
+            "domain": domain,
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        })
+    
+    result = await db.personnel.insert_many(personnel_list)
+    personnel_ids = [str(id) for id in result.inserted_ids]
+    
+    # Neo4j 同步
+    for idx, p in enumerate(personnel_list):
+        async with neo4j_driver.session() as session:
+            await session.run(
+                """
+                MERGE (p:Personnel {id: $id})
+                SET p.name = $name, p.role = $role, p.department = $department
+                """,
+                id=personnel_ids[idx],
+                name=p["name"],
+                role=p["role"],
+                department=p.get("department", "General")
+            )
+            
+    # 确保每个活动都有人员，循环分配
+    for i, activity_id in enumerate(activity_ids):
+        # 每个活动至少分配 1-2 个人
+        num_to_assign = 2 if len(personnel_ids) >= 2 else 1
+        for j in range(num_to_assign):
+            p_idx = (i + j) % len(personnel_ids)
+            async with neo4j_driver.session() as session:
+                await session.run(
+                    """
+                    MATCH (a:Activity {id: $activity_id})
+                    MATCH (p:Personnel {id: $personnel_id})
+                    MERGE (a)-[r:HAS_PERSONNEL]->(p)
+                    SET r.type = 'assigned', r.created_at = datetime()
+                    """,
+                    activity_id=activity_id,
+                    personnel_id=personnel_ids[p_idx]
+                )
+    
+    relation_count = len(activity_ids) * min(2, len(personnel_ids)) if len(personnel_ids) >= 2 else len(activity_ids)
+    print(f"  - Created {len(personnel_list)} personnel, {relation_count} HAS_PERSONNEL relations")
+
+
+async def create_and_link_resources(db, neo4j_driver, resource_list, activity_ids, process_id, domain):
+    """创建资源（设备/材料）并关联到活动"""
+    if not resource_list:
+        return
+
+    # MongoDB 插入
+    for r in resource_list:
+        r.update({
+            "process_id": process_id,
+            "domain": domain,
+            "is_active": True,
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        })
+    
+    result = await db.resources.insert_many(resource_list)
+    resource_ids = [str(id) for id in result.inserted_ids]
+    
+    # Neo4j 同步
+    for idx, r in enumerate(resource_list):
+        async with neo4j_driver.session() as session:
+            await session.run(
+                """
+                MERGE (r:Resource {id: $id})
+                SET r.name = $name, r.type = $type
+                """,
+                id=resource_ids[idx],
+                name=r["name"],
+                type=r["type"]
+            )
+
+    # 先按照指定的 target_activity_indices 分配
+    uses_count = 0
+    for i, r in enumerate(resource_list):
+        target_indices = r.get("_target_activity_indices", [])
+        if not target_indices:
+            # 默认分配给某个活动，避免孤立
+            target_indices = [i % len(activity_ids)]
+            
+        for act_idx in target_indices:
+            if act_idx < len(activity_ids):
+                async with neo4j_driver.session() as session:
+                    await session.run(
+                        """
+                        MATCH (a:Activity {id: $activity_id})
+                        MATCH (r:Resource {id: $resource_id})
+                        MERGE (a)-[u:USES]->(r)
+                        SET u.quantity = 1, u.unit = 'unit', u.stage = $domain
+                        """,
+                        activity_id=activity_ids[act_idx],
+                        resource_id=resource_ids[i],
+                        domain=domain
+                    )
+                    uses_count += 1
+    
+    # 确保每个活动都至少有一个资源，循环补充
+    for i, activity_id in enumerate(activity_ids):
+        r_idx = i % len(resource_ids)
+        async with neo4j_driver.session() as session:
+            # 使用 MERGE 避免重复
+            await session.run(
+                """
+                MATCH (a:Activity {id: $activity_id})
+                MATCH (r:Resource {id: $resource_id})
+                MERGE (a)-[u:USES]->(r)
+                ON CREATE SET u.quantity = 1, u.unit = 'unit', u.stage = $domain
+                """,
+                activity_id=activity_id,
+                resource_id=resource_ids[r_idx],
+                domain=domain
+            )
+    
+    print(f"  - Created {len(resource_list)} resources, ensured all activities have resources")
 
 
 async def create_production_p001(mongo_client, neo4j_driver):
@@ -218,12 +347,7 @@ async def create_production_p001(mongo_client, neo4j_driver):
             "quantity": 1,
             "unit": "台",
             "status": "available",
-            "domain": "production",
-            "process_id": "P001",
-            "version": 1,
-            "is_active": True,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "_target_activity_indices": [2] # 消毒
         },
         {
             "name": "灌装机-自动01",
@@ -233,12 +357,7 @@ async def create_production_p001(mongo_client, neo4j_driver):
             "quantity": 1,
             "unit": "台",
             "status": "available",
-            "domain": "production",
-            "process_id": "P001",
-            "version": 1,
-            "is_active": True,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "_target_activity_indices": [3] # 灌装
         },
         {
             "name": "包装材料-1L纸盒",
@@ -248,71 +367,64 @@ async def create_production_p001(mongo_client, neo4j_driver):
             "quantity": 10000,
             "unit": "个",
             "status": "available",
-            "domain": "production",
-            "process_id": "P001",
-            "version": 1,
-            "is_active": True,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+             "_target_activity_indices": [4] # 包装
+        },
+        {
+            "name": "储奶罐-A",
+            "type": "设备",
+            "specification": "10吨级",
+            "supplier": "设备供应商A",
+            "quantity": 2,
+            "unit": "个",
+            "status": "available",
+            "_target_activity_indices": [0] # 接收
+        },
+        {
+            "name": "检测试剂盒",
+            "type": "材料",
+            "specification": "快速检测",
+            "supplier": "检测耗材厂",
+            "quantity": 100,
+            "unit": "盒",
+            "status": "available",
+            "_target_activity_indices": [1] # 检验
+        },
+        {
+            "name": "传送带",
+            "type": "设备",
+            "specification": "自动化",
+            "supplier": "设备供应商C",
+            "quantity": 3,
+            "unit": "条",
+            "status": "available",
+            "_target_activity_indices": [3, 4] # 灌装、包装
+        },
+        {
+            "name": "托盘",
+            "type": "材料",
+            "specification": "标准尺寸",
+            "supplier": "仓储设备厂",
+            "quantity": 50,
+            "unit": "个",
+            "status": "available",
+            "_target_activity_indices": [5] # 入库
         }
     ]
     
-    result = await db.resources.insert_many(resources)
-    resource_ids = [str(id) for id in result.inserted_ids]
+    await create_and_link_resources(db, neo4j_driver, resources, activity_ids, "P001", "production")
+
+    # 创建人员
+    personnel = [
+        {"name": "张三", "role": "生产主管", "department": "生产部"},
+        {"name": "李四", "role": "操作工", "department": "生产部"},
+        {"name": "王五", "role": "质检员", "department": "质检部"},
+        {"name": "赵二", "role": "操作工", "department": "生产部"},
+        {"name": "刘明", "role": "机械工", "department": "生产部"},
+        {"name": "陈欣", "role": "仓管员", "department": "仓储部"}
+    ]
+    await create_and_link_personnel(db, neo4j_driver, personnel, activity_ids, "P001", "production")
     
-    # 同步资源到 Neo4j
-    for idx, resource in enumerate(resources):
-        async with neo4j_driver.session() as session:
-            await session.run(
-                """
-                MERGE (r:Resource {id: $id})
-                SET r.name = $name
-                """,
-                id=resource_ids[idx],
-                name=resource["name"]
-            )
-    
-    # 创建活动-资源使用关系（USES）
-    # 消毒设备 -> 牛奶消毒活动
-    async with neo4j_driver.session() as session:
-        await session.run(
-            """
-            MATCH (a:Activity {id: $activity_id})
-            MATCH (r:Resource {id: $resource_id})
-            MERGE (a)-[u:USES]->(r)
-            SET u.quantity = 1, u.unit = '台', u.stage = 'production'
-            """,
-            activity_id=activity_ids[2],  # 牛奶消毒
-            resource_id=resource_ids[0]   # 消毒设备
-        )
-    
-    # 灌装机 -> 灌装活动
-    async with neo4j_driver.session() as session:
-        await session.run(
-            """
-            MATCH (a:Activity {id: $activity_id})
-            MATCH (r:Resource {id: $resource_id})
-            MERGE (a)-[u:USES]->(r)
-            SET u.quantity = 1, u.unit = '台', u.stage = 'production'
-            """,
-            activity_id=activity_ids[3],  # 灌装
-            resource_id=resource_ids[1]   # 灌装机
-        )
-    
-    # 包装材料 -> 包装活动
-    async with neo4j_driver.session() as session:
-        await session.run(
-            """
-            MATCH (a:Activity {id: $activity_id})
-            MATCH (r:Resource {id: $resource_id})
-            MERGE (a)-[u:USES]->(r)
-            SET u.quantity = 1000, u.unit = '个', u.stage = 'production'
-            """,
-            activity_id=activity_ids[4],  # 包装
-            resource_id=resource_ids[2]   # 包装材料
-        )
-    
-    print(f"[OK] 生产流程P001: {len(activities)}个活动, {len(dependencies)}条依赖, {len(resources)}个资源, 3条USES关系")
+    print(f"[OK] 生产流程P001: {len(activities)}个活动, {len(dependencies)}条依赖")
     return activity_ids
 
 
@@ -462,6 +574,92 @@ async def create_transport_t001(mongo_client, neo4j_driver, production_last_acti
             source=production_last_activity_id,
             target=activity_ids[0]
         )
+        
+    # 创建资源
+    resources = [
+        {
+            "name": "冷链车-A001",
+            "type": "设备",
+            "specification": "5吨级冷链车",
+            "supplier": "物流车队",
+            "quantity": 1,
+            "unit": "辆",
+            "status": "available",
+            "_target_activity_indices": [1] # 运输
+        },
+        {
+            "name": "电动叉车",
+            "type": "设备",
+            "specification": "2吨",
+            "supplier": "杭叉",
+            "quantity": 2,
+            "unit": "台",
+            "status": "available",
+            "_target_activity_indices": [0, 2] # 装车，卸货
+        },
+        {
+            "name": "燃油",
+            "type": "材料",
+            "specification": "0号柴油",
+            "supplier": "中石油",
+            "quantity": 500,
+            "unit": "升",
+            "status": "available",
+             "_target_activity_indices": [1] # 运输
+        },
+        {
+            "name": "GPS定位设备",
+            "type": "设备",
+            "specification": "车载",
+            "supplier": "物联网公司",
+            "quantity": 5,
+            "unit": "台",
+            "status": "available",
+            "_target_activity_indices": [1] # 运输
+        },
+        {
+            "name": "温度记录仪",
+            "type": "设备",
+            "specification": "电子式",
+            "supplier": "仪器厂",
+            "quantity": 10,
+            "unit": "个",
+            "status": "available",
+            "_target_activity_indices": [1] # 运输
+        },
+        {
+            "name": "缠绕膜",
+            "type": "材料",
+            "specification": "工业级",
+            "supplier": "包装材料厂",
+            "quantity": 100,
+            "unit": "卷",
+            "status": "available",
+            "_target_activity_indices": [0] # 装车
+        },
+        {
+            "name": "手持扫码枪",
+            "type": "设备",
+            "specification": "无线",
+            "supplier": "信息设备厂",
+            "quantity": 8,
+            "unit": "个",
+            "status": "available",
+            "_target_activity_indices": [3] # 签收
+        }
+    ]
+    
+    await create_and_link_resources(db, neo4j_driver, resources, activity_ids, "T001", "transport")
+
+    # 创建人员
+    personnel = [
+        {"name": "孙七", "role": "司机", "department": "物流部"},
+        {"name": "赵六", "role": "物流调度", "department": "物流部"},
+        {"name": "搬运工甲", "role": "搬运工", "department": "物流部"},
+        {"name": "搬运工乙", "role": "搬运工", "department": "物流部"},
+        {"name": "押运员小李", "role": "押运员", "department": "物流部"}
+    ]
+    await create_and_link_personnel(db, neo4j_driver, personnel, activity_ids, "T001", "transport")
     
     print(f"[OK] 运输流程T001: {len(activities)}个活动, {len(dependencies)}条依赖 + 1条跨流程依赖")
     return activity_ids
@@ -614,6 +812,92 @@ async def create_sales_s001(mongo_client, neo4j_driver, transport_last_activity_
             source=transport_last_activity_id,
             target=activity_ids[1]
         )
+        
+    # 创建资源
+    resources = [
+        {
+            "name": "PDA手持终端",
+            "type": "设备",
+            "specification": "型号X100",
+            "supplier": "电子供应商",
+            "quantity": 10,
+            "unit": "台",
+            "status": "available",
+            "_target_activity_indices": [1] # 拣货
+        },
+        {
+            "name": "快递箱",
+            "type": "材料",
+            "specification": "标准5号箱",
+            "supplier": "包装厂",
+            "quantity": 500,
+            "unit": "个",
+            "status": "available",
+             "_target_activity_indices": [2] # 配送
+        },
+        {
+            "name": "订单管理系统",
+            "type": "设备",
+            "specification": "软件系统",
+            "supplier": "软件开发商",
+            "quantity": 1,
+            "unit": "套",
+            "status": "available",
+            "_target_activity_indices": [0] # 订单生成
+        },
+        {
+            "name": "拣货车",
+            "type": "设备",
+            "specification": "手推式",
+            "supplier": "仓储设备厂",
+            "quantity": 15,
+            "unit": "辆",
+            "status": "available",
+            "_target_activity_indices": [1] # 拣货
+        },
+        {
+            "name": "泡沫箱",
+            "type": "材料",
+            "specification": "保温型",
+            "supplier": "包装厂",
+            "quantity": 300,
+            "unit": "个",
+            "status": "available",
+            "_target_activity_indices": [2] # 配送
+        },
+        {
+            "name": "冰袋",
+            "type": "材料",
+            "specification": "可重复使用",
+            "supplier": "冷链耗材厂",
+            "quantity": 1000,
+            "unit": "个",
+            "status": "available",
+            "_target_activity_indices": [2] # 配送
+        },
+        {
+            "name": "配送电动车",
+            "type": "设备",
+            "specification": "电动三轮",
+            "supplier": "车辆厂",
+            "quantity": 20,
+            "unit": "辆",
+            "status": "available",
+            "_target_activity_indices": [2, 3] # 配送、签收
+        }
+    ]
+    
+    await create_and_link_resources(db, neo4j_driver, resources, activity_ids, "S001", "sales")
+
+    # 创建人员
+    personnel = [
+        {"name": "周八", "role": "销售助理", "department": "销售部"},
+        {"name": "吴九", "role": "拣货员", "department": "仓储部"},
+        {"name": "快递员小王", "role": "配送员", "department": "物流部"},
+        {"name": "拣货员小张", "role": "拣货员", "department": "仓储部"},
+        {"name": "客服小刘", "role": "客服", "department": "销售部"}
+    ]
+    await create_and_link_personnel(db, neo4j_driver, personnel, activity_ids, "S001", "sales")
     
     print(f"[OK] 销售流程S001: {len(activities)}个活动, {len(dependencies)}条依赖 + 1条跨流程依赖")
     return activity_ids
@@ -727,6 +1011,81 @@ async def create_quality_q001(mongo_client, neo4j_driver):
                 type=dep_type,
                 lag=lag
             )
+            
+    # 创建资源
+    resources = [
+        {
+            "name": "高倍显微镜",
+            "type": "设备",
+            "specification": "1600X",
+            "supplier": "光学仪器厂",
+            "quantity": 2,
+            "unit": "台",
+            "status": "available",
+            "_target_activity_indices": [1] # 检测
+        },
+        {
+            "name": "检测试剂A",
+            "type": "材料",
+            "specification": "500ml",
+            "supplier": "化学试剂厂",
+            "quantity": 20,
+            "unit": "瓶",
+            "status": "available",
+             "_target_activity_indices": [1] # 检测
+        },
+        {
+            "name": "采样工具箱",
+            "type": "设备",
+            "specification": "标准配置",
+            "supplier": "实验器材厂",
+            "quantity": 5,
+            "unit": "套",
+            "status": "available",
+            "_target_activity_indices": [0] # 采样
+        },
+        {
+            "name": "pH计",
+            "type": "设备",
+            "specification": "精密型",
+            "supplier": "仪器厂",
+            "quantity": 3,
+            "unit": "台",
+            "status": "available",
+            "_target_activity_indices": [1] # 检测
+        },
+        {
+            "name": "培养皿",
+            "type": "材料",
+            "specification": "无菌",
+            "supplier": "实验耗材厂",
+            "quantity": 200,
+            "unit": "个",
+            "status": "available",
+            "_target_activity_indices": [1] # 检测
+        },
+        {
+            "name": "报告打印机",
+            "type": "设备",
+            "specification": "激光打印",
+            "supplier": "办公设备厂",
+            "quantity": 2,
+            "unit": "台",
+            "status": "available",
+            "_target_activity_indices": [2] # 报告
+        }
+    ]
+    
+    await create_and_link_resources(db, neo4j_driver, resources, activity_ids, "Q001", "quality")
+
+    # 创建人员
+    personnel = [
+        {"name": "郑十", "role": "质检主任", "department": "质检部"},
+        {"name": "钱十一", "role": "化验员", "department": "质检部"},
+        {"name": "化验员小赵", "role": "化验员", "department": "质检部"},
+        {"name": "采样员小孙", "role": "采样员", "department": "质检部"}
+    ]
+    await create_and_link_personnel(db, neo4j_driver, personnel, activity_ids, "Q001", "quality")
     
     print(f"[OK] 质检流程Q001: {len(activities)}个活动, {len(dependencies)}条依赖（独立流程）")
 
@@ -770,4 +1129,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
