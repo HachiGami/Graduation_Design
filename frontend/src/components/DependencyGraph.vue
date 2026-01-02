@@ -1101,9 +1101,9 @@ const computeDagreLayout = (nodes: any[], edges: any[]) => {
       const overlapH = Math.min(r1.y2, r2.y2) - Math.max(r1.y1, r2.y1)
       
       if (overlapW > overlapH && Math.abs(node1.x - node2.x) < 150) {
-        // X 方向推开
+        // X 方向推开（D策略：移除上限限制）
         const rightNode = node1.x > node2.x ? node1 : node2
-        rightNode.x += Math.min(overlapW + 20, 120)
+        rightNode.x += overlapW + 100
       }
     })
   }
@@ -1281,6 +1281,297 @@ const computeDagreLayout = (nodes: any[], edges: any[]) => {
   
   // ============ 去重叠后处理结束 ============
   
+  // ============ 简化布局策略：主链冻结 + 支链锚点化 ============
+  
+  // B2: 主链冻结 - 收集所有主链节点
+  const backboneNodes = new Set<string>()
+  nodeLaneInfo.forEach((info, nodeId) => {
+    if (info.isBackbone) {
+      backboneNodes.add(nodeId)
+    }
+  })
+  
+  if (debugMode) {
+    console.log(`[FREEZE_BACKBONE] Froze ${backboneNodes.size} backbone nodes`)
+  }
+  
+  // 辅助：计算节点+label 完整包围盒
+  const getNodeBBox = (nodeId: string) => {
+    const node = g2.node(nodeId)
+    const meta = nodeMetadata.get(nodeId)
+    
+    if (meta?.isVirtual) {
+      return { x1: node.x, y1: node.y, x2: node.x, y2: node.y }
+    }
+    
+    const r = 25
+    const labelW = 100
+    const labelH = 14
+    const labelMargin = 6
+    const padding = 10
+    
+    const nodeX1 = node.x - r - padding
+    const nodeY1 = node.y - r - padding
+    const nodeX2 = node.x + r + padding
+    const nodeY2 = node.y + r + padding
+    
+    const labelX1 = node.x - labelW / 2 - padding
+    const labelY1 = node.y + r + labelMargin
+    const labelX2 = node.x + labelW / 2 + padding
+    const labelY2 = labelY1 + labelH + padding
+    
+    return {
+      x1: Math.min(nodeX1, labelX1),
+      y1: Math.min(nodeY1, labelY1),
+      x2: Math.max(nodeX2, labelX2),
+      y2: Math.max(nodeY2, labelY2)
+    }
+  }
+  
+  const bboxOverlap = (b1: any, b2: any) => {
+    return !(b1.x2 <= b2.x1 || b2.x2 <= b1.x1 || b1.y2 <= b2.y1 || b2.y2 <= b1.y1)
+  }
+  
+  // B3: 支链锚点化摆放
+  const layoutBranchesNearAnchors = () => {
+    const realNodes = g2.nodes().filter(id => !nodeMetadata.get(id)?.isVirtual)
+    const branchNodes = realNodes.filter(id => !backboneNodes.has(id))
+    
+    // 为每个锚点维护已占用的扇区
+    const anchorOccupancy = new Map<string, Array<{angle: number, ring: number}>>()
+    
+    branchNodes.forEach(branchId => {
+      // 找到该支链节点连接的主链节点（锚点）
+      const anchors: string[] = []
+      newEdges.forEach(e => {
+        if (e.source === branchId && backboneNodes.has(e.target)) {
+          anchors.push(e.target)
+        }
+        if (e.target === branchId && backboneNodes.has(e.source)) {
+          anchors.push(e.source)
+        }
+      })
+      
+      if (anchors.length === 0) return
+      
+      // 选择第一个锚点（如果有多个，选最近的）
+      const anchorId = anchors[0]
+      const anchorNode = g2.node(anchorId)
+      
+      if (!anchorOccupancy.has(anchorId)) {
+        anchorOccupancy.set(anchorId, [])
+      }
+      const occupied = anchorOccupancy.get(anchorId)!
+      
+      // 确定左右侧：检测锚点左右哪边更空
+      const leftCount = realNodes.filter(id => {
+        const n = g2.node(id)
+        return n.x < anchorNode.x && Math.abs(n.y - anchorNode.y) < 500
+      }).length
+      
+      const rightCount = realNodes.filter(id => {
+        const n = g2.node(id)
+        return n.x > anchorNode.x && Math.abs(n.y - anchorNode.y) < 500
+      }).length
+      
+      const preferLeft = leftCount < rightCount
+      
+      // 选择扇区和层级
+      let bestAngle = preferLeft ? 180 : 0
+      let bestRing = 1
+      
+      // 避开已占用扇区
+      const angles = preferLeft ? [180, 210, 150, 240, 120] : [0, 30, 330, 60, 300]
+      for (const angle of angles) {
+        let ringFound = false
+        for (let ring = 1; ring <= 3; ring++) {
+          const conflict = occupied.some(occ => 
+            Math.abs(occ.angle - angle) < 45 && occ.ring === ring
+          )
+          if (!conflict) {
+            bestAngle = angle
+            bestRing = ring
+            ringFound = true
+            break
+          }
+        }
+        if (ringFound) break
+      }
+      
+      occupied.push({ angle: bestAngle, ring: bestRing })
+      
+      // 计算位置
+      const baseRadius = 300
+      const radius = baseRadius + (bestRing - 1) * 300
+      const rad = (bestAngle * Math.PI) / 180
+      const newX = anchorNode.x + radius * Math.cos(rad)
+      const newY = anchorNode.y + radius * Math.sin(rad)
+      
+      g2.node(branchId).x = newX
+      g2.node(branchId).y = newY
+    })
+    
+    if (debugMode) {
+      console.log(`[ANCHOR_LAYOUT] Placed ${branchNodes.length} branch nodes near anchors`)
+    }
+  }
+  
+  layoutBranchesNearAnchors()
+  updateVirtualNodes()
+  
+  // B4: 局部去重叠（仅支链）
+  const resolveOverlapsLocally = () => {
+    const realNodes = g2.nodes().filter(id => !nodeMetadata.get(id)?.isVirtual)
+    const branchNodes = realNodes.filter(id => !backboneNodes.has(id))
+    
+    let maxIter = 30
+    let resolved = 0
+    
+    while (maxIter > 0) {
+      maxIter--
+      let moved = false
+      
+      for (const branchId of branchNodes) {
+        const branchNode = g2.node(branchId)
+        const branchBBox = getNodeBBox(branchId)
+        
+        // 检测范围：锚点附近 800px + 所有实节点
+        const nearbyNodes = realNodes.filter(otherId => {
+          if (otherId === branchId) return false
+          const otherNode = g2.node(otherId)
+          const dist = Math.sqrt(
+            (otherNode.x - branchNode.x) ** 2 +
+            (otherNode.y - branchNode.y) ** 2
+          )
+          return dist < 800
+        })
+        
+        for (const otherId of nearbyNodes) {
+          const otherBBox = getNodeBBox(otherId)
+          
+          if (bboxOverlap(branchBBox, otherBBox)) {
+            // 优先纵向分离
+            const overlapY = Math.min(branchBBox.y2, otherBBox.y2) - Math.max(branchBBox.y1, otherBBox.y1)
+            const overlapX = Math.min(branchBBox.x2, otherBBox.x2) - Math.max(branchBBox.x1, otherBBox.x1)
+            
+            if (overlapY < overlapX || backboneNodes.has(otherId)) {
+              // 纵向推开
+              if (branchNode.y > g2.node(otherId).y) {
+                branchNode.y += overlapY + 20
+              } else {
+                branchNode.y -= overlapY + 20
+              }
+            } else {
+              // 横向错位（限制 ±100px）
+              const shift = Math.min(overlapX + 20, 100)
+              if (branchNode.x > g2.node(otherId).x) {
+                branchNode.x += shift
+              } else {
+                branchNode.x -= shift
+              }
+            }
+            
+            moved = true
+            resolved++
+            break
+          }
+        }
+        
+        if (moved) break
+      }
+      
+      if (!moved) break
+    }
+    
+    if (debugMode && resolved > 0) {
+      console.log(`[RESOLVE_OVERLAP] Resolved ${resolved} overlaps`)
+    }
+  }
+  
+  resolveOverlapsLocally()
+  updateVirtualNodes()
+  
+  // 网格吸附
+  g2.nodes().forEach(nodeId => {
+    const node = g2.node(nodeId)
+    node.x = Math.round(node.x / 20) * 20
+    node.y = Math.round(node.y / 20) * 20
+  })
+  
+  // 网格吸附后复检重叠
+  const recheckOverlaps = () => {
+    const realNodes = g2.nodes().filter(id => !nodeMetadata.get(id)?.isVirtual)
+    let overlapCount = 0
+    
+    for (let i = 0; i < realNodes.length; i++) {
+      for (let j = i + 1; j < realNodes.length; j++) {
+        const b1 = getNodeBBox(realNodes[i])
+        const b2 = getNodeBBox(realNodes[j])
+        if (bboxOverlap(b1, b2)) {
+          overlapCount++
+        }
+      }
+    }
+    
+    return overlapCount
+  }
+  
+  let postSnapOverlaps = recheckOverlaps()
+  
+  if (postSnapOverlaps > 0) {
+    if (debugMode) {
+      console.log(`[POST_SNAP] Found ${postSnapOverlaps} overlaps after grid snap, re-resolving...`)
+    }
+    
+    // 二次分离（仅支链，小范围）
+    const realNodes = g2.nodes().filter(id => !nodeMetadata.get(id)?.isVirtual)
+    const branchNodes = realNodes.filter(id => !backboneNodes.has(id))
+    
+    let maxIter = 20
+    while (maxIter > 0 && postSnapOverlaps > 0) {
+      maxIter--
+      let moved = false
+      
+      for (const branchId of branchNodes) {
+        const branchBBox = getNodeBBox(branchId)
+        
+        for (const otherId of realNodes) {
+          if (otherId === branchId) continue
+          
+          const otherBBox = getNodeBBox(otherId)
+          if (bboxOverlap(branchBBox, otherBBox)) {
+            const branchNode = g2.node(branchId)
+            const otherNode = g2.node(otherId)
+            
+            // 小范围纵向分离
+            if (branchNode.y > otherNode.y) {
+              branchNode.y += 30
+            } else {
+              branchNode.y -= 30
+            }
+            
+            moved = true
+            break
+          }
+        }
+        
+        if (moved) break
+      }
+      
+      if (!moved) break
+      
+      postSnapOverlaps = recheckOverlaps()
+    }
+    
+    if (debugMode) {
+      console.log(`[POST_SNAP] After re-resolve: ${postSnapOverlaps} overlaps remaining`)
+    }
+  }
+  
+  updateVirtualNodes()
+  
+  // ============ 布局策略结束 ============
+  
   const nodePositions = new Map<string, { x: number, y: number, isVirtual?: boolean }>()
   let minX = Infinity, minY = Infinity
   
@@ -1288,17 +1579,14 @@ const computeDagreLayout = (nodes: any[], edges: any[]) => {
     const node = g2.node(nodeId)
     const meta = nodeMetadata.get(nodeId)
     
-    const x = Math.round(node.x / 20) * 20
-    const y = Math.round(node.y / 20) * 20
-    
     nodePositions.set(nodeId, { 
-      x, 
-      y, 
+      x: node.x, 
+      y: node.y, 
       isVirtual: meta?.isVirtual || false 
     })
     
-    minX = Math.min(minX, x)
-    minY = Math.min(minY, y)
+    minX = Math.min(minX, node.x)
+    minY = Math.min(minY, node.y)
   })
   
   const padding = 100
