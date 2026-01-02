@@ -1090,6 +1090,601 @@ async def create_quality_q001(mongo_client, neo4j_driver):
     print(f"[OK] 质检流程Q001: {len(activities)}个活动, {len(dependencies)}条依赖（独立流程）")
 
 
+async def create_production_p002(mongo_client, neo4j_driver):
+    """副生产线 - P002"""
+    print("\n创建副生产线 P002...")
+    db = mongo_client[MONGODB_DB]
+    
+    activities = [
+        {
+            "name": "原料预处理",
+            "description": "对原料进行预处理",
+            "activity_type": "预处理",
+            "sop_steps": [
+                {"step_number": 1, "description": "原料分类", "duration": 15},
+                {"step_number": 2, "description": "清洗", "duration": 20}
+            ],
+            "estimated_duration": 35,
+            "status": "completed",
+            "domain": "production",
+            "process_id": "P002",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "name": "发酵处理",
+            "description": "发酵工艺处理",
+            "activity_type": "发酵",
+            "sop_steps": [
+                {"step_number": 1, "description": "投料", "duration": 10},
+                {"step_number": 2, "description": "发酵控温", "duration": 120}
+            ],
+            "estimated_duration": 130,
+            "status": "in_progress",
+            "domain": "production",
+            "process_id": "P002",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "name": "成品检验",
+            "description": "成品质量检验",
+            "activity_type": "检验",
+            "sop_steps": [
+                {"step_number": 1, "description": "抽样", "duration": 10},
+                {"step_number": 2, "description": "检验", "duration": 25}
+            ],
+            "estimated_duration": 35,
+            "status": "pending",
+            "domain": "production",
+            "process_id": "P002",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+    ]
+    
+    result = await db.activities.insert_many(activities)
+    activity_ids = [str(id) for id in result.inserted_ids]
+    
+    for idx, activity in enumerate(activities):
+        async with neo4j_driver.session() as session:
+            await session.run(
+                "MERGE (a:Activity {id: $id}) SET a.name = $name, a.domain = $domain, a.process_id = $process_id",
+                id=activity_ids[idx], name=activity["name"], domain=activity["domain"], process_id=activity["process_id"]
+            )
+    
+    dependencies = [(0, 1, "sequential", 10), (1, 2, "sequential", 15)]
+    for source_idx, target_idx, dep_type, lag in dependencies:
+        async with neo4j_driver.session() as session:
+            await session.run(
+                """MATCH (a:Activity {id: $source}) MATCH (b:Activity {id: $target})
+                MERGE (a)-[r:DEPENDS_ON]->(b) SET r.type = $type, r.lag_minutes = $lag, r.status = 'active', r.domain = 'production', r.process_id = 'P002'""",
+                source=activity_ids[source_idx], target=activity_ids[target_idx], type=dep_type, lag=lag
+            )
+    
+    resources = [
+        {"name": "发酵罐", "type": "设备", "specification": "5吨级", "supplier": "发酵设备厂", "quantity": 3, "unit": "个", "status": "available", "_target_activity_indices": [1]},
+        {"name": "清洗设备", "type": "设备", "specification": "自动", "supplier": "清洗设备厂", "quantity": 2, "unit": "台", "status": "available", "_target_activity_indices": [0]},
+        {"name": "发酵菌种", "type": "材料", "specification": "益生菌", "supplier": "菌种供应商", "quantity": 50, "unit": "包", "status": "available", "_target_activity_indices": [1]}
+    ]
+    await create_and_link_resources(db, neo4j_driver, resources, activity_ids, "P002", "production")
+    
+    personnel = [
+        {"name": "发酵师傅老王", "role": "发酵技师", "department": "生产部"},
+        {"name": "预处理工小李", "role": "操作工", "department": "生产部"},
+        {"name": "检验员小陈", "role": "质检员", "department": "质检部"}
+    ]
+    await create_and_link_personnel(db, neo4j_driver, personnel, activity_ids, "P002", "production")
+    
+    print(f"[OK] 副生产线P002: {len(activities)}个活动, {len(dependencies)}条依赖")
+    return activity_ids
+
+
+async def create_transport_t002(mongo_client, neo4j_driver):
+    """常温运输 - T002"""
+    print("\n创建常温运输 T002...")
+    db = mongo_client[MONGODB_DB]
+    
+    activities = [
+        {
+            "name": "常温装车",
+            "description": "常温产品装车",
+            "activity_type": "装车",
+            "sop_steps": [
+                {"step_number": 1, "description": "清点货物", "duration": 20},
+                {"step_number": 2, "description": "装车", "duration": 30}
+            ],
+            "estimated_duration": 50,
+            "status": "completed",
+            "domain": "transport",
+            "process_id": "T002",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "name": "常温运输",
+            "description": "常温车辆运输",
+            "activity_type": "运输",
+            "sop_steps": [
+                {"step_number": 1, "description": "路线规划", "duration": 5},
+                {"step_number": 2, "description": "运输", "duration": 150}
+            ],
+            "estimated_duration": 155,
+            "status": "in_progress",
+            "domain": "transport",
+            "process_id": "T002",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "name": "常温配送",
+            "description": "到达目的地配送",
+            "activity_type": "配送",
+            "sop_steps": [
+                {"step_number": 1, "description": "卸货", "duration": 25},
+                {"step_number": 2, "description": "签收", "duration": 10}
+            ],
+            "estimated_duration": 35,
+            "status": "pending",
+            "domain": "transport",
+            "process_id": "T002",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+    ]
+    
+    result = await db.activities.insert_many(activities)
+    activity_ids = [str(id) for id in result.inserted_ids]
+    
+    for idx, activity in enumerate(activities):
+        async with neo4j_driver.session() as session:
+            await session.run(
+                "MERGE (a:Activity {id: $id}) SET a.name = $name, a.domain = $domain, a.process_id = $process_id",
+                id=activity_ids[idx], name=activity["name"], domain=activity["domain"], process_id=activity["process_id"]
+            )
+    
+    dependencies = [(0, 1, "sequential", 10), (1, 2, "sequential", 5)]
+    for source_idx, target_idx, dep_type, lag in dependencies:
+        async with neo4j_driver.session() as session:
+            await session.run(
+                """MATCH (a:Activity {id: $source}) MATCH (b:Activity {id: $target})
+                MERGE (a)-[r:DEPENDS_ON]->(b) SET r.type = $type, r.lag_minutes = $lag, r.status = 'active', r.domain = 'transport', r.process_id = 'T002'""",
+                source=activity_ids[source_idx], target=activity_ids[target_idx], type=dep_type, lag=lag
+            )
+    
+    resources = [
+        {"name": "普通货车", "type": "设备", "specification": "5吨级", "supplier": "车队", "quantity": 3, "unit": "辆", "status": "available", "_target_activity_indices": [1]},
+        {"name": "手推车", "type": "设备", "specification": "标准", "supplier": "仓储设备", "quantity": 5, "unit": "辆", "status": "available", "_target_activity_indices": [0, 2]},
+        {"name": "纸箱", "type": "材料", "specification": "标准", "supplier": "包装厂", "quantity": 1000, "unit": "个", "status": "available", "_target_activity_indices": [0]}
+    ]
+    await create_and_link_resources(db, neo4j_driver, resources, activity_ids, "T002", "transport")
+    
+    personnel = [
+        {"name": "司机老张", "role": "司机", "department": "物流部"},
+        {"name": "装卸工小刘", "role": "装卸工", "department": "物流部"},
+        {"name": "调度员", "role": "调度", "department": "物流部"}
+    ]
+    await create_and_link_personnel(db, neo4j_driver, personnel, activity_ids, "T002", "transport")
+    
+    print(f"[OK] 常温运输T002: {len(activities)}个活动, {len(dependencies)}条依赖")
+    return activity_ids
+
+
+async def create_sales_s002(mongo_client, neo4j_driver):
+    """线下销售 - S002"""
+    print("\n创建线下销售 S002...")
+    db = mongo_client[MONGODB_DB]
+    
+    activities = [
+        {
+            "name": "门店接单",
+            "description": "门店收银接单",
+            "activity_type": "接单",
+            "sop_steps": [
+                {"step_number": 1, "description": "客户选购", "duration": 10},
+                {"step_number": 2, "description": "收银", "duration": 5}
+            ],
+            "estimated_duration": 15,
+            "status": "completed",
+            "domain": "sales",
+            "process_id": "S002",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "name": "商品打包",
+            "description": "商品打包装袋",
+            "activity_type": "打包",
+            "sop_steps": [
+                {"step_number": 1, "description": "装袋", "duration": 5},
+                {"step_number": 2, "description": "密封", "duration": 3}
+            ],
+            "estimated_duration": 8,
+            "status": "in_progress",
+            "domain": "sales",
+            "process_id": "S002",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "name": "客户取货",
+            "description": "客户取货完成",
+            "activity_type": "交付",
+            "sop_steps": [
+                {"step_number": 1, "description": "验货", "duration": 3},
+                {"step_number": 2, "description": "交付", "duration": 2}
+            ],
+            "estimated_duration": 5,
+            "status": "pending",
+            "domain": "sales",
+            "process_id": "S002",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+    ]
+    
+    result = await db.activities.insert_many(activities)
+    activity_ids = [str(id) for id in result.inserted_ids]
+    
+    for idx, activity in enumerate(activities):
+        async with neo4j_driver.session() as session:
+            await session.run(
+                "MERGE (a:Activity {id: $id}) SET a.name = $name, a.domain = $domain, a.process_id = $process_id",
+                id=activity_ids[idx], name=activity["name"], domain=activity["domain"], process_id=activity["process_id"]
+            )
+    
+    dependencies = [(0, 1, "sequential", 2), (1, 2, "sequential", 1)]
+    for source_idx, target_idx, dep_type, lag in dependencies:
+        async with neo4j_driver.session() as session:
+            await session.run(
+                """MATCH (a:Activity {id: $source}) MATCH (b:Activity {id: $target})
+                MERGE (a)-[r:DEPENDS_ON]->(b) SET r.type = $type, r.lag_minutes = $lag, r.status = 'active', r.domain = 'sales', r.process_id = 'S002'""",
+                source=activity_ids[source_idx], target=activity_ids[target_idx], type=dep_type, lag=lag
+            )
+    
+    resources = [
+        {"name": "收银机", "type": "设备", "specification": "POS机", "supplier": "收银设备商", "quantity": 5, "unit": "台", "status": "available", "_target_activity_indices": [0]},
+        {"name": "购物袋", "type": "材料", "specification": "环保袋", "supplier": "包装厂", "quantity": 2000, "unit": "个", "status": "available", "_target_activity_indices": [1]},
+        {"name": "保鲜袋", "type": "材料", "specification": "食品级", "supplier": "包装厂", "quantity": 1000, "unit": "卷", "status": "available", "_target_activity_indices": [1]}
+    ]
+    await create_and_link_resources(db, neo4j_driver, resources, activity_ids, "S002", "sales")
+    
+    personnel = [
+        {"name": "收银员小美", "role": "收银员", "department": "销售部"},
+        {"name": "店员小红", "role": "销售员", "department": "销售部"},
+        {"name": "店长", "role": "店长", "department": "销售部"}
+    ]
+    await create_and_link_personnel(db, neo4j_driver, personnel, activity_ids, "S002", "sales")
+    
+    print(f"[OK] 线下销售S002: {len(activities)}个活动, {len(dependencies)}条依赖")
+    return activity_ids
+
+
+async def create_quality_q002(mongo_client, neo4j_driver):
+    """专项质检 - Q002"""
+    print("\n创建专项质检 Q002...")
+    db = mongo_client[MONGODB_DB]
+    
+    activities = [
+        {
+            "name": "专项抽检",
+            "description": "针对性专项抽检",
+            "activity_type": "抽检",
+            "sop_steps": [
+                {"step_number": 1, "description": "确定抽检批次", "duration": 15},
+                {"step_number": 2, "description": "抽样", "duration": 20}
+            ],
+            "estimated_duration": 35,
+            "status": "completed",
+            "domain": "quality",
+            "process_id": "Q002",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "name": "专项检测",
+            "description": "进行专项检测分析",
+            "activity_type": "检测",
+            "sop_steps": [
+                {"step_number": 1, "description": "样品准备", "duration": 20},
+                {"step_number": 2, "description": "专项检测", "duration": 90}
+            ],
+            "estimated_duration": 110,
+            "status": "in_progress",
+            "domain": "quality",
+            "process_id": "Q002",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "name": "结果分析",
+            "description": "检测结果分析评估",
+            "activity_type": "分析",
+            "sop_steps": [
+                {"step_number": 1, "description": "数据统计", "duration": 25},
+                {"step_number": 2, "description": "报告编制", "duration": 40}
+            ],
+            "estimated_duration": 65,
+            "status": "pending",
+            "domain": "quality",
+            "process_id": "Q002",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+    ]
+    
+    result = await db.activities.insert_many(activities)
+    activity_ids = [str(id) for id in result.inserted_ids]
+    
+    for idx, activity in enumerate(activities):
+        async with neo4j_driver.session() as session:
+            await session.run(
+                "MERGE (a:Activity {id: $id}) SET a.name = $name, a.domain = $domain, a.process_id = $process_id",
+                id=activity_ids[idx], name=activity["name"], domain=activity["domain"], process_id=activity["process_id"]
+            )
+    
+    dependencies = [(0, 1, "sequential", 10), (1, 2, "sequential", 15)]
+    for source_idx, target_idx, dep_type, lag in dependencies:
+        async with neo4j_driver.session() as session:
+            await session.run(
+                """MATCH (a:Activity {id: $source}) MATCH (b:Activity {id: $target})
+                MERGE (a)-[r:DEPENDS_ON]->(b) SET r.type = $type, r.lag_minutes = $lag, r.status = 'active', r.domain = 'quality', r.process_id = 'Q002'""",
+                source=activity_ids[source_idx], target=activity_ids[target_idx], type=dep_type, lag=lag
+            )
+    
+    resources = [
+        {"name": "光谱仪", "type": "设备", "specification": "高精度", "supplier": "精密仪器厂", "quantity": 1, "unit": "台", "status": "available", "_target_activity_indices": [1]},
+        {"name": "专项试剂", "type": "材料", "specification": "专用", "supplier": "试剂供应商", "quantity": 30, "unit": "瓶", "status": "available", "_target_activity_indices": [1]},
+        {"name": "分析软件", "type": "设备", "specification": "专业版", "supplier": "软件公司", "quantity": 2, "unit": "套", "status": "available", "_target_activity_indices": [2]}
+    ]
+    await create_and_link_resources(db, neo4j_driver, resources, activity_ids, "Q002", "quality")
+    
+    personnel = [
+        {"name": "高级检测师", "role": "高级技师", "department": "质检部"},
+        {"name": "质检分析员", "role": "分析员", "department": "质检部"},
+        {"name": "抽检员", "role": "抽检员", "department": "质检部"}
+    ]
+    await create_and_link_personnel(db, neo4j_driver, personnel, activity_ids, "Q002", "quality")
+    
+    print(f"[OK] 专项质检Q002: {len(activities)}个活动, {len(dependencies)}条依赖")
+    return activity_ids
+
+
+async def create_warehouse_w001(mongo_client, neo4j_driver):
+    """主仓库 - W001"""
+    print("\n创建主仓库 W001...")
+    db = mongo_client[MONGODB_DB]
+    
+    activities = [
+        {
+            "name": "入库登记",
+            "description": "货物入库登记管理",
+            "activity_type": "入库",
+            "sop_steps": [
+                {"step_number": 1, "description": "核对单据", "duration": 10},
+                {"step_number": 2, "description": "系统登记", "duration": 8}
+            ],
+            "estimated_duration": 18,
+            "status": "completed",
+            "domain": "warehouse",
+            "process_id": "W001",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "name": "货物上架",
+            "description": "将货物摆放到货架",
+            "activity_type": "上架",
+            "sop_steps": [
+                {"step_number": 1, "description": "分配货位", "duration": 5},
+                {"step_number": 2, "description": "搬运上架", "duration": 20}
+            ],
+            "estimated_duration": 25,
+            "status": "in_progress",
+            "domain": "warehouse",
+            "process_id": "W001",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "name": "库存盘点",
+            "description": "定期库存盘点",
+            "activity_type": "盘点",
+            "sop_steps": [
+                {"step_number": 1, "description": "清点数量", "duration": 40},
+                {"step_number": 2, "description": "录入系统", "duration": 15}
+            ],
+            "estimated_duration": 55,
+            "status": "pending",
+            "domain": "warehouse",
+            "process_id": "W001",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+    ]
+    
+    result = await db.activities.insert_many(activities)
+    activity_ids = [str(id) for id in result.inserted_ids]
+    
+    for idx, activity in enumerate(activities):
+        async with neo4j_driver.session() as session:
+            await session.run(
+                "MERGE (a:Activity {id: $id}) SET a.name = $name, a.domain = $domain, a.process_id = $process_id",
+                id=activity_ids[idx], name=activity["name"], domain=activity["domain"], process_id=activity["process_id"]
+            )
+    
+    dependencies = [(0, 1, "sequential", 5), (1, 2, "sequential", 60)]
+    for source_idx, target_idx, dep_type, lag in dependencies:
+        async with neo4j_driver.session() as session:
+            await session.run(
+                """MATCH (a:Activity {id: $source}) MATCH (b:Activity {id: $target})
+                MERGE (a)-[r:DEPENDS_ON]->(b) SET r.type = $type, r.lag_minutes = $lag, r.status = 'active', r.domain = 'warehouse', r.process_id = 'W001'""",
+                source=activity_ids[source_idx], target=activity_ids[target_idx], type=dep_type, lag=lag
+            )
+    
+    resources = [
+        {"name": "货架系统", "type": "设备", "specification": "立体货架", "supplier": "仓储设备商", "quantity": 50, "unit": "组", "status": "available", "_target_activity_indices": [1]},
+        {"name": "叉车", "type": "设备", "specification": "电动", "supplier": "叉车厂", "quantity": 4, "unit": "台", "status": "available", "_target_activity_indices": [1]},
+        {"name": "盘点机", "type": "设备", "specification": "手持", "supplier": "信息设备商", "quantity": 10, "unit": "台", "status": "available", "_target_activity_indices": [2]},
+        {"name": "托盘", "type": "材料", "specification": "塑料", "supplier": "仓储耗材", "quantity": 200, "unit": "个", "status": "available", "_target_activity_indices": [0, 1]}
+    ]
+    await create_and_link_resources(db, neo4j_driver, resources, activity_ids, "W001", "warehouse")
+    
+    personnel = [
+        {"name": "主仓管理员", "role": "仓库主管", "department": "仓储部"},
+        {"name": "叉车工老李", "role": "叉车工", "department": "仓储部"},
+        {"name": "理货员", "role": "理货员", "department": "仓储部"},
+        {"name": "录单员", "role": "文员", "department": "仓储部"}
+    ]
+    await create_and_link_personnel(db, neo4j_driver, personnel, activity_ids, "W001", "warehouse")
+    
+    print(f"[OK] 主仓库W001: {len(activities)}个活动, {len(dependencies)}条依赖")
+    return activity_ids
+
+
+async def create_warehouse_w002(mongo_client, neo4j_driver):
+    """分仓库 - W002"""
+    print("\n创建分仓库 W002...")
+    db = mongo_client[MONGODB_DB]
+    
+    activities = [
+        {
+            "name": "分仓入库",
+            "description": "分仓库收货入库",
+            "activity_type": "入库",
+            "sop_steps": [
+                {"step_number": 1, "description": "验收", "duration": 15},
+                {"step_number": 2, "description": "入库", "duration": 10}
+            ],
+            "estimated_duration": 25,
+            "status": "completed",
+            "domain": "warehouse",
+            "process_id": "W002",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "name": "分仓出库",
+            "description": "分仓库提货出库",
+            "activity_type": "出库",
+            "sop_steps": [
+                {"step_number": 1, "description": "拣货", "duration": 20},
+                {"step_number": 2, "description": "出库", "duration": 10}
+            ],
+            "estimated_duration": 30,
+            "status": "in_progress",
+            "domain": "warehouse",
+            "process_id": "W002",
+            "version": 1,
+            "is_active": True,
+            "required_resources": [],
+            "required_personnel": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+    ]
+    
+    result = await db.activities.insert_many(activities)
+    activity_ids = [str(id) for id in result.inserted_ids]
+    
+    for idx, activity in enumerate(activities):
+        async with neo4j_driver.session() as session:
+            await session.run(
+                "MERGE (a:Activity {id: $id}) SET a.name = $name, a.domain = $domain, a.process_id = $process_id",
+                id=activity_ids[idx], name=activity["name"], domain=activity["domain"], process_id=activity["process_id"]
+            )
+    
+    dependencies = [(0, 1, "sequential", 30)]
+    for source_idx, target_idx, dep_type, lag in dependencies:
+        async with neo4j_driver.session() as session:
+            await session.run(
+                """MATCH (a:Activity {id: $source}) MATCH (b:Activity {id: $target})
+                MERGE (a)-[r:DEPENDS_ON]->(b) SET r.type = $type, r.lag_minutes = $lag, r.status = 'active', r.domain = 'warehouse', r.process_id = 'W002'""",
+                source=activity_ids[source_idx], target=activity_ids[target_idx], type=dep_type, lag=lag
+            )
+    
+    resources = [
+        {"name": "小型货架", "type": "设备", "specification": "标准", "supplier": "货架厂", "quantity": 20, "unit": "组", "status": "available", "_target_activity_indices": [0, 1]},
+        {"name": "手推车", "type": "设备", "specification": "仓储用", "supplier": "设备商", "quantity": 6, "unit": "辆", "status": "available", "_target_activity_indices": [1]},
+        {"name": "条码扫描枪", "type": "设备", "specification": "无线", "supplier": "信息设备", "quantity": 5, "unit": "个", "status": "available", "_target_activity_indices": [0, 1]}
+    ]
+    await create_and_link_resources(db, neo4j_driver, resources, activity_ids, "W002", "warehouse")
+    
+    personnel = [
+        {"name": "分仓管理员", "role": "仓管", "department": "仓储部"},
+        {"name": "拣货员小周", "role": "拣货员", "department": "仓储部"},
+        {"name": "验收员", "role": "验收员", "department": "仓储部"}
+    ]
+    await create_and_link_personnel(db, neo4j_driver, personnel, activity_ids, "W002", "warehouse")
+    
+    print(f"[OK] 分仓库W002: {len(activities)}个活动, {len(dependencies)}条依赖")
+    return activity_ids
+
+
 async def main():
     print("=" * 60)
     print("多流程测试数据初始化")
@@ -1109,18 +1704,32 @@ async def main():
         sales_ids = await create_sales_s001(mongo_client, neo4j_driver, transport_ids[-1])
         await create_quality_q001(mongo_client, neo4j_driver)
         
+        # 新增流程
+        await create_production_p002(mongo_client, neo4j_driver)
+        await create_transport_t002(mongo_client, neo4j_driver)
+        await create_sales_s002(mongo_client, neo4j_driver)
+        await create_quality_q002(mongo_client, neo4j_driver)
+        await create_warehouse_w001(mongo_client, neo4j_driver)
+        await create_warehouse_w002(mongo_client, neo4j_driver)
+        
         print("\n" + "=" * 60)
         print("[OK] 所有数据初始化完成！")
         print("=" * 60)
         print("\n流程清单：")
-        print("  - production/P001: 生产流程（6个活动）")
-        print("  - transport/T001: 运输流程（4个活动）")
-        print("  - sales/S001: 销售流程（4个活动）")
-        print("  - quality/Q001: 质检流程（3个活动，独立）")
+        print("  - production/P001: 主生产流程（6个活动）")
+        print("  - production/P002: 副生产线（3个活动）")
+        print("  - transport/T001: 冷链运输（4个活动）")
+        print("  - transport/T002: 常温运输（3个活动）")
+        print("  - sales/S001: 线上销售（4个活动）")
+        print("  - sales/S002: 线下销售（3个活动）")
+        print("  - quality/Q001: 常规质检（3个活动）")
+        print("  - quality/Q002: 专项质检（3个活动）")
+        print("  - warehouse/W001: 主仓库（3个活动）")
+        print("  - warehouse/W002: 分仓库（2个活动）")
         print("\n跨流程关联：")
         print("  - 生产入库 → 运输出库装车")
         print("  - 运输入库签收 → 销售拣货")
-        print("\n请使用前端流程选择器切换查看不同流程")
+        print("\n共10个流程，每个流程都包含活动、人员、资源节点")
         
     finally:
         mongo_client.close()

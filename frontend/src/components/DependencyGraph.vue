@@ -148,17 +148,33 @@ const layoutExpandedNodes = (
   
   // T2: 碰撞检测函数
   const getCollisionRect = (x: number, y: number, category: string) => {
-    const r = category === 'Activity' ? 25 : 17.5
-    const fontSize = category === 'Activity' ? 12 : 10
-    const lineHeight = fontSize * 1.2
-    const labelW = 100
-    const labelMargin = 6
-    const padding = 60  // 参考活动节点间距，确保视觉清晰度
-    const x1 = Math.min(x - r, x - labelW / 2) - padding
-    const y1 = y - r - padding
-    const x2 = Math.max(x + r, x + labelW / 2) + padding
-    const y2 = y + r + labelMargin + lineHeight + padding
-    return { x1, y1, x2, y2 }
+    const padding = 80  // 增大 padding，确保标签不重叠
+    
+    // Activity 节点标签在底部，需要考虑标签区域
+    if (category === 'Activity') {
+      const r = 25
+      const fontSize = 12
+      const lineHeight = fontSize * 1.2
+      const labelW = 100
+      const labelMargin = 6
+      const x1 = Math.min(x - r, x - labelW / 2) - padding
+      const y1 = y - r - padding
+      const x2 = Math.max(x + r, x + labelW / 2) + padding
+      const y2 = y + r + labelMargin + lineHeight + padding
+      return { x1, y1, x2, y2 }
+    } else {
+      // Resource/Personnel 节点标签在右侧，需要考虑标签向右延伸
+      const r = 17.5
+      const labelW = 80
+      const labelDistance = 10
+      const labelHeight = 12  // lineHeight
+      // 右侧标签需要更大的右侧padding
+      const x1 = x - r - padding
+      const y1 = y - Math.max(r, labelHeight / 2) - padding
+      const x2 = x + r + labelDistance + labelW + padding * 0.5  // 右侧适当缩小padding避免过度保守
+      const y2 = y + Math.max(r, labelHeight / 2) + padding
+      return { x1, y1, x2, y2 }
+    }
   }
   
   const rectsOverlap = (r1: any, r2: any) => !(r1.x2 <= r2.x1 || r2.x2 <= r1.x1 || r1.y2 <= r2.y1 || r2.y2 <= r1.y1)
@@ -237,8 +253,8 @@ const layoutExpandedNodes = (
     let bestPos = { x: hostX, y: hostY + 100, score: -Infinity }
     let foundValid = false
     
-    // 采样参数：参考活动节点间距（~440px），从300px开始
-    const radii = [300, 340, 380, 420, 460, 500, 540, 580]
+    // 采样参数：考虑资源节点标签在右侧占用空间，从更大半径开始
+    const radii = [350, 400, 450, 500, 550, 600, 650, 700]
     const angleStep = 15 * Math.PI / 180
     
     for (const R of radii) {
@@ -1514,7 +1530,7 @@ const initChart = (options?: { preserveView?: boolean }) => {
     // T4: 统计重叠（局部验证，含宿主）
     const localRects = [
       { id: activityId, rect: ((x: number, y: number) => {
-        const r = 25, labelW = 100, fontSize = 12, lineHeight = fontSize * 1.2, labelMargin = 6, padding = 25
+        const r = 25, labelW = 100, fontSize = 12, lineHeight = fontSize * 1.2, labelMargin = 6, padding = 80
         return {
           x1: Math.min(x - r, x - labelW / 2) - padding,
           y1: y - r - padding,
@@ -1526,20 +1542,38 @@ const initChart = (options?: { preserveView?: boolean }) => {
     positions.forEach(p => {
       const nodeData = toExpand.find(n => n.id === p.id)!
       const r = nodeData.category === 'Activity' ? 25 : 17.5
-      const fontSize = nodeData.category === 'Activity' ? 12 : 10
-      const lineHeight = fontSize * 1.2
-      const labelW = 100
-      const labelMargin = 6
-      const padding = 25  // 增大 padding 确保标签不遮挡其他节点
-      localRects.push({
-        id: p.id,
-        rect: {
-          x1: Math.min(p.x - r, p.x - labelW / 2) - padding,
-          y1: p.y - r - padding,
-          x2: Math.max(p.x + r, p.x + labelW / 2) + padding,
-          y2: p.y + r + labelMargin + lineHeight + padding
-        }
-      })
+      const padding = 80
+      
+      // Resource/Personnel 标签在右侧，需要考虑标签向右延伸
+      if (nodeData.category === 'Resource' || nodeData.category === 'Personnel') {
+        const labelW = 80
+        const labelDistance = 10
+        const labelHeight = 12
+        localRects.push({
+          id: p.id,
+          rect: {
+            x1: p.x - r - padding,
+            y1: p.y - Math.max(r, labelHeight / 2) - padding,
+            x2: p.x + r + labelDistance + labelW + padding * 0.5,
+            y2: p.y + Math.max(r, labelHeight / 2) + padding
+          }
+        })
+      } else {
+        // Activity 节点标签在底部
+        const fontSize = 12
+        const lineHeight = fontSize * 1.2
+        const labelW = 100
+        const labelMargin = 6
+        localRects.push({
+          id: p.id,
+          rect: {
+            x1: Math.min(p.x - r, p.x - labelW / 2) - padding,
+            y1: p.y - r - padding,
+            x2: Math.max(p.x + r, p.x + labelW / 2) + padding,
+            y2: p.y + r + labelMargin + lineHeight + padding
+          }
+        })
+      }
     })
     let localOverlap = 0
     for (let i = 0; i < localRects.length; i++) {
@@ -1561,7 +1595,7 @@ const initChart = (options?: { preserveView?: boolean }) => {
       if (nodeData.category === 'Resource') {
         displayNodes.push({
           id: nodeData.id,
-          name: truncateText(nodeData.name),
+          name: truncateText(nodeData.name, 8),
           fullName: nodeData.name,
           category: 'Resource',
           symbolSize: 35,
@@ -1577,15 +1611,17 @@ const initChart = (options?: { preserveView?: boolean }) => {
           label: {
             show: true,
             fontSize: 10,
-            position: 'bottom',
-            width: 100,
-            overflow: 'truncate'
+            position: 'right',
+            distance: 10,
+            width: 80,
+            overflow: 'truncate',
+            lineHeight: 12
           }
         })
       } else if (nodeData.category === 'Personnel') {
         displayNodes.push({
           id: nodeData.id,
-          name: truncateText(nodeData.name),
+          name: truncateText(nodeData.name, 8),
           fullName: nodeData.name,
           category: 'Personnel',
           symbolSize: 35,
@@ -1601,9 +1637,11 @@ const initChart = (options?: { preserveView?: boolean }) => {
           label: {
             show: true,
             fontSize: 10,
-            position: 'bottom',
-            width: 100,
-            overflow: 'truncate'
+            position: 'right',
+            distance: 10,
+            width: 80,
+            overflow: 'truncate',
+            lineHeight: 12
           }
         })
       }
