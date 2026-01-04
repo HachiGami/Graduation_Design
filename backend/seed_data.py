@@ -76,15 +76,15 @@ async def create_and_link_personnel(db, neo4j_driver, personnel_list, activity_i
                     """
                     MATCH (a:Activity {id: $activity_id})
                     MATCH (p:Personnel {id: $personnel_id})
-                    MERGE (a)-[r:HAS_PERSONNEL]->(p)
-                    SET r.type = 'assigned', r.created_at = datetime()
+                    MERGE (a)-[r:ASSIGNS]->(p)
+                    SET r.role = 'operator', r.created_at = datetime()
                     """,
                     activity_id=activity_id,
                     personnel_id=personnel_ids[p_idx]
                 )
     
     relation_count = len(activity_ids) * min(2, len(personnel_ids)) if len(personnel_ids) >= 2 else len(activity_ids)
-    print(f"  - Created {len(personnel_list)} personnel, {relation_count} HAS_PERSONNEL relations")
+    print(f"  - Created {len(personnel_list)} personnel, {relation_count} ASSIGNS relations")
 
 
 async def create_and_link_resources(db, neo4j_driver, resource_list, activity_ids, process_id, domain):

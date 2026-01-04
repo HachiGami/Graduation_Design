@@ -29,6 +29,54 @@
         </el-descriptions>
       </div>
     </el-drawer>
+
+    <el-drawer
+      v-model="personnelDrawerVisible"
+      :title="selectedPersonnel?.name || '人员详情'"
+      size="50%"
+      direction="rtl"
+    >
+      <div v-if="selectedPersonnel" class="personnel-detail">
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="姓名">{{ selectedPersonnel.name }}</el-descriptions-item>
+          <el-descriptions-item label="角色">{{ selectedPersonnel.role || '未知' }}</el-descriptions-item>
+          <el-descriptions-item label="职责">{{ selectedPersonnel.responsibility || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="工作时间">{{ selectedPersonnel.work_hours || '未知' }}</el-descriptions-item>
+          <el-descriptions-item label="技能">
+            <el-tag v-for="skill in selectedPersonnel.skills" :key="skill" style="margin-right: 5px;">{{ skill }}</el-tag>
+            <span v-if="!selectedPersonnel.skills || selectedPersonnel.skills.length === 0">无</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="selectedPersonnel.status === 'available' ? 'success' : 'info'">
+              {{ selectedPersonnel.status === 'available' ? '可用' : selectedPersonnel.status }}
+            </el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+    </el-drawer>
+
+    <el-drawer
+      v-model="resourceDrawerVisible"
+      :title="selectedResource?.name || '资源详情'"
+      size="50%"
+      direction="rtl"
+    >
+      <div v-if="selectedResource" class="resource-detail">
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="资源名称">{{ selectedResource.name }}</el-descriptions-item>
+          <el-descriptions-item label="资源类型">{{ selectedResource.type || '未知' }}</el-descriptions-item>
+          <el-descriptions-item label="规格">{{ selectedResource.specification || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="供应商">{{ selectedResource.supplier || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="数量">{{ selectedResource.quantity }} {{ selectedResource.unit }}</el-descriptions-item>
+          <el-descriptions-item label="过期日期" v-if="selectedResource.expiry_date">{{ selectedResource.expiry_date }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="selectedResource.status === 'available' ? 'success' : 'warning'">
+              {{ selectedResource.status === 'available' ? '可用' : selectedResource.status }}
+            </el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -36,12 +84,10 @@
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import cytoscape from 'cytoscape'
 import fcose from 'cytoscape-fcose'
-import cxtmenu from 'cytoscape-cxtmenu'
 import { computeELKLayout } from '@/utils/elkLayout'
 import type { GraphData } from '@/types'
 
 cytoscape.use(fcose)
-cytoscape.use(cxtmenu)
 
 const props = defineProps<{
   data: GraphData
@@ -55,10 +101,13 @@ const emit = defineEmits<{
 
 const chartRef = ref<HTMLElement>()
 let cy: any = null
-let cxtMenu: any = null
 const expandedActivities = ref<Set<string>>(new Set())
 const detailDrawerVisible = ref(false)
 const selectedActivity = ref<any>(null)
+const selectedPersonnel = ref<any>(null)
+const selectedResource = ref<any>(null)
+const personnelDrawerVisible = ref(false)
+const resourceDrawerVisible = ref(false)
 
 const getStatusType = (status: string) => {
   const typeMap: Record<string, string> = {
@@ -197,11 +246,7 @@ const initCytoscape = async () => {
           'line-color': '#ccc',
           'target-arrow-color': '#ccc',
           'target-arrow-shape': 'triangle',
-          'curve-style': 'bezier',
-          'label': 'data(label)',
-          'font-size': '10px',
-          'text-rotation': 'autorotate',
-          'text-margin-y': -10
+          'curve-style': 'bezier'
         }
       },
       {
@@ -231,7 +276,7 @@ const initCytoscape = async () => {
     layout: { name: 'preset' },
     minZoom: 0.1,
     maxZoom: 3,
-    wheelSensitivity: 0.2
+    wheelSensitivity: 0.8
   })
 
   cy.fit(cy.elements(), 50)
@@ -244,14 +289,31 @@ const initCytoscape = async () => {
 
   cy.on('tap', 'node', (evt: any) => {
     const node = evt.target
-    if (node.data('nodeType') === 'activity') {
-      selectedActivity.value = node.data('rawData')
+    const nodeType = node.data('nodeType')
+    const rawData = node.data('rawData')
+    
+    if (nodeType === 'activity') {
+      selectedActivity.value = rawData
       detailDrawerVisible.value = true
       emit('nodeClick', node.data())
+    } else if (nodeType === 'personnel' && rawData) {
+      selectedPersonnel.value = rawData
+      personnelDrawerVisible.value = true
+    } else if (nodeType === 'resource' && rawData) {
+      selectedResource.value = rawData
+      resourceDrawerVisible.value = true
     }
   })
 
-  setupContextMenu()
+  cy.on('cxttap', 'node.activity-node', (evt: any) => {
+    const node = evt.target
+    const nodeId = node.id()
+    if (expandedActivities.value.has(nodeId)) {
+      collapseActivity(nodeId)
+    } else {
+      expandActivity(nodeId)
+    }
+  })
 
   cy.on('mouseover', 'node', (evt: any) => {
     const node = evt.target
@@ -264,51 +326,18 @@ const initCytoscape = async () => {
   })
 }
 
-const setupContextMenu = () => {
-  if (!cy) return
-
-  cxtMenu = cy.cxtmenu({
-    selector: 'node.activity-node',
-    commands: [
-      {
-        content: '<span style="color: #409EFF;">展开</span>',
-        select: function(ele: any) {
-          const nodeId = ele.id()
-          if (expandedActivities.value.has(nodeId)) {
-            collapseActivity(nodeId)
-          } else {
-            expandActivity(nodeId)
-          }
-        }
-      }
-    ],
-    fillColor: 'rgba(255, 255, 255, 0.95)',
-    activeFillColor: 'rgba(64, 158, 255, 0.2)',
-    activePadding: 8,
-    indicatorSize: 20,
-    separatorWidth: 3,
-    spotlightPadding: 4,
-    minSpotlightRadius: 28,
-    maxSpotlightRadius: 38,
-    openMenuEvents: 'cxttapstart taphold',
-    itemColor: '#333',
-    itemTextShadowColor: 'transparent',
-    zIndex: 9999,
-    atMouse: false
-  })
-}
 
 const expandActivity = (activityId: string) => {
   if (!cy) return
 
-  const toExpand: Array<{id: string, name: string, category: string}> = []
+  const toExpand: Array<{id: string, name: string, category: string, rawData?: any}> = []
 
   if (props.data.resource_nodes) {
     props.data.resource_nodes
       .filter((rn: any) => rn.parent_activity === activityId)
       .forEach((rn: any) => {
         if (!cy.$id(rn.id).length) {
-          toExpand.push({ id: rn.id, name: rn.name, category: 'resource' })
+          toExpand.push({ id: rn.id, name: rn.name, category: 'resource', rawData: rn })
         }
       })
   }
@@ -318,7 +347,7 @@ const expandActivity = (activityId: string) => {
       .filter((pn: any) => pn.parent_activity === activityId)
       .forEach((pn: any) => {
         if (!cy.$id(pn.id).length) {
-          toExpand.push({ id: pn.id, name: pn.name, category: 'personnel' })
+          toExpand.push({ id: pn.id, name: pn.name, category: 'personnel', rawData: pn })
         }
       })
   }
@@ -341,7 +370,8 @@ const expandActivity = (activityId: string) => {
         id: item.id,
         label: item.name,
         nodeType: item.category,
-        expandedFrom: activityId
+        expandedFrom: activityId,
+        rawData: item.rawData
       },
       position: { x, y },
       classes: `expanded-node ${item.category}-node`
@@ -517,9 +547,6 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  if (cxtMenu) {
-    cxtMenu.destroy()
-  }
   if (cy) {
     cy.destroy()
   }

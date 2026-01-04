@@ -23,8 +23,15 @@ class PersonnelUpdate(BaseModel):
     assigned_tasks: Optional[List[str]] = None
     status: Optional[str] = None
 
-class PersonnelResponse(PersonnelBase):
+class PersonnelResponse(BaseModel):
     id: str = Field(..., alias="_id")
+    name: str
+    role: str
+    responsibility: Optional[str] = Field(None, description="职责")
+    skills: Optional[List[str]] = Field(default=[], description="技能列表")
+    work_hours: Optional[str] = Field(None, description="工作时间")
+    assigned_tasks: Optional[List[str]] = Field(default=[], description="分配的任务")
+    status: str = Field(default="active", description="状态")
     created_at: datetime
     updated_at: datetime
 

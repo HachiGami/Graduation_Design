@@ -321,7 +321,12 @@ async def get_graph_data(
                         "category": "Resource",
                         "type": resource.get("type", "material"),
                         "status": resource.get("status", "available"),
-                        "parent_activity": activity_id
+                        "parent_activity": activity_id,
+                        "specification": resource.get("specification", ""),
+                        "supplier": resource.get("supplier", ""),
+                        "quantity": resource.get("quantity", 0),
+                        "unit": resource.get("unit", ""),
+                        "expiry_date": resource.get("expiry_date")
                     })
                 
                 resource_edges.append({
@@ -356,17 +361,24 @@ async def get_graph_data(
                 personnel_instance_id = f"{personnel_id}_inst_{activity_id}"
                 
                 # 获取人员详情
-                personnel = await db.personnel.find_one({"_id": ObjectId(personnel_id)})
-                if personnel:
-                    personnel_nodes.append({
-                        "id": personnel_instance_id,
-                        "original_id": personnel_id,
-                        "name": personnel.get("name", "未知人员"),
-                        "category": "Personnel",
-                        "role": rel.get("role", "操作员"),
-                        "status": personnel.get("status", "available"),
-                        "parent_activity": activity_id
-                    })
+                try:
+                    personnel = await db.personnel.find_one({"_id": ObjectId(personnel_id)})
+                    if personnel:
+                        personnel_nodes.append({
+                            "id": personnel_instance_id,
+                            "original_id": personnel_id,
+                            "name": personnel.get("name", "未知人员"),
+                            "category": "Personnel",
+                            "role": rel.get("role", "操作员"),
+                            "status": personnel.get("status", "available"),
+                            "parent_activity": activity_id,
+                            "responsibility": personnel.get("responsibility", ""),
+                            "skills": personnel.get("skills", []),
+                            "work_hours": personnel.get("work_hours", ""),
+                            "assigned_tasks": personnel.get("assigned_tasks", [])
+                        })
+                except Exception as e:
+                    pass
                 
                 personnel_edges.append({
                     "source": activity_id,

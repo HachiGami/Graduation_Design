@@ -41,9 +41,14 @@ async def create_personnel(personnel: PersonnelCreate):
 async def get_personnel():
     db = get_database()
     personnel_list = []
-    async for personnel in db.personnel.find():
-        personnel["_id"] = str(personnel["_id"])
-        personnel_list.append(personnel)
+    try:
+        cursor = db.personnel.find()
+        async for personnel in cursor:
+            personnel["_id"] = str(personnel["_id"])
+            personnel_list.append(personnel)
+    except Exception as e:
+        raise
+    
     return personnel_list
 
 @router.get("/{personnel_id}", response_model=PersonnelResponse)
