@@ -59,6 +59,11 @@ export interface GraphNode {
   name: string
   type: string
   status: string
+  domain?: string
+  process_id?: string
+  parent_activity?: string
+  estimated_duration?: number
+  description?: string
 }
 
 export interface GraphEdge {

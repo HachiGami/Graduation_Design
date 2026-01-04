@@ -13,9 +13,13 @@
     "ag-grid-community": "^31.0.3",
     "ag-grid-vue3": "^31.0.3",
     "axios": "^1.6.5",
+    "cytoscape": "^3.33.1",
+    "cytoscape-cxtmenu": "^3.5.0",
+    "cytoscape-fcose": "^2.2.0",
     "dagre": "^0.8.5",
     "echarts": "^6.0.0",
     "element-plus": "^2.5.3",
+    "elkjs": "^0.11.0",
     "vue": "^3.4.0",
     "vue-router": "^4.2.5"
   },
@@ -26,3 +30,4 @@
     "vue-tsc": "^1.8.27"
   }
 }
+

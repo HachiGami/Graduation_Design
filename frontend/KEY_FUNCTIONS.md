@@ -411,3 +411,4 @@ window.__debugBackboneLayout = true
 4. **性能**：`countOverlaps()` 是 O(n²)，生产环境可考虑只在最后验证一次
 5. **调试**：只在 `debugMode=true` 或 `overlapCountAfter > 0` 时输出日志
 
+

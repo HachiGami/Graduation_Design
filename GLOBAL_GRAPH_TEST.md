@@ -260,3 +260,4 @@ const highlightSet = ref<{nodeIds: Set<string>, edgeIds: Set<string>}>({
 4. **高亮是"灰化其他"而非"隐藏其他"**
 5. **所有节点和边必须包含 domain 和 process_id 属性**
 
+
