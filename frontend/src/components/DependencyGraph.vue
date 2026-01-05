@@ -18,11 +18,10 @@
       <div v-if="selectedActivity" class="activity-detail">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="活动名称">{{ selectedActivity.name }}</el-descriptions-item>
-          <el-descriptions-item label="流程域">{{ selectedActivity.domain || '未知' }}</el-descriptions-item>
-          <el-descriptions-item label="流程ID">{{ selectedActivity.process_id || '未知' }}</el-descriptions-item>
+          <el-descriptions-item label="所属流程">{{ getProcessName(selectedActivity.process_id) || '未知' }}</el-descriptions-item>
           <el-descriptions-item label="活动类型">{{ selectedActivity.type }}</el-descriptions-item>
           <el-descriptions-item label="状态">
-            <el-tag :type="getStatusType(selectedActivity.status)">{{ selectedActivity.status }}</el-tag>
+            <el-tag :type="getStatusType(selectedActivity.status)">{{ getStatusName(selectedActivity.status) }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="预计时长">{{ selectedActivity.estimated_duration }}分钟</el-descriptions-item>
           <el-descriptions-item label="描述">{{ selectedActivity.description || '无' }}</el-descriptions-item>
@@ -39,7 +38,7 @@
       <div v-if="selectedPersonnel" class="personnel-detail">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="姓名">{{ selectedPersonnel.name }}</el-descriptions-item>
-          <el-descriptions-item label="角色">{{ selectedPersonnel.role || '未知' }}</el-descriptions-item>
+          <el-descriptions-item label="角色">{{ getRoleName(selectedPersonnel.role) || '未知' }}</el-descriptions-item>
           <el-descriptions-item label="职责">{{ selectedPersonnel.responsibility || '无' }}</el-descriptions-item>
           <el-descriptions-item label="工作时间">{{ selectedPersonnel.work_hours || '未知' }}</el-descriptions-item>
           <el-descriptions-item label="技能">
@@ -47,8 +46,8 @@
             <span v-if="!selectedPersonnel.skills || selectedPersonnel.skills.length === 0">无</span>
           </el-descriptions-item>
           <el-descriptions-item label="状态">
-            <el-tag :type="selectedPersonnel.status === 'available' ? 'success' : 'info'">
-              {{ selectedPersonnel.status === 'available' ? '可用' : selectedPersonnel.status }}
+            <el-tag :type="getStatusType(selectedPersonnel.status)">
+              {{ getStatusName(selectedPersonnel.status) }}
             </el-tag>
           </el-descriptions-item>
         </el-descriptions>
@@ -64,14 +63,14 @@
       <div v-if="selectedResource" class="resource-detail">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="资源名称">{{ selectedResource.name }}</el-descriptions-item>
-          <el-descriptions-item label="资源类型">{{ selectedResource.type || '未知' }}</el-descriptions-item>
+          <el-descriptions-item label="资源类型">{{ getResourceTypeName(selectedResource.type) || '未知' }}</el-descriptions-item>
           <el-descriptions-item label="规格">{{ selectedResource.specification || '无' }}</el-descriptions-item>
           <el-descriptions-item label="供应商">{{ selectedResource.supplier || '无' }}</el-descriptions-item>
           <el-descriptions-item label="数量">{{ selectedResource.quantity }} {{ selectedResource.unit }}</el-descriptions-item>
           <el-descriptions-item label="过期日期" v-if="selectedResource.expiry_date">{{ selectedResource.expiry_date }}</el-descriptions-item>
           <el-descriptions-item label="状态">
-            <el-tag :type="selectedResource.status === 'available' ? 'success' : 'warning'">
-              {{ selectedResource.status === 'available' ? '可用' : selectedResource.status }}
+            <el-tag :type="getStatusType(selectedResource.status)">
+              {{ getStatusName(selectedResource.status) }}
             </el-tag>
           </el-descriptions-item>
         </el-descriptions>
@@ -115,9 +114,80 @@ const getStatusType = (status: string) => {
     'in_progress': 'warning',
     'completed': 'success',
     'paused': 'warning',
-    'cancelled': 'danger'
+    'cancelled': 'danger',
+    'available': 'success',
+    'in_use': 'warning',
+    'maintenance': 'danger'
   }
   return typeMap[status] || 'info'
+}
+
+const getDomainName = (domain: string) => {
+  const domainMap: Record<string, string> = {
+    'production': '生产',
+    'transport': '运输',
+    'sales': '销售',
+    'quality': '质检',
+    'warehouse': '仓储'
+  }
+  return domainMap[domain] || domain
+}
+
+const getProcessName = (processId: string) => {
+  const processMap: Record<string, string> = {
+    'P001': 'P001 - 主生产线',
+    'P002': 'P002 - 副生产线',
+    'T001': 'T001 - 冷链运输',
+    'T002': 'T002 - 常温运输',
+    'S001': 'S001 - 线上销售',
+    'S002': 'S002 - 线下销售',
+    'Q001': 'Q001 - 常规质检',
+    'Q002': 'Q002 - 专项质检',
+    'W001': 'W001 - 主仓库',
+    'W002': 'W002 - 分仓库'
+  }
+  return processMap[processId] || processId
+}
+
+const getStatusName = (status: string) => {
+  const statusMap: Record<string, string> = {
+    'pending': '待处理',
+    'in_progress': '进行中',
+    'completed': '已完成',
+    'paused': '已暂停',
+    'cancelled': '已取消',
+    'available': '可用',
+    'in_use': '使用中',
+    'maintenance': '维护中',
+    'active': '活跃',
+    'inactive': '非活跃'
+  }
+  return statusMap[status] || status
+}
+
+const getRoleName = (role: string) => {
+  const roleMap: Record<string, string> = {
+    'operator': '操作员',
+    'supervisor': '主管',
+    'manager': '经理',
+    'technician': '技术员',
+    'quality_inspector': '质检员',
+    'driver': '司机',
+    'warehouse_keeper': '仓管员',
+    'sales_representative': '销售代表'
+  }
+  return roleMap[role] || role
+}
+
+const getResourceTypeName = (type: string) => {
+  const typeMap: Record<string, string> = {
+    'material': '材料',
+    'equipment': '设备',
+    'tool': '工具',
+    'vehicle': '车辆',
+    'consumable': '耗材'
+  }
+  return typeMap[type] || type
 }
 
 const initCytoscape = async () => {
@@ -276,7 +346,7 @@ const initCytoscape = async () => {
     layout: { name: 'preset' },
     minZoom: 0.1,
     maxZoom: 3,
-    wheelSensitivity: 0.8
+    wheelSensitivity: 2
   })
 
   cy.fit(cy.elements(), 50)
@@ -504,10 +574,11 @@ const fitToView = () => {
   }
 }
 
-watch(() => props.highlightActive, (active) => {
+watch([() => props.highlightActive, () => props.highlightSet], ([active]) => {
   if (!cy) return
 
   if (active && props.highlightSet) {
+    cy.elements().removeClass('highlighted')
     cy.elements().addClass('dimmed')
     
     props.highlightSet.nodeIds.forEach(nodeId => {

@@ -413,9 +413,9 @@ const applyProcessHighlight = () => {
     }
   })
   
-  graphData.value.edges?.forEach((edge: any, index: number) => {
+  graphData.value.edges?.forEach((edge: any) => {
     if (edge.domain === currentDomain.value && edge.process_id === currentProcessId.value) {
-      edgeIds.add(`${edge.source}-${edge.target}-${index}`)
+      edgeIds.add(`${edge.source}-${edge.target}`)
     }
   })
   
