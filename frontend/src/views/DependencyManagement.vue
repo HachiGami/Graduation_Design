@@ -19,7 +19,15 @@
         :domain="currentDomain"
         :process-id="currentProcessId"
         @change="handleProcessChange"
-        @clear="clearHighlight"
+        @clear="clearFlowHighlight"
+      />
+      
+      <!-- 仪表盘 -->
+      <DashboardPanel
+        :graph-data="graphData"
+        :current-process-id="currentProcessId"
+        @highlight-request="handleDashboardHighlight"
+        @process-select="handleProcessSelect"
       />
       
       <DependencyGraph 
@@ -303,6 +311,7 @@ import { getPersonnel, getPersonnelById, createPersonnel, updatePersonnel, delet
 import type { Dependency, GraphData, Activity, Resource, Personnel } from '@/types'
 import DependencyGraph from '@/components/DependencyGraph.vue'
 import ProcessSelector from '@/components/ProcessSelector.vue'
+import DashboardPanel from '@/components/DashboardPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -351,12 +360,32 @@ const resources = ref<Resource[]>([])
 const personnel = ref<Personnel[]>([])
 const graphData = ref<GraphData>({ nodes: [], edges: [] })
 
-// 高亮状态
+// 高亮状态：FlowHighlightSet（流程选择器）和 DashboardHighlightSet（仪表盘）
+const flowHighlightSet = ref<{nodeIds: Set<string>, edgeIds: Set<string>}>({
+  nodeIds: new Set(),
+  edgeIds: new Set()
+})
+
+const dashboardHighlightSet = ref<{nodeIds: Set<string>, edgeIds: Set<string>}>({
+  nodeIds: new Set(),
+  edgeIds: new Set()
+})
+
+// 最终高亮集合（并集）
 const highlightActive = ref(false)
 const highlightSet = ref<{nodeIds: Set<string>, edgeIds: Set<string>}>({
   nodeIds: new Set(),
   edgeIds: new Set()
 })
+
+// 计算并集并更新最终高亮集合
+const updateHighlightUnion = () => {
+  const nodeIds = new Set([...flowHighlightSet.value.nodeIds, ...dashboardHighlightSet.value.nodeIds])
+  const edgeIds = new Set([...flowHighlightSet.value.edgeIds, ...dashboardHighlightSet.value.edgeIds])
+  
+  highlightSet.value = { nodeIds, edgeIds }
+  highlightActive.value = nodeIds.size > 0 || edgeIds.size > 0
+}
 
 const loadActivities = async () => {
   try {
@@ -424,20 +453,53 @@ const applyProcessHighlight = () => {
     return
   }
   
-  highlightSet.value = { nodeIds, edgeIds }
-  highlightActive.value = true
+  flowHighlightSet.value = { nodeIds, edgeIds }
+  updateHighlightUnion()
   
   ElMessage.success(`已定位到 ${currentDomain.value}/${currentProcessId.value}（${nodeIds.size}个节点）`)
 }
 
-// 清除高亮
-const clearHighlight = () => {
+// 清除流程高亮
+const clearFlowHighlight = () => {
   currentDomain.value = ''
   currentProcessId.value = ''
-  highlightActive.value = false
-  highlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+  flowHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+  updateHighlightUnion()
   updateUrl()
   ElMessage.success('已恢复全局视图')
+}
+
+// 清除仪表盘高亮
+const clearDashboardHighlight = () => {
+  dashboardHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+  updateHighlightUnion()
+}
+
+// 全清空
+const clearAllHighlights = () => {
+  flowHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+  dashboardHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+  updateHighlightUnion()
+}
+
+// 处理仪表盘高亮请求
+const handleDashboardHighlight = (payload: { nodeIds: string[], edgeIds: string[] }) => {
+  dashboardHighlightSet.value = {
+    nodeIds: new Set(payload.nodeIds),
+    edgeIds: new Set(payload.edgeIds)
+  }
+  updateHighlightUnion()
+}
+
+// 处理流程选择请求（来自仪表盘全局排行点击）
+const handleProcessSelect = (payload: { processId: string }) => {
+  const node = graphData.value.nodes?.find((n: any) => n.process_id === payload.processId)
+  if (node) {
+    currentDomain.value = node.domain || ''
+    currentProcessId.value = payload.processId
+    updateUrl()
+    applyProcessHighlight()
+  }
 }
 
 // 刷新图数据
