@@ -418,9 +418,22 @@ const highlightSet = ref<{nodeIds: Set<string>, edgeIds: Set<string>}>({
 })
 
 // 计算并集并更新最终高亮集合
+// 策略：仪表盘高亮优先，如果仪表盘有高亮则覆盖流程高亮
 const updateHighlightUnion = () => {
-  const nodeIds = new Set([...flowHighlightSet.value.nodeIds, ...dashboardHighlightSet.value.nodeIds])
-  const edgeIds = new Set([...flowHighlightSet.value.edgeIds, ...dashboardHighlightSet.value.edgeIds])
+  const hasDashboardHighlight = dashboardHighlightSet.value.nodeIds.size > 0 || dashboardHighlightSet.value.edgeIds.size > 0
+  
+  let nodeIds: Set<string>
+  let edgeIds: Set<string>
+  
+  if (hasDashboardHighlight) {
+    // 仪表盘有高亮时，完全使用仪表盘的高亮（覆盖流程高亮）
+    nodeIds = new Set(dashboardHighlightSet.value.nodeIds)
+    edgeIds = new Set(dashboardHighlightSet.value.edgeIds)
+  } else {
+    // 仪表盘无高亮时，使用流程高亮
+    nodeIds = new Set(flowHighlightSet.value.nodeIds)
+    edgeIds = new Set(flowHighlightSet.value.edgeIds)
+  }
   
   highlightSet.value = { nodeIds, edgeIds }
   highlightActive.value = nodeIds.size > 0 || edgeIds.size > 0

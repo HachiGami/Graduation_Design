@@ -429,6 +429,47 @@ watch(() => props.graphData, () => {
   performAnalysis()
 }, { deep: true })
 
+watch(activeTab, (newTab, oldTab) => {
+  if (currentScope.value !== 'process' || !props.currentProcessId) return
+  
+  if (newTab === 'cpm') {
+    // 进入关键路径Tab，只高亮关键路径
+    const criticalNodeIds = cpmResult.value?.criticalPath || []
+    if (criticalNodeIds.length === 0) return
+    
+    // 提取关键路径的边
+    const criticalNodeSet = new Set(criticalNodeIds)
+    const criticalEdgeIds: string[] = []
+    props.graphData.edges.forEach(e => {
+      if (criticalNodeSet.has(e.source) && criticalNodeSet.has(e.target)) {
+        criticalEdgeIds.push(`${e.source}-${e.target}`)
+      }
+    })
+    
+    emit('highlightRequest', { nodeIds: criticalNodeIds, edgeIds: criticalEdgeIds })
+  } else if (oldTab === 'cpm') {
+    // 离开关键路径Tab，恢复全流程高亮
+    const processNodeIds: string[] = []
+    const processEdgeIds: string[] = []
+    
+    props.graphData.nodes.forEach(n => {
+      if ((n.type === 'activity' || n.category === 'Activity') && n.process_id === props.currentProcessId) {
+        processNodeIds.push(n.id)
+      }
+    })
+    
+    props.graphData.edges.forEach(e => {
+      const source = props.graphData.nodes.find(n => n.id === e.source)
+      const target = props.graphData.nodes.find(n => n.id === e.target)
+      if (source?.process_id === props.currentProcessId && target?.process_id === props.currentProcessId) {
+        processEdgeIds.push(`${e.source}-${e.target}`)
+      }
+    })
+    
+    emit('highlightRequest', { nodeIds: processNodeIds, edgeIds: processEdgeIds })
+  }
+})
+
 function handleScopeChange() {
   performAnalysis()
 }
