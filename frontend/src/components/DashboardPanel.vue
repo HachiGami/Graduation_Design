@@ -11,6 +11,9 @@
       <el-text v-if="dataLevel !== 'level2'" type="warning" size="small" style="margin-left: 10px;">
         {{ dataLevelHint }}
       </el-text>
+      <el-button size="small" @click="handleClearHighlight" style="margin-left: auto;">
+        清空仪表盘高亮
+      </el-button>
     </div>
 
     <div class="kpi-cards">
@@ -151,6 +154,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import type { GraphData } from '@/types'
 import { analyzeGraph, type AnalysisScope, type HealthIssue, type ProcessMetrics } from '@/utils/graphAnalyzer'
 import { calculateCPM, type CPMActivity } from '@/utils/cpmCalculator'
@@ -165,6 +169,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   highlightRequest: [{ nodeIds: string[], edgeIds: string[] }]
   processSelect: [{ processId: string }]
+  clearHighlight: []
 }>()
 
 const currentScope = ref<'global' | 'process'>('global')
@@ -235,7 +240,7 @@ const healthRanking = computed(() => {
 const durationRanking = computed(() => {
   return processSummary.value.map((p: ProcessMetrics) => {
     const scope: AnalysisScope = { type: 'process', processId: p.processId }
-    const activities = props.graphData.nodes.filter(n => n.type === 'activity' && n.process_id === p.processId)
+    const activities = props.graphData.nodes.filter(n => isActivityNode(n) && n.process_id === p.processId)
     const deps = props.graphData.edges.filter(e => {
       const source = props.graphData.nodes.find(n => n.id === e.source)
       const target = props.graphData.nodes.find(n => n.id === e.target)
@@ -307,6 +312,8 @@ const resourceRisks = computed(() => {
 
 const dynamicRiskEvents = computed(() => dynamicRisksData.value.slice(0, 5))
 
+const isActivityNode = (n: any) => n?.type === 'activity' || n?.category === 'Activity'
+
 watch(() => props.currentProcessId, (newId) => {
   if (newId) {
     currentScope.value = 'process'
@@ -332,8 +339,8 @@ function performAnalysis() {
   analysisResult.value = analyzeGraph(props.graphData, scope)
   
   const activities = scope.type === 'process'
-    ? props.graphData.nodes.filter(n => n.type === 'activity' && n.process_id === scope.processId)
-    : props.graphData.nodes.filter(n => n.type === 'activity')
+    ? props.graphData.nodes.filter(n => isActivityNode(n) && n.process_id === scope.processId)
+    : props.graphData.nodes.filter(isActivityNode)
   
   const dependencies = scope.type === 'process'
     ? props.graphData.edges.filter(e => {
@@ -359,7 +366,7 @@ async function loadDynamicRisks() {
 
 function handleKpiClick(type: string) {
   if (type === 'activities') {
-    const activityIds = props.graphData.nodes.filter(n => n.type === 'activity').map(n => n.id)
+    const activityIds = props.graphData.nodes.filter(isActivityNode).map(n => n.id)
     emit('highlightRequest', { nodeIds: activityIds, edgeIds: [] })
   } else if (type === 'dependencies') {
     const edgeIds = props.graphData.edges.map(e => `${e.source}-${e.target}`)
@@ -406,15 +413,40 @@ function handleBottleneckClick(activity: CPMActivity) {
 }
 
 function handleResourceRiskClick(item: any) {
-  emit('highlightRequest', { nodeIds: item.relatedActivityIds, edgeIds: [] })
+  // 验证activityIds是否存在于图中
+  const validNodeIds = (item.relatedActivityIds || []).filter((id: string) => 
+    props.graphData.nodes.some(n => n.id === id)
+  )
+  
+  if (validNodeIds.length === 0) {
+    ElMessage.warning('该风险条目无关联活动或活动不在当前视图中')
+    return
+  }
+  
+  emit('highlightRequest', { nodeIds: validNodeIds, edgeIds: [] })
 }
 
 function handleDynamicRiskClick(event: DynamicRiskEvent) {
-  emit('highlightRequest', { nodeIds: event.activityIds, edgeIds: [] })
+  // 验证activityIds是否存在于图中
+  const validNodeIds = (event.activityIds || []).filter((id: string) => 
+    props.graphData.nodes.some(n => n.id === id)
+  )
+  
+  if (validNodeIds.length === 0) {
+    ElMessage.warning('该风险条目无关联活动或活动不在当前视图中')
+    return
+  }
+  
+  emit('highlightRequest', { nodeIds: validNodeIds, edgeIds: [] })
 }
 
 function handleProcessRankingClick(row: any) {
   emit('processSelect', { processId: row.processId })
+}
+
+function handleClearHighlight() {
+  emit('clearHighlight')
+  ElMessage.success('已清空仪表盘高亮')
 }
 
 function getProcessName(processId: string): string {

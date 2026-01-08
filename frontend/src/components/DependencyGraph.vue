@@ -577,7 +577,10 @@ const fitToView = () => {
 watch([() => props.highlightActive, () => props.highlightSet], ([active]) => {
   if (!cy) return
 
-  if (active && props.highlightSet) {
+  // 如果highlightActive为false，或者highlightSet为空，则恢复全亮状态
+  const hasHighlight = active && props.highlightSet && (props.highlightSet.nodeIds.size > 0 || props.highlightSet.edgeIds.size > 0)
+  
+  if (hasHighlight) {
     cy.elements().removeClass('highlighted')
     cy.elements().addClass('dimmed')
     

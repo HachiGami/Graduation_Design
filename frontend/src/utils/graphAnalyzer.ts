@@ -46,11 +46,13 @@ export interface AnalysisResult {
 /**
  * 分析图数据：规模统计、健康度校验、按流程聚合
  */
+const isActivityNode = (n: any) => n?.type === 'activity' || n?.category === 'Activity'
+
 export function analyzeGraph(
   graphData: GraphData,
   scope: AnalysisScope = { type: 'global' }
 ): AnalysisResult {
-  const activities = graphData.nodes.filter(n => n.type === 'activity')
+  const activities = graphData.nodes.filter(isActivityNode)
   const dependencies = graphData.edges
   
   if (scope.type === 'process' && scope.processId) {
@@ -64,7 +66,7 @@ export function analyzeGraph(
  * 全局口径分析
  */
 function analyzeGlobalScope(graphData: GraphData): AnalysisResult {
-  const activities = graphData.nodes.filter(n => n.type === 'activity')
+  const activities = graphData.nodes.filter(isActivityNode)
   const dependencies = graphData.edges
   
   const scale: ScaleMetrics = {
@@ -88,7 +90,7 @@ function analyzeGlobalScope(graphData: GraphData): AnalysisResult {
  */
 function analyzeProcessScope(graphData: GraphData, processId: string): AnalysisResult {
   const activities = graphData.nodes.filter(
-    n => n.type === 'activity' && n.process_id === processId
+    n => isActivityNode(n) && n.process_id === processId
   )
   const activityIds = new Set(activities.map(a => a.id))
   
@@ -298,7 +300,7 @@ function generateProcessSummary(graphData: GraphData): ProcessMetrics[] {
   }>()
   
   graphData.nodes
-    .filter(n => n.type === 'activity')
+    .filter(isActivityNode)
     .forEach(activity => {
       const pid = activity.process_id || 'unknown'
       if (!processMap.has(pid)) {

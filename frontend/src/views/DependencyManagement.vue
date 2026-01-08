@@ -28,6 +28,7 @@
         :current-process-id="currentProcessId"
         @highlight-request="handleDashboardHighlight"
         @process-select="handleProcessSelect"
+        @clear-highlight="clearDashboardHighlight"
       />
       
       <DependencyGraph 
