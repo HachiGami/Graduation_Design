@@ -1,10 +1,10 @@
 <template>
   <div class="dependency-management">
-    <el-card>
+    <el-card class="fullscreen-container">
       <template #header>
         <div class="card-header">
           <span>生产流程依赖与资源关联视图</span>
-          <div>
+          <div class="header-actions">
             <el-button @click="loadGraphData" :icon="'Refresh'">刷新</el-button>
             <el-button type="primary" @click="handleAddDependency" :icon="'Plus'">添加依赖</el-button>
             <el-button type="success" @click="handleAddActivity" :icon="'Plus'">添加活动</el-button>
@@ -14,29 +14,63 @@
         </div>
       </template>
       
-      <!-- 流程选择器 -->
-      <ProcessSelector
-        :domain="currentDomain"
-        :process-id="currentProcessId"
-        @change="handleProcessChange"
-        @clear="clearFlowHighlight"
-      />
+      <div class="toolbar">
+        <ProcessSelector
+          :domain="currentDomain"
+          :process-id="currentProcessId"
+          @change="handleProcessChange"
+          @clear="clearFlowHighlight"
+        />
+        
+        <div class="mini-kpi-hud">
+          <div class="mini-kpi-item" @click="handleKpiClick('activities')">
+            <div class="mini-value">{{ metrics.activityCount }}</div>
+            <div class="mini-label">活动数</div>
+          </div>
+          <div class="mini-kpi-item" @click="handleKpiClick('dependencies')">
+            <div class="mini-value">{{ metrics.internalDependencyCount }}</div>
+            <div class="mini-label">内部依赖</div>
+          </div>
+          <div class="mini-kpi-item" @click="handleKpiClick('health')">
+            <div class="mini-value">{{ metrics.healthScore }}</div>
+            <div class="mini-label">健康评分</div>
+          </div>
+          <div class="mini-kpi-item" @click="handleKpiClick('cpm')">
+            <div class="mini-value">{{ metrics.totalDuration }}</div>
+            <div class="mini-label">总工期</div>
+          </div>
+          <div class="mini-kpi-item" @click="handleKpiClick('resource')">
+            <div class="mini-value">{{ metrics.resourceShortageCount }}</div>
+            <div class="mini-label">原料</div>
+          </div>
+          <div class="mini-kpi-item" @click="handleKpiClick('dynamic')">
+            <div class="mini-value">{{ metrics.dynamicRiskCount }}</div>
+            <div class="mini-label">动态风险</div>
+          </div>
+        </div>
+      </div>
       
-      <!-- 仪表盘 -->
-      <DashboardPanel
-        :graph-data="graphData"
-        :current-process-id="currentProcessId"
-        @highlight-request="handleDashboardHighlight"
-        @process-select="handleProcessSelect"
-        @clear-highlight="clearDashboardHighlight"
-      />
-      
-      <DependencyGraph 
-        :data="graphData" 
-        :highlight-active="highlightActive"
-        :highlight-set="highlightSet"
-        @node-click="handleNodeClick" 
-      />
+      <div class="main-layout">
+        <div class="graph-panel">
+          <DependencyGraph 
+            :data="graphData" 
+            :highlight-active="highlightActive"
+            :highlight-set="highlightSet"
+            @node-click="handleNodeClick" 
+          />
+        </div>
+        
+        <aside class="sidebar">
+          <DashboardPanel
+            mode="sidebar"
+            :graph-data="graphData"
+            :current-process-id="currentProcessId"
+            @highlight-request="handleDashboardHighlight"
+            @process-select="handleProcessSelect"
+            @clear-highlight="clearDashboardHighlight"
+          />
+        </aside>
+      </div>
     </el-card>
 
     <!-- 依赖关系对话框 -->
@@ -302,7 +336,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { createDependency, updateDependency, getGraphData } from '@/api/dependency'
@@ -313,6 +347,10 @@ import type { Dependency, GraphData, Activity, Resource, Personnel } from '@/typ
 import DependencyGraph from '@/components/DependencyGraph.vue'
 import ProcessSelector from '@/components/ProcessSelector.vue'
 import DashboardPanel from '@/components/DashboardPanel.vue'
+import { analyzeGraph, type AnalysisScope } from '@/utils/graphAnalyzer'
+import { calculateCPM } from '@/utils/cpmCalculator'
+import { checkResources } from '@/utils/resourceChecker'
+import { getDynamicRisks } from '@/api/analytics'
 
 const route = useRoute()
 const router = useRouter()
@@ -474,6 +512,52 @@ const clearFlowHighlight = () => {
 const clearDashboardHighlight = () => {
   dashboardHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
   updateHighlightUnion()
+}
+
+// 计算 KPI 指标
+const metrics = computed(() => {
+  const scope: AnalysisScope = currentProcessId.value 
+    ? { type: 'process', processId: currentProcessId.value }
+    : { type: 'global' }
+  
+  const analysis = analyzeGraph(graphData.value, scope)
+  
+  const activities = currentProcessId.value
+    ? graphData.value.nodes.filter((n: any) => (n.type === 'activity' || n.category === 'Activity') && n.process_id === currentProcessId.value)
+    : graphData.value.nodes.filter((n: any) => n.type === 'activity' || n.category === 'Activity')
+  
+  const dependencies = currentProcessId.value
+    ? graphData.value.edges.filter((e: any) => {
+        const source = graphData.value.nodes.find((n: any) => n.id === e.source)
+        const target = graphData.value.nodes.find((n: any) => n.id === e.target)
+        return source?.process_id === currentProcessId.value && target?.process_id === currentProcessId.value
+      })
+    : graphData.value.edges
+  
+  const cpm = calculateCPM(activities, dependencies)
+  const resourceCheck = checkResources(graphData.value, currentProcessId.value)
+  
+  return {
+    activityCount: analysis.scale.activityCount,
+    internalDependencyCount: analysis.scale.internalDependencyCount,
+    healthScore: analysis.health.score,
+    issueCount: analysis.health.issueCount,
+    totalDuration: cpm.totalDuration || 0,
+    criticalPathLength: cpm.criticalPath?.length || 0,
+    resourceShortageCount: resourceCheck.dataLevel === 'level1' ? resourceCheck.shortageCount : resourceCheck.riskList?.length || 0,
+    dynamicRiskCount: 0
+  }
+})
+
+// KPI 点击处理
+const handleKpiClick = (type: string) => {
+  if (type === 'activities') {
+    const activityIds = graphData.value.nodes.filter((n: any) => n.type === 'activity' || n.category === 'Activity').map((n: any) => n.id)
+    handleDashboardHighlight({ nodeIds: activityIds, edgeIds: [] })
+  } else if (type === 'dependencies') {
+    const edgeIds = graphData.value.edges.map((e: any) => `${e.source}-${e.target}`)
+    handleDashboardHighlight({ nodeIds: [], edgeIds })
+  }
 }
 
 // 全清空
@@ -851,9 +935,102 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.dependency-management {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.fullscreen-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fullscreen-container :deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #f5f7fa;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.mini-kpi-hud {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+  background: #fff;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid #dcdfe6;
+}
+
+.mini-kpi-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  border-radius: 4px;
+  min-width: 60px;
+}
+
+.mini-kpi-item:hover {
+  background: #f0f9ff;
+}
+
+.mini-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #409eff;
+  line-height: 1.2;
+}
+
+.mini-label {
+  font-size: 11px;
+  color: #606266;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.main-layout {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.graph-panel {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.sidebar {
+  width: 350px;
+  background: #fff;
+  border-left: 1px solid #e4e7ed;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 </style>

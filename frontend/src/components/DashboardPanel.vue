@@ -1,6 +1,6 @@
 <template>
-  <div class="dashboard-panel">
-    <div class="scope-switcher">
+  <div class="dashboard-panel" :class="{ 'sidebar-mode': props.mode === 'sidebar' }">
+    <div v-if="props.mode === 'full'" class="scope-switcher">
       <el-radio-group v-model="currentScope" size="small" @change="handleScopeChange">
         <el-radio-button label="global">全局</el-radio-button>
         <el-radio-button label="process" :disabled="!hasSelectedProcess">当前流程</el-radio-button>
@@ -16,7 +16,7 @@
       </el-button>
     </div>
 
-    <div class="kpi-cards">
+    <div v-if="props.mode === 'full'" class="kpi-cards">
       <el-card class="kpi-card" shadow="hover" @click="handleKpiClick('activities')">
         <div class="kpi-value">{{ metrics.activityCount }}</div>
         <div class="kpi-label">活动数</div>
@@ -51,13 +51,111 @@
       </el-card>
     </div>
 
-    <div v-if="currentScope === 'process' && metrics.externalDependencyCount > 0" class="external-deps">
+    <div v-if="props.mode === 'full' && currentScope === 'process' && metrics.externalDependencyCount > 0" class="external-deps">
       <el-tag type="info" @click="handleExternalDepsClick">
         外部依赖：入{{ metrics.externalDependencyInCount }} / 出{{ metrics.externalDependencyOutCount }}
       </el-tag>
     </div>
 
-    <el-collapse v-model="activePanels" class="panels">
+    <div v-if="props.mode === 'sidebar'" class="sidebar-header">
+      <el-radio-group v-model="currentScope" size="small" @change="handleScopeChange">
+        <el-radio-button label="global">全局</el-radio-button>
+        <el-radio-button label="process" :disabled="!hasSelectedProcess">流程</el-radio-button>
+      </el-radio-group>
+      <el-button size="small" @click="handleClearHighlight" text>
+        清空
+      </el-button>
+    </div>
+
+    <el-tabs v-if="props.mode === 'sidebar'" v-model="activeTab" class="sidebar-tabs">
+      <el-tab-pane label="健康度" name="health">
+        <div v-if="currentScope === 'global' && processSummary.length > 0" class="process-ranking">
+          <el-table :data="healthRanking" size="small" @row-click="handleProcessRankingClick" height="calc(100vh - 200px)">
+            <el-table-column prop="processName" label="流程" width="130" show-overflow-tooltip />
+            <el-table-column prop="healthScore" label="评分" width="70" />
+            <el-table-column prop="issueCount" label="问题" width="70" />
+            <el-table-column prop="activityCount" label="活动" width="70" />
+          </el-table>
+        </div>
+        <div v-else class="issue-list">
+          <el-empty v-if="healthIssues.length === 0" description="无健康问题" :image-size="60" />
+          <div v-else>
+            <div v-for="issue in healthIssues" :key="issue.description" class="issue-item" @click="handleIssueClick(issue)">
+              <el-tag :type="issue.severity === 'error' ? 'danger' : 'warning'" size="small">{{ getIssueTypeName(issue.type) }}</el-tag>
+              <span class="issue-text">{{ issue.description }}</span>
+            </div>
+          </div>
+        </div>
+      </el-tab-pane>
+
+      <el-tab-pane label="关键路径" name="cpm">
+        <div v-if="currentScope === 'global' && processSummary.length > 0" class="process-ranking">
+          <el-table :data="durationRanking" size="small" @row-click="handleProcessRankingClick" height="calc(100vh - 200px)">
+            <el-table-column prop="processName" label="流程" width="130" show-overflow-tooltip />
+            <el-table-column prop="totalDuration" label="工期" width="90" />
+            <el-table-column prop="criticalPathLength" label="路径长" width="80" />
+          </el-table>
+        </div>
+        <div v-else>
+          <div v-if="cpmError" class="error-hint">
+            <el-alert type="warning" :title="cpmError" :closable="false" />
+          </div>
+          <div v-else>
+            <div class="critical-path">
+              <h4>关键路径</h4>
+              <div class="path-sequence">
+                <el-tag v-for="(actId, idx) in criticalPath" :key="actId" type="danger" size="small" @click="handleCriticalPathClick(actId)">
+                  {{ getActivityName(actId) }}
+                </el-tag>
+                <el-empty v-if="criticalPath.length === 0" description="无关键路径" :image-size="60" />
+              </div>
+            </div>
+            <div class="bottlenecks">
+              <h4>瓶颈活动</h4>
+              <div v-for="activity in topBottlenecks" :key="activity.id" class="bottleneck-item" @click="handleBottleneckClick(activity)">
+                <span class="bottleneck-name">{{ activity.name }}</span>
+                <el-tag size="small">{{ activity.duration }}分</el-tag>
+              </div>
+              <el-empty v-if="topBottlenecks.length === 0" description="无瓶颈活动" :image-size="60" />
+            </div>
+          </div>
+        </div>
+      </el-tab-pane>
+
+      <el-tab-pane label="风险" name="risk">
+        <div v-if="currentScope === 'global' && processSummary.length > 0" class="process-ranking">
+          <el-table :data="riskRanking" size="small" @row-click="handleProcessRankingClick" height="calc(100vh - 200px)">
+            <el-table-column prop="processName" label="流程" width="130" show-overflow-tooltip />
+            <el-table-column prop="shortageCount" label="原料" width="70" />
+            <el-table-column prop="dynamicRiskCount" label="动态" width="70" />
+          </el-table>
+        </div>
+        <div v-else>
+          <div class="resource-risks">
+            <h4>{{ dataLevel === 'level1' ? '原料短缺' : '原料关联风险' }}</h4>
+            <div v-for="item in resourceRisks" :key="item.resourceId" class="risk-item" @click="handleResourceRiskClick(item)">
+              <span class="risk-name">{{ item.resourceName }}</span>
+              <el-tag size="small" :type="dataLevel === 'level1' && item.shortage > 0 ? 'danger' : 'info'">
+                {{ dataLevel === 'level1' ? `缺口${item.shortage}` : `关联${item.referenceCount}次` }}
+              </el-tag>
+            </div>
+            <el-empty v-if="resourceRisks.length === 0" description="无原料风险" :image-size="60" />
+          </div>
+          <div class="dynamic-risks">
+            <h4>动态风险</h4>
+            <div v-for="event in dynamicRiskEvents" :key="event.description" class="risk-item" @click="handleDynamicRiskClick(event)">
+              <el-tag size="small" :type="event.type === 'equipment_shortage' ? 'warning' : 'danger'">
+                {{ event.type === 'equipment_shortage' ? '设备' : '人力' }}
+              </el-tag>
+              <span class="risk-text">{{ event.description }}</span>
+            </div>
+            <el-empty v-if="dynamicRiskEvents.length === 0" description="无动态风险" :image-size="60" />
+          </div>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
+
+    <el-collapse v-if="props.mode === 'full'" v-model="activePanels" class="panels">
       <el-collapse-item title="模型健康度" name="health">
         <div v-if="currentScope === 'global' && processSummary.length > 0" class="process-ranking">
           <h4>按流程健康度排行</h4>
@@ -161,10 +259,13 @@ import { calculateCPM, type CPMActivity } from '@/utils/cpmCalculator'
 import { checkResources, summarizeResourceRisksByProcess, type ResourceShortage, type ResourceRisk } from '@/utils/resourceChecker'
 import { getDynamicRisks, summarizeDynamicRisksByProcess, type DynamicRiskEvent } from '@/api/analytics'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   graphData: GraphData
   currentProcessId?: string
-}>()
+  mode?: 'full' | 'sidebar'
+}>(), {
+  mode: 'full'
+})
 
 const emit = defineEmits<{
   highlightRequest: [{ nodeIds: string[], edgeIds: string[] }]
@@ -174,6 +275,7 @@ const emit = defineEmits<{
 
 const currentScope = ref<'global' | 'process'>('global')
 const activePanels = ref(['health', 'cpm', 'risk'])
+const activeTab = ref('health')
 const dataLevel = ref<'level0' | 'level1' | 'level2'>('level0')
 
 const analysisResult = ref<any>(null)
@@ -490,6 +592,47 @@ onMounted(() => {
   background: #f5f7fa;
 }
 
+.dashboard-panel.sidebar-mode {
+  padding: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border-bottom: 1px solid #e4e7ed;
+  background: #f5f7fa;
+}
+
+.sidebar-tabs {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-tabs :deep(.el-tabs__header) {
+  margin: 0;
+  padding: 0 12px;
+  background: #fff;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.sidebar-tabs :deep(.el-tabs__content) {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.sidebar-tabs :deep(.el-tab-pane) {
+  height: 100%;
+}
+
 .scope-switcher {
   margin-bottom: 20px;
   display: flex;
@@ -574,8 +717,16 @@ onMounted(() => {
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   transition: background 0.3s;
+}
+
+.issue-text, .risk-text, .bottleneck-name, .risk-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
 }
 
 .issue-item:hover, .bottleneck-item:hover, .risk-item:hover {
@@ -585,8 +736,20 @@ onMounted(() => {
 .path-sequence {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   margin-top: 10px;
+}
+
+.sidebar-mode .path-sequence {
+  gap: 4px;
+}
+
+.sidebar-mode .path-sequence .el-tag {
+  font-size: 11px;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .path-sequence .el-tag {
