@@ -19,13 +19,22 @@
         <el-descriptions :column="1" border>
           <el-descriptions-item label="活动名称">{{ selectedActivity.name }}</el-descriptions-item>
           <el-descriptions-item label="所属流程">{{ getProcessName(selectedActivity.process_id) || '未知' }}</el-descriptions-item>
-          <el-descriptions-item label="活动类型">{{ selectedActivity.type }}</el-descriptions-item>
+          <el-descriptions-item label="活动类型">{{ getDomainName(selectedActivity.domain) || '未知' }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="getStatusType(selectedActivity.status)">{{ getStatusName(selectedActivity.status) }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="预计时长">{{ selectedActivity.estimated_duration }}分钟</el-descriptions-item>
           <el-descriptions-item label="描述">{{ selectedActivity.description || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="SOP步骤" v-if="selectedActivity.sop_steps && selectedActivity.sop_steps.length > 0">
+            <div v-for="(step, index) in selectedActivity.sop_steps" :key="index" style="margin-bottom: 8px;">
+              <el-tag type="primary" size="small" style="margin-right: 8px;">步骤{{ step.step_number }}</el-tag>
+              {{ step.description }} ({{ step.duration }}分钟)
+            </div>
+          </el-descriptions-item>
         </el-descriptions>
+        <div style="margin-top: 20px; text-align: right;">
+          <el-button type="primary" @click="handleEditActivity">编辑活动</el-button>
+        </div>
       </div>
     </el-drawer>
 
@@ -51,6 +60,9 @@
             </el-tag>
           </el-descriptions-item>
         </el-descriptions>
+        <div style="margin-top: 20px; text-align: right;">
+          <el-button type="primary" @click="handleEditPersonnel">编辑人员</el-button>
+        </div>
       </div>
     </el-drawer>
 
@@ -74,6 +86,9 @@
             </el-tag>
           </el-descriptions-item>
         </el-descriptions>
+        <div style="margin-top: 20px; text-align: right;">
+          <el-button type="primary" @click="handleEditResource">编辑资源</el-button>
+        </div>
       </div>
     </el-drawer>
   </div>
@@ -85,6 +100,9 @@ import cytoscape from 'cytoscape'
 import fcose from 'cytoscape-fcose'
 import { computeELKLayout } from '@/utils/elkLayout'
 import type { GraphData } from '@/types'
+import { getActivity } from '@/api/activity'
+import { getPersonnelById } from '@/api/personnel'
+import { getResource } from '@/api/resource'
 
 cytoscape.use(fcose)
 
@@ -96,6 +114,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   nodeClick: [node: any]
+  editActivity: [activity: any]
+  editPersonnel: [personnel: any]
+  editResource: [resource: any]
 }>()
 
 const chartRef = ref<HTMLElement>()
@@ -188,6 +209,21 @@ const getResourceTypeName = (type: string) => {
     'consumable': '耗材'
   }
   return typeMap[type] || type
+}
+
+const handleEditActivity = () => {
+  detailDrawerVisible.value = false
+  emit('editActivity', selectedActivity.value)
+}
+
+const handleEditPersonnel = () => {
+  personnelDrawerVisible.value = false
+  emit('editPersonnel', selectedPersonnel.value)
+}
+
+const handleEditResource = () => {
+  resourceDrawerVisible.value = false
+  emit('editResource', selectedResource.value)
 }
 
 const initCytoscape = async () => {
@@ -357,20 +393,52 @@ const initCytoscape = async () => {
     cy.center()
   }
 
-  cy.on('tap', 'node', (evt: any) => {
+  cy.on('tap', 'node', async (evt: any) => {
     const node = evt.target
     const nodeType = node.data('nodeType')
     const rawData = node.data('rawData')
     
     if (nodeType === 'activity') {
-      selectedActivity.value = rawData
+      try {
+        const fullActivity = await getActivity(rawData.id)
+        if ((fullActivity as any)._id && !fullActivity.id) {
+          fullActivity.id = (fullActivity as any)._id
+        }
+        selectedActivity.value = fullActivity
+      } catch (error) {
+        selectedActivity.value = rawData
+      }
       detailDrawerVisible.value = true
       emit('nodeClick', node.data())
     } else if (nodeType === 'personnel' && rawData) {
-      selectedPersonnel.value = rawData
+      try {
+        let personnelId = rawData.original_id || rawData.id
+        if (personnelId && personnelId.includes('_inst_')) {
+          personnelId = personnelId.split('_inst_')[0]
+        }
+        const fullPersonnel = await getPersonnelById(personnelId)
+        if ((fullPersonnel as any)._id && !fullPersonnel.id) {
+          fullPersonnel.id = (fullPersonnel as any)._id
+        }
+        selectedPersonnel.value = fullPersonnel
+      } catch (error) {
+        selectedPersonnel.value = rawData
+      }
       personnelDrawerVisible.value = true
     } else if (nodeType === 'resource' && rawData) {
-      selectedResource.value = rawData
+      try {
+        let resourceId = rawData.original_id || rawData.id
+        if (resourceId && resourceId.includes('_inst_')) {
+          resourceId = resourceId.split('_inst_')[0]
+        }
+        const fullResource = await getResource(resourceId)
+        if ((fullResource as any)._id && !fullResource.id) {
+          fullResource.id = (fullResource as any)._id
+        }
+        selectedResource.value = fullResource
+      } catch (error) {
+        selectedResource.value = rawData
+      }
       resourceDrawerVisible.value = true
     }
   })

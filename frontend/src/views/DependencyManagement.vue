@@ -56,7 +56,10 @@
             :data="graphData" 
             :highlight-active="highlightActive"
             :highlight-set="highlightSet"
-            @node-click="handleNodeClick" 
+            @node-click="handleNodeClick"
+            @edit-activity="handleEditActivityFromGraph"
+            @edit-personnel="handleEditPersonnelFromGraph"
+            @edit-resource="handleEditResourceFromGraph"
           />
         </div>
         
@@ -137,7 +140,7 @@
       <div v-if="currentActivity?.id && !isEditActivity">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="活动名称" :span="2">{{ activityForm.name }}</el-descriptions-item>
-          <el-descriptions-item label="活动类型">{{ activityForm.activity_type }}</el-descriptions-item>
+          <el-descriptions-item label="活动类型">{{ getDomainName(activityForm.domain) || '未知' }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag v-if="activityForm.status === 'pending'" type="info">待开始</el-tag>
             <el-tag v-else-if="activityForm.status === 'in_progress'" type="warning">进行中</el-tag>
@@ -147,7 +150,44 @@
           </el-descriptions-item>
           <el-descriptions-item label="预计时长">{{ activityForm.estimated_duration }} 分钟</el-descriptions-item>
           <el-descriptions-item label="截止日期">{{ activityForm.deadline || '未设置' }}</el-descriptions-item>
+          <el-descriptions-item label="流程ID">{{ activityForm.process_id }}</el-descriptions-item>
+          <el-descriptions-item label="版本">{{ activityForm.version || 1 }}</el-descriptions-item>
           <el-descriptions-item label="描述" :span="2">{{ activityForm.description || '无' }}</el-descriptions-item>
+          
+          <el-descriptions-item label="SOP步骤" :span="2">
+            <div v-if="activityForm.sop_steps && activityForm.sop_steps.length > 0">
+              <div v-for="(step, index) in activityForm.sop_steps" :key="index" style="margin-bottom: 8px;">
+                <el-tag type="primary" style="margin-right: 8px;">步骤{{ step.step_number }}</el-tag>
+                {{ step.description }} ({{ step.duration }}分钟)
+              </div>
+            </div>
+            <span v-else>无</span>
+          </el-descriptions-item>
+          
+          <el-descriptions-item label="所需资源" :span="2">
+            <div v-if="activityForm.required_resources && activityForm.required_resources.length > 0">
+              <el-tag v-for="resourceId in activityForm.required_resources" :key="resourceId" style="margin-right: 5px;">
+                {{ getResourceNameById(resourceId) }}
+              </el-tag>
+            </div>
+            <span v-else>无</span>
+          </el-descriptions-item>
+          
+          <el-descriptions-item label="所需人员" :span="2">
+            <div v-if="activityForm.required_personnel && activityForm.required_personnel.length > 0">
+              <el-tag v-for="personnelId in activityForm.required_personnel" :key="personnelId" style="margin-right: 5px;" type="success">
+                {{ getPersonnelNameById(personnelId) }}
+              </el-tag>
+            </div>
+            <span v-else>无</span>
+          </el-descriptions-item>
+          
+          <el-descriptions-item label="创建时间" v-if="activityForm.created_at">
+            {{ new Date(activityForm.created_at).toLocaleString('zh-CN') }}
+          </el-descriptions-item>
+          <el-descriptions-item label="更新时间" v-if="activityForm.updated_at">
+            {{ new Date(activityForm.updated_at).toLocaleString('zh-CN') }}
+          </el-descriptions-item>
         </el-descriptions>
       </div>
 
@@ -469,6 +509,30 @@ const loadPersonnel = async () => {
   }
 }
 
+// 通过ID获取资源名称
+const getResourceNameById = (id: string) => {
+  const resource = resources.value.find(r => r.id === id)
+  return resource?.name || id
+}
+
+// 通过ID获取人员名称
+const getPersonnelNameById = (id: string) => {
+  const person = personnel.value.find(p => p.id === id)
+  return person?.name || id
+}
+
+// 获取流程域中文名称
+const getDomainName = (domain: string) => {
+  const domainMap: Record<string, string> = {
+    'production': '生产',
+    'transport': '运输',
+    'sales': '销售',
+    'quality': '质检',
+    'warehouse': '仓储'
+  }
+  return domainMap[domain] || domain
+}
+
 // 加载全局图数据
 const loadGlobalGraphData = async () => {
   try {
@@ -724,6 +788,64 @@ const handleNodeClick = async (node: any) => {
     } catch (error) {
       ElMessage.error('加载人员详情失败')
     }
+  }
+}
+
+// 从图表编辑活动
+const handleEditActivityFromGraph = async (activity: any) => {
+  try {
+    const fullActivity = await getActivity(activity.id)
+    if ((fullActivity as any)._id && !fullActivity.id) {
+      fullActivity.id = (fullActivity as any)._id
+    }
+    currentActivity.value = fullActivity
+    activityForm.value = { ...fullActivity }
+    isEditActivity.value = true
+    activityDialogVisible.value = true
+  } catch (error) {
+    ElMessage.error('加载活动详情失败')
+  }
+}
+
+// 从图表编辑人员
+const handleEditPersonnelFromGraph = async (personnel: any) => {
+  try {
+    const personnelId = personnel.rawData?.original_id || personnel.id
+    let finalPersonnelId = personnelId
+    if (finalPersonnelId && finalPersonnelId.includes('_inst_')) {
+      finalPersonnelId = finalPersonnelId.split('_inst_')[0]
+    }
+    const person = await getPersonnelById(finalPersonnelId)
+    if ((person as any)._id && !person.id) {
+      person.id = (person as any)._id
+    }
+    currentPersonnel.value = person
+    personnelForm.value = { ...person }
+    isEditPersonnel.value = true
+    personnelDialogVisible.value = true
+  } catch (error) {
+    ElMessage.error('加载人员详情失败')
+  }
+}
+
+// 从图表编辑资源
+const handleEditResourceFromGraph = async (resource: any) => {
+  try {
+    const resourceId = resource.rawData?.original_id || resource.id
+    let finalResourceId = resourceId
+    if (finalResourceId && finalResourceId.includes('_inst_')) {
+      finalResourceId = finalResourceId.split('_inst_')[0]
+    }
+    const fullResource = await getResource(finalResourceId)
+    if ((fullResource as any)._id && !fullResource.id) {
+      fullResource.id = (fullResource as any)._id
+    }
+    currentResource.value = fullResource
+    resourceForm.value = { ...fullResource }
+    isEditResource.value = true
+    resourceDialogVisible.value = true
+  } catch (error) {
+    ElMessage.error('加载资源详情失败')
   }
 }
 
