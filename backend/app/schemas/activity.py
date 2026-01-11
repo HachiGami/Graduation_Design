@@ -7,6 +7,19 @@ class SOPStep(BaseModel):
     description: str
     duration: int
 
+class MaterialRequirement(BaseModel):
+    material_model: str = Field(..., description="原料型号（匹配Asset.model）")
+    consumption_rate_per_day: float = Field(..., description="日消耗速率")
+    unit: str = Field(..., description="单位（仅展示）")
+
+class PersonnelRequirement(BaseModel):
+    role: str = Field(..., description="角色")
+    count: int = Field(..., description="需要人数")
+
+class EquipmentRequirement(BaseModel):
+    equipment_model: str = Field(..., description="设备型号（匹配Asset.model）")
+    count: int = Field(..., description="需要数量")
+
 class ActivityBase(BaseModel):
     name: str = Field(..., description="活动名称")
     description: str = Field(..., description="活动描述")
@@ -22,6 +35,11 @@ class ActivityBase(BaseModel):
     process_id: str = Field(..., description="流程实例ID")
     version: Optional[int] = Field(1, description="流程版本号")
     is_active: Optional[bool] = Field(True, description="是否启用")
+    
+    # 资源需求定义
+    material_requirements: List[MaterialRequirement] = Field(default=[], description="原料需求")
+    personnel_requirements: List[PersonnelRequirement] = Field(default=[], description="人员需求")
+    equipment_requirements: List[EquipmentRequirement] = Field(default=[], description="设备需求")
 
 class ActivityCreate(ActivityBase):
     pass
@@ -41,6 +59,9 @@ class ActivityUpdate(BaseModel):
     process_id: Optional[str] = None
     version: Optional[int] = None
     is_active: Optional[bool] = None
+    material_requirements: Optional[List[MaterialRequirement]] = None
+    personnel_requirements: Optional[List[PersonnelRequirement]] = None
+    equipment_requirements: Optional[List[EquipmentRequirement]] = None
 
 class ActivityResponse(ActivityBase):
     id: str = Field(..., alias="_id")

@@ -8,9 +8,32 @@
     <el-tabs v-model="activeTab" class="data-tabs">
       <!-- 活动标签页 -->
       <el-tab-pane label="活动" name="activities">
+        <!-- 分流程视图选择器 -->
+        <div class="process-selector">
+          <el-select v-model="selectedDomain" placeholder="选择流程域" style="width: 200px; margin-right: 10px">
+            <el-option label="乳制品生产" value="dairy_production" />
+            <el-option label="质量检测" value="quality_control" />
+          </el-select>
+          <el-select v-model="selectedProcessId" placeholder="选择流程实例" style="width: 200px; margin-right: 10px">
+            <el-option label="生产批次-001" value="batch_001" />
+            <el-option label="生产批次-002" value="batch_002" />
+          </el-select>
+          <el-button type="primary" @click="loadProcessActivities">加载活动</el-button>
+        </div>
+
+        <!-- 批量状态控制 -->
+        <div class="batch-status-control" v-if="activities.length > 0">
+          <span style="margin-right: 10px">批量状态控制：</span>
+          <el-button-group>
+            <el-button size="small" @click="batchUpdateStatus('pending')">待开始</el-button>
+            <el-button size="small" type="warning" @click="batchUpdateStatus('in_progress')">进行中</el-button>
+            <el-button size="small" type="success" @click="batchUpdateStatus('completed')">已完成</el-button>
+          </el-button-group>
+        </div>
+
         <el-table
           :data="activities"
-          style="width: 100%"
+          style="width: 100%; margin-top: 15px"
           @row-click="handleActivityRowClick"
           stripe
           highlight-current-row
@@ -24,6 +47,15 @@
             </template>
           </el-table-column>
           <el-table-column prop="estimated_duration" label="预估时长(分钟)" width="140" />
+          <el-table-column label="合规状态" width="100">
+            <template #default="scope">
+              <span class="compliance-indicator">
+                <span v-if="scope.row.compliance_status === 'compliant'" style="color: #67C23A">✓</span>
+                <span v-else-if="scope.row.compliance_status === 'partial'" style="color: #E6A23C">⚠</span>
+                <span v-else style="color: #F56C6C">✗</span>
+              </span>
+            </template>
+          </el-table-column>
           <el-table-column prop="description" label="描述" show-overflow-tooltip />
           <el-table-column label="操作" width="120" fixed="right">
             <template #default="scope">
@@ -88,9 +120,37 @@
 
       <!-- 原料标签页 -->
       <el-tab-pane label="原料" name="materials">
+        <!-- 库存预警面板 -->
+        <el-card class="inventory-forecast-card" shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span>原料库存预警面板</span>
+              <el-button type="primary" size="small" @click="calculateInventoryForecast">刷新预测</el-button>
+            </div>
+          </template>
+          <div class="forecast-list">
+            <div v-for="forecast in inventoryForecasts" :key="forecast.material_model" 
+                 class="forecast-item"
+                 :class="getForecastClass(forecast.days_remaining)">
+              <div class="forecast-header">
+                <h4>{{ forecast.material_model }}</h4>
+                <span class="forecast-status" :class="getForecastStatusClass(forecast.days_remaining)">
+                  {{ getForecastStatusIcon(forecast.days_remaining) }}
+                </span>
+              </div>
+              <div class="forecast-details">
+                <p>库存：{{ forecast.current_stock }} {{ forecast.unit }}</p>
+                <p>当前消耗：{{ forecast.consumption_rate }} {{ forecast.unit }}/天</p>
+                <p class="forecast-days">预计可用：<strong>{{ forecast.days_remaining }}</strong> 天</p>
+              </div>
+            </div>
+            <el-empty v-if="inventoryForecasts.length === 0" description="暂无预测数据，请先加载进行中的活动" />
+          </div>
+        </el-card>
+
         <el-table
           :data="materials"
-          style="width: 100%"
+          style="width: 100%; margin-top: 15px"
           @row-click="handleMaterialRowClick"
           stripe
           highlight-current-row
@@ -120,6 +180,12 @@
       <div class="drawer-content">
         <!-- 操作按钮组 -->
         <div class="action-buttons">
+          <el-button v-if="!isEditing && currentType === 'activity'" 
+                     type="success" 
+                     @click="handleStartTask"
+                     :disabled="currentItem.status !== 'pending'">
+            开始任务
+          </el-button>
           <el-button v-if="!isEditing" type="primary" @click="handleEdit">
             编辑
           </el-button>
@@ -179,6 +245,90 @@
             </div>
             <el-button type="primary" size="small" @click="addStep">添加步骤</el-button>
           </div>
+
+          <!-- 资源需求配置（仅查看模式） -->
+          <template v-if="!isEditing && currentItem.activityDetails">
+            <el-divider content-position="left">资源需求定义</el-divider>
+            <div class="resource-requirements">
+              <div v-if="currentItem.activityDetails.material_requirements?.length > 0">
+                <h4>原料需求（按型号）：</h4>
+                <ul>
+                  <li v-for="(req, idx) in currentItem.activityDetails.material_requirements" :key="idx">
+                    {{ req.material_model }}：{{ req.consumption_rate_per_day }} {{ req.unit }}/天
+                  </li>
+                </ul>
+              </div>
+              
+              <div v-if="currentItem.activityDetails.personnel_requirements?.length > 0">
+                <h4>人员需求：</h4>
+                <ul>
+                  <li v-for="(req, idx) in currentItem.activityDetails.personnel_requirements" :key="idx">
+                    {{ req.role }}：{{ req.count }} 人
+                  </li>
+                </ul>
+              </div>
+              
+              <div v-if="currentItem.activityDetails.equipment_requirements?.length > 0">
+                <h4>设备需求（按型号）：</h4>
+                <ul>
+                  <li v-for="(req, idx) in currentItem.activityDetails.equipment_requirements" :key="idx">
+                    {{ req.equipment_model }}：{{ req.count }} 台
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <el-divider content-position="left">实际分配情况</el-divider>
+            <div class="actual-allocations">
+              <div v-if="currentItem.activityDetails.actual_allocations">
+                <!-- 原料分配 -->
+                <div v-if="currentItem.activityDetails.actual_allocations.materials?.length > 0">
+                  <h4>原料分配（资产实例）：</h4>
+                  <ul class="allocation-list">
+                    <li v-for="(mat, idx) in currentItem.activityDetails.actual_allocations.materials" :key="idx">
+                      <span class="status-icon" :class="getResourceStatus('material', mat, currentItem.activityDetails.material_requirements)">
+                        {{ getResourceStatusIcon('material', mat, currentItem.activityDetails.material_requirements) }}
+                      </span>
+                      {{ mat.name }}：已分配 {{ mat.allocated_rate }} {{ mat.unit }}/天
+                    </li>
+                  </ul>
+                </div>
+
+                <!-- 人员分配 -->
+                <div v-if="currentItem.activityDetails.actual_allocations.personnel?.length > 0">
+                  <h4>人员分配：</h4>
+                  <ul class="allocation-list">
+                    <li v-for="(person, idx) in currentItem.activityDetails.actual_allocations.personnel" :key="idx">
+                      <span class="status-icon compliant">✓</span>
+                      {{ person.role }}：{{ person.name }}
+                    </li>
+                  </ul>
+                </div>
+
+                <!-- 设备分配 -->
+                <div v-if="currentItem.activityDetails.actual_allocations.equipment?.length > 0">
+                  <h4>设备分配（资产实例）：</h4>
+                  <div v-for="(model, equipmentModel) in groupEquipmentByModel(currentItem.activityDetails.actual_allocations.equipment)" :key="equipmentModel">
+                    <div class="equipment-group">
+                      <span class="status-icon" :class="getEquipmentStatus(equipmentModel, model.length, currentItem.activityDetails.equipment_requirements)">
+                        {{ getEquipmentStatusIcon(equipmentModel, model.length, currentItem.activityDetails.equipment_requirements) }}
+                      </span>
+                      <strong>{{ equipmentModel }}：</strong>
+                      <span v-for="(eq, idx) in model" :key="idx">
+                        {{ eq.name }}<span v-if="idx < model.length - 1">, </span>
+                      </span>
+                      <span class="count-badge">({{ model.length }}/{{ getRequiredCount(equipmentModel, currentItem.activityDetails.equipment_requirements) }} 台)</span>
+                    </div>
+                  </div>
+                </div>
+
+                <el-empty v-if="!currentItem.activityDetails.actual_allocations.materials?.length && 
+                              !currentItem.activityDetails.actual_allocations.personnel?.length && 
+                              !currentItem.activityDetails.actual_allocations.equipment?.length" 
+                          description="暂无资源分配" />
+              </div>
+            </div>
+          </template>
         </template>
 
         <!-- 员工详情 -->
@@ -343,8 +493,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, computed, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getActivities, batchUpdateStatus as batchUpdateStatusApi, getActivityDetails, updateActivity } from '@/api/activity'
+import { getAssets } from '@/api/asset'
+import { getPersonnel } from '@/api/personnel'
+import type { ActivityDetails, ComplianceCheckResult } from '@/types'
 
 // 类型定义
 interface Activity {
@@ -354,6 +508,7 @@ interface Activity {
   sop_steps: string[]
   estimated_duration: number
   status: string
+  compliance_status?: 'compliant' | 'partial' | 'non_compliant'
 }
 
 interface Personnel {
@@ -396,140 +551,18 @@ const currentType = ref<'activity' | 'personnel' | 'equipment' | 'material' | nu
 const currentItem = ref<any>(null)
 const editForm = ref<any>({})
 
-// Mock 数据
-const activities = ref<Activity[]>([
-  {
-    id: 'A001',
-    name: '牛奶接收',
-    description: '接收并验收原奶',
-    sop_steps: ['检查温度', '检查质量', '称重记录', '转移至储罐'],
-    estimated_duration: 30,
-    status: 'completed'
-  },
-  {
-    id: 'A002',
-    name: '巴氏杀菌',
-    description: '对牛奶进行巴氏杀菌处理',
-    sop_steps: ['加热至72℃', '保持15秒', '快速冷却', '质检'],
-    estimated_duration: 45,
-    status: 'in_progress'
-  },
-  {
-    id: 'A003',
-    name: '灌装',
-    description: '将处理后的牛奶灌装到包装容器中',
-    sop_steps: ['准备包装材料', '消毒灌装设备', '灌装', '封口'],
-    estimated_duration: 60,
-    status: 'pending'
-  },
-  {
-    id: 'A004',
-    name: '质量检测',
-    description: '对成品进行质量检测',
-    sop_steps: ['抽样', '微生物检测', '营养成分检测', '记录结果'],
-    estimated_duration: 90,
-    status: 'pending'
-  }
-])
+// 分流程选择器状态
+const selectedDomain = ref('dairy_production')
+const selectedProcessId = ref('batch_001')
 
-const personnel = ref<Personnel[]>([
-  {
-    id: 'P001',
-    name: '张三',
-    role: '生产主管',
-    department: '生产部',
-    allocations: [
-      { activity_name: '牛奶接收', amount: 0.5, duration: 30 },
-      { activity_name: '巴氏杀菌', amount: 0.5, duration: 45 }
-    ]
-  },
-  {
-    id: 'P002',
-    name: '李四',
-    role: '质检员',
-    department: '质检部',
-    allocations: [
-      { activity_name: '质量检测', amount: 1, duration: 90 }
-    ]
-  },
-  {
-    id: 'P003',
-    name: '王五',
-    role: '操作员',
-    department: '生产部',
-    allocations: [
-      { activity_name: '灌装', amount: 0.8, duration: 60 }
-    ]
-  }
-])
+// 库存预测数据
+const inventoryForecasts = ref<any[]>([])
 
-const equipment = ref<Equipment[]>([
-  {
-    id: 'E001',
-    name: '巴氏杀菌机',
-    specification: '2000L/H',
-    quantity: 2,
-    status: 'available',
-    allocations: [
-      { activity_name: '巴氏杀菌', amount: 1, duration: 45 }
-    ]
-  },
-  {
-    id: 'E002',
-    name: '灌装机',
-    specification: '5000瓶/H',
-    quantity: 3,
-    status: 'available',
-    allocations: [
-      { activity_name: '灌装', amount: 2, duration: 60 }
-    ]
-  },
-  {
-    id: 'E003',
-    name: '储罐',
-    specification: '5000L',
-    quantity: 5,
-    status: 'available',
-    allocations: [
-      { activity_name: '牛奶接收', amount: 2, duration: 30 },
-      { activity_name: '巴氏杀菌', amount: 1, duration: 45 }
-    ]
-  }
-])
-
-const materials = ref<Material[]>([
-  {
-    id: 'M001',
-    name: '原奶',
-    specification: 'A级',
-    quantity: 10000,
-    unit: 'L',
-    allocations: [
-      { activity_name: '牛奶接收', amount: 2000, duration: 30 },
-      { activity_name: '巴氏杀菌', amount: 3000, duration: 45 }
-    ]
-  },
-  {
-    id: 'M002',
-    name: '包装瓶',
-    specification: '1L装',
-    quantity: 20000,
-    unit: '个',
-    allocations: [
-      { activity_name: '灌装', amount: 5000, duration: 60 }
-    ]
-  },
-  {
-    id: 'M003',
-    name: '瓶盖',
-    specification: '标准型',
-    quantity: 20000,
-    unit: '个',
-    allocations: [
-      { activity_name: '灌装', amount: 5000, duration: 60 }
-    ]
-  }
-])
+// 数据列表（从API获取）
+const activities = ref<Activity[]>([])
+const personnel = ref<Personnel[]>([])
+const equipment = ref<Equipment[]>([])
+const materials = ref<Material[]>([])
 
 // 计算属性
 const drawerTitle = computed(() => {
@@ -545,19 +578,292 @@ const drawerTitle = computed(() => {
 
 // 方法
 function handleRefresh() {
-  ElMessage.success('数据已刷新')
-  // 这里可以调用 API 获取最新数据
   fetchData()
 }
 
-function fetchData() {
-  // Mock API 调用
-  console.log('正在获取数据...')
+async function fetchData() {
+  try {
+    // 并行加载所有数据
+    await Promise.all([
+      loadPersonnel(),
+      loadEquipment(),
+      loadMaterials()
+    ])
+    ElMessage.success('数据已刷新')
+  } catch (error) {
+    console.error('加载数据失败:', error)
+    ElMessage.error('加载数据失败')
+  }
 }
 
-function handleActivityRowClick(row: Activity) {
+// 加载人员数据
+async function loadPersonnel() {
+  try {
+    const data = await getPersonnel()
+    personnel.value = data.map((p: any) => ({
+      id: p.id || p._id,
+      name: p.name,
+      role: p.role,
+      department: p.responsibility || '未知部门',
+      allocations: []
+    }))
+  } catch (error) {
+    console.error('加载人员数据失败:', error)
+  }
+}
+
+// 加载设备数据
+async function loadEquipment() {
+  try {
+    const data = await getAssets({ asset_type: 'equipment' })
+    // 按型号分组统计数量
+    const grouped: Record<string, any> = {}
+    data.forEach((asset: any) => {
+      const model = asset.model
+      if (!grouped[model]) {
+        grouped[model] = {
+          id: asset.id || asset._id,
+          name: model,
+          specification: asset.specification || '',
+          quantity: 0,
+          status: 'available',
+          allocations: []
+        }
+      }
+      grouped[model].quantity += 1
+    })
+    equipment.value = Object.values(grouped)
+  } catch (error) {
+    console.error('加载设备数据失败:', error)
+  }
+}
+
+// 加载原料数据
+async function loadMaterials() {
+  try {
+    const data = await getAssets({ asset_type: 'material' })
+    materials.value = data.map((asset: any) => ({
+      id: asset.id || asset._id,
+      name: asset.name,
+      specification: asset.specification || '',
+      quantity: asset.quantity || 0,
+      unit: asset.unit || '',
+      allocations: []
+    }))
+  } catch (error) {
+    console.error('加载原料数据失败:', error)
+  }
+}
+
+// 组件挂载时加载数据
+onMounted(() => {
+  fetchData()
+})
+
+// 加载流程活动
+async function loadProcessActivities() {
+  if (!selectedDomain.value || !selectedProcessId.value) {
+    ElMessage.warning('请选择流程域和流程实例')
+    return
+  }
+  
+  try {
+    const data = await getActivities({
+      domain: selectedDomain.value,
+      process_id: selectedProcessId.value
+    })
+    activities.value = data.map((act: any) => ({
+      ...act,
+      compliance_status: 'compliant' // 默认合规，实际应从详情API获取
+    }))
+    ElMessage.success(`加载了 ${data.length} 个活动`)
+  } catch (error) {
+    console.error('加载活动失败:', error)
+    ElMessage.error('加载活动失败')
+  }
+}
+
+// 批量更新状态
+async function batchUpdateStatus(newStatus: string) {
+  if (!selectedDomain.value || !selectedProcessId.value) {
+    ElMessage.warning('请先选择流程')
+    return
+  }
+  
+  const statusText = {
+    'pending': '待开始',
+    'in_progress': '进行中',
+    'completed': '已完成'
+  }[newStatus] || newStatus
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定将当前流程的所有活动状态更新为"${statusText}"吗？`,
+      '批量状态更新',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    await batchUpdateStatusApi(selectedDomain.value, selectedProcessId.value, newStatus)
+    ElMessage.success('批量更新成功')
+    await loadProcessActivities() // 重新加载数据
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('批量更新失败:', error)
+      ElMessage.error('批量更新失败')
+    }
+  }
+}
+
+// 合规性卫士：开始任务
+async function handleStartTask() {
+  if (!currentItem.value || !currentItem.value.id) {
+    ElMessage.warning('无效的活动')
+    return
+  }
+  
+  try {
+    // 获取活动详情（包含需求和实际分配）
+    const details: ActivityDetails = await getActivityDetails(currentItem.value.id)
+    
+    // 执行合规性校验
+    const checkResult = await checkCompliance(details)
+    
+    if (checkResult.is_compliant) {
+      // 合规，直接开始任务
+      await updateActivity(currentItem.value.id, { status: 'in_progress' })
+      ElMessage.success('任务已开始')
+      currentItem.value.status = 'in_progress'
+    } else {
+      // 不合规，显示缺失资源并询问是否强制开始
+      const missingText = checkResult.missing_resources.map(m => {
+        let text = `- ${m.resource}：需要 ${m.required}，实际分配 ${m.actual}`
+        if (m.available && m.available.length > 0) {
+          text += `\n  可用闲置实例：${m.available.join(', ')}`
+        }
+        return text
+      }).join('\n')
+      
+      await ElMessageBox.confirm(
+        `资源配置不合规，缺少以下资产：\n\n${missingText}\n\n是否强制开始任务？`,
+        '资源合规性检查',
+        {
+          confirmButtonText: '强制开始',
+          cancelButtonText: '取消',
+          type: 'warning',
+          dangerouslyUseHTMLString: false
+        }
+      )
+      
+      // 用户确认强制开始
+      await updateActivity(currentItem.value.id, { status: 'in_progress' })
+      ElMessage.success('任务已强制开始')
+      currentItem.value.status = 'in_progress'
+    }
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('开始任务失败:', error)
+      ElMessage.error('开始任务失败')
+    }
+  }
+}
+
+// 合规性校验函数
+async function checkCompliance(details: ActivityDetails): Promise<ComplianceCheckResult> {
+  const missing: any[] = []
+  
+  // 检查原料
+  for (const req of details.material_requirements || []) {
+    const allocated = details.actual_allocations.materials.find(
+      m => m.name === req.material_model || m.name.includes(req.material_model)
+    )
+    const actualRate = allocated?.allocated_rate || 0
+    
+    if (actualRate < req.consumption_rate_per_day) {
+      missing.push({
+        type: 'material',
+        resource: req.material_model,
+        required: `${req.consumption_rate_per_day} ${req.unit}/天`,
+        actual: `${actualRate} ${req.unit}/天`
+      })
+    }
+  }
+  
+  // 检查人员
+  const personnelByRole: Record<string, number> = {}
+  details.actual_allocations.personnel.forEach(p => {
+    personnelByRole[p.role] = (personnelByRole[p.role] || 0) + 1
+  })
+  
+  for (const req of details.personnel_requirements || []) {
+    const actualCount = personnelByRole[req.role] || 0
+    if (actualCount < req.count) {
+      missing.push({
+        type: 'personnel',
+        resource: req.role,
+        required: `${req.count} 人`,
+        actual: `${actualCount} 人`
+      })
+    }
+  }
+  
+  // 检查设备
+  const equipmentByModel: Record<string, number> = {}
+  details.actual_allocations.equipment.forEach(e => {
+    equipmentByModel[e.model] = (equipmentByModel[e.model] || 0) + 1
+  })
+  
+  for (const req of details.equipment_requirements || []) {
+    const actualCount = equipmentByModel[req.equipment_model] || 0
+    if (actualCount < req.count) {
+      // 查询可用的闲置实例
+      try {
+        const availableAssets = await getAssets({
+          asset_type: 'equipment',
+          model: req.equipment_model,
+          status: 'idle'
+        })
+        const availableNames = availableAssets.map(a => a.name)
+        
+        missing.push({
+          type: 'equipment',
+          resource: `${req.equipment_model}（型号）`,
+          required: `${req.count} 台`,
+          actual: `${actualCount} 台`,
+          available: availableNames
+        })
+      } catch (error) {
+        missing.push({
+          type: 'equipment',
+          resource: `${req.equipment_model}（型号）`,
+          required: `${req.count} 台`,
+          actual: `${actualCount} 台`
+        })
+      }
+    }
+  }
+  
+  return {
+    is_compliant: missing.length === 0,
+    missing_resources: missing
+  }
+}
+
+async function handleActivityRowClick(row: Activity) {
   currentType.value = 'activity'
   currentItem.value = { ...row }
+  
+  // 加载活动详细信息（包含需求和分配）
+  try {
+    const details = await getActivityDetails(row.id!)
+    currentItem.value.activityDetails = details
+  } catch (error) {
+    console.error('加载活动详情失败:', error)
+  }
+  
   drawerVisible.value = true
   isEditing.value = false
 }
@@ -690,6 +996,140 @@ function calculateUsagePercentage(allocations: Allocation[] | undefined, total: 
   const used = calculateUsedAmount(allocations)
   return Math.round((used / total) * 100)
 }
+
+// 按型号分组设备
+function groupEquipmentByModel(equipment: any[]) {
+  const grouped: Record<string, any[]> = {}
+  equipment.forEach(eq => {
+    if (!grouped[eq.model]) {
+      grouped[eq.model] = []
+    }
+    grouped[eq.model].push(eq)
+  })
+  return grouped
+}
+
+// 获取资源状态
+function getResourceStatus(type: string, resource: any, requirements: any[]) {
+  if (type === 'material') {
+    const req = requirements.find(r => r.material_model === resource.name || resource.name.includes(r.material_model))
+    if (!req) return 'unknown'
+    if (resource.allocated_rate >= req.consumption_rate_per_day) return 'compliant'
+    if (resource.allocated_rate > 0) return 'partial'
+    return 'non-compliant'
+  }
+  return 'compliant'
+}
+
+function getResourceStatusIcon(type: string, resource: any, requirements: any[]) {
+  const status = getResourceStatus(type, resource, requirements)
+  if (status === 'compliant') return '✓'
+  if (status === 'partial') return '⚠'
+  return '✗'
+}
+
+// 获取设备合规状态
+function getEquipmentStatus(model: string, actualCount: number, requirements: any[]) {
+  const req = requirements.find(r => r.equipment_model === model)
+  if (!req) return 'unknown'
+  if (actualCount >= req.count) return 'compliant'
+  if (actualCount > 0) return 'partial'
+  return 'non-compliant'
+}
+
+function getEquipmentStatusIcon(model: string, actualCount: number, requirements: any[]) {
+  const status = getEquipmentStatus(model, actualCount, requirements)
+  if (status === 'compliant') return '✓'
+  if (status === 'partial') return '⚠'
+  return '✗'
+}
+
+// 获取需求数量
+function getRequiredCount(model: string, requirements: any[]) {
+  const req = requirements.find(r => r.equipment_model === model)
+  return req ? req.count : 0
+}
+
+// 计算库存维持力预测
+async function calculateInventoryForecast() {
+  try {
+    // 获取所有进行中的活动
+    const allActivities = await getActivities({
+      domain: selectedDomain.value
+    })
+    
+    const inProgressActivities = allActivities.filter(act => act.status === 'in_progress')
+    
+    if (inProgressActivities.length === 0) {
+      ElMessage.warning('当前没有进行中的活动')
+      inventoryForecasts.value = []
+      return
+    }
+    
+    // 聚合每种原料的消耗速率
+    const consumptionByMaterial: Record<string, { rate: number, unit: string }> = {}
+    
+    for (const activity of inProgressActivities) {
+      if (activity.material_requirements) {
+        activity.material_requirements.forEach((req: any) => {
+          if (!consumptionByMaterial[req.material_model]) {
+            consumptionByMaterial[req.material_model] = { rate: 0, unit: req.unit }
+          }
+          consumptionByMaterial[req.material_model].rate += req.consumption_rate_per_day
+        })
+      }
+    }
+    
+    // 计算每种原料的维持天数
+    const forecasts = []
+    for (const [materialModel, consumption] of Object.entries(consumptionByMaterial)) {
+      // 从materials数据中找到对应的库存
+      const material = materials.value.find(m => m.name === materialModel || m.name.includes(materialModel))
+      
+      if (material && material.quantity) {
+        const daysRemaining = consumption.rate > 0 
+          ? Math.floor(material.quantity / consumption.rate)
+          : 999
+        
+        forecasts.push({
+          material_model: materialModel,
+          current_stock: material.quantity,
+          unit: consumption.unit,
+          consumption_rate: consumption.rate,
+          days_remaining: daysRemaining
+        })
+      }
+    }
+    
+    // 按剩余天数排序（危急的在前）
+    forecasts.sort((a, b) => a.days_remaining - b.days_remaining)
+    inventoryForecasts.value = forecasts
+    
+    ElMessage.success(`已计算 ${forecasts.length} 种原料的库存预测`)
+  } catch (error) {
+    console.error('计算库存预测失败:', error)
+    ElMessage.error('计算库存预测失败')
+  }
+}
+
+// 获取预测卡片样式
+function getForecastClass(days: number) {
+  if (days < 7) return 'forecast-critical'
+  if (days < 30) return 'forecast-warning'
+  return 'forecast-normal'
+}
+
+function getForecastStatusClass(days: number) {
+  if (days < 7) return 'status-critical'
+  if (days < 30) return 'status-warning'
+  return 'status-normal'
+}
+
+function getForecastStatusIcon(days: number) {
+  if (days < 7) return '🔴'
+  if (days < 30) return '🟡'
+  return '🟢'
+}
 </script>
 
 <style scoped>
@@ -721,6 +1161,168 @@ function calculateUsagePercentage(allocations: Allocation[] | undefined, total: 
   padding: 20px;
   border-radius: 8px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+
+.process-selector {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+  padding: 15px;
+  background: #f5f7fa;
+  border-radius: 4px;
+}
+
+.batch-status-control {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+  padding: 10px;
+  background: #ecf5ff;
+  border-radius: 4px;
+  border-left: 3px solid #409EFF;
+}
+
+.compliance-indicator {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.resource-requirements h4,
+.actual-allocations h4 {
+  margin: 15px 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #606266;
+}
+
+.resource-requirements ul,
+.actual-allocations ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.resource-requirements li,
+.allocation-list li {
+  margin: 8px 0;
+  list-style: none;
+}
+
+.status-icon {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+  border-radius: 50%;
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.status-icon.compliant {
+  color: #67C23A;
+  background: #f0f9ff;
+}
+
+.status-icon.partial {
+  color: #E6A23C;
+  background: #fdf6ec;
+}
+
+.status-icon.non-compliant {
+  color: #F56C6C;
+  background: #fef0f0;
+}
+
+.equipment-group {
+  margin: 10px 0;
+  padding: 10px;
+  background: #f5f7fa;
+  border-radius: 4px;
+}
+
+.count-badge {
+  margin-left: 8px;
+  color: #909399;
+  font-size: 12px;
+}
+
+/* 库存预警面板样式 */
+.inventory-forecast-card {
+  margin-bottom: 15px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.forecast-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 15px;
+}
+
+.forecast-item {
+  padding: 15px;
+  border-radius: 8px;
+  border: 2px solid;
+  transition: all 0.3s;
+}
+
+.forecast-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.forecast-normal {
+  background: #f0f9ff;
+  border-color: #67C23A;
+}
+
+.forecast-warning {
+  background: #fdf6ec;
+  border-color: #E6A23C;
+}
+
+.forecast-critical {
+  background: #fef0f0;
+  border-color: #F56C6C;
+}
+
+.forecast-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.forecast-header h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.forecast-status {
+  font-size: 24px;
+}
+
+.forecast-details p {
+  margin: 5px 0;
+  font-size: 14px;
+  color: #606266;
+}
+
+.forecast-days {
+  margin-top: 10px;
+  font-size: 15px;
+  color: #303133;
+}
+
+.forecast-days strong {
+  font-size: 20px;
+  font-weight: 700;
 }
 
 .drawer-content {

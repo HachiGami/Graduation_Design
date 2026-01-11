@@ -107,5 +107,93 @@ export interface Activity {
   is_active?: boolean
   created_at?: string
   updated_at?: string
+  material_requirements?: MaterialRequirement[]
+  personnel_requirements?: PersonnelRequirement[]
+  equipment_requirements?: EquipmentRequirement[]
+}
+
+// Asset (资产) 相关类型
+export interface Asset {
+  id?: string
+  model: string
+  name: string
+  asset_type: 'equipment' | 'material'
+  specification?: string
+  supplier?: string
+  status: 'idle' | 'in_use' | 'maintenance' | 'available'
+  quantity?: number
+  unit?: string
+  created_at?: string
+  updated_at?: string
+}
+
+// 资源需求类型
+export interface MaterialRequirement {
+  material_model: string
+  consumption_rate_per_day: number
+  unit: string
+}
+
+export interface PersonnelRequirement {
+  role: string
+  count: number
+}
+
+export interface EquipmentRequirement {
+  equipment_model: string
+  count: number
+}
+
+// 实际分配类型
+export interface MaterialAllocation {
+  asset_id: string
+  name: string
+  allocated_rate: number
+  unit: string
+}
+
+export interface PersonnelAllocation {
+  id: string
+  name: string
+  role: string
+}
+
+export interface EquipmentAllocation {
+  asset_id: string
+  name: string
+  model: string
+}
+
+export interface ActualAllocations {
+  materials: MaterialAllocation[]
+  personnel: PersonnelAllocation[]
+  equipment: EquipmentAllocation[]
+}
+
+// 活动详情（包含需求和分配）
+export interface ActivityDetails {
+  id: string
+  name: string
+  description: string
+  status: string
+  process_id: string
+  domain: string
+  estimated_duration: number
+  material_requirements: MaterialRequirement[]
+  personnel_requirements: PersonnelRequirement[]
+  equipment_requirements: EquipmentRequirement[]
+  actual_allocations: ActualAllocations
+}
+
+// 合规性检查结果
+export interface ComplianceCheckResult {
+  is_compliant: boolean
+  missing_resources: {
+    type: 'material' | 'personnel' | 'equipment'
+    resource: string
+    required: number | string
+    actual: number | string
+    available?: string[]
+  }[]
 }
 

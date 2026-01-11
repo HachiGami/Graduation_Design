@@ -3,6 +3,12 @@
     <div class="graph-controls">
       <el-button @click="resetView" :icon="'Refresh'">重置视图</el-button>
       <el-button @click="fitToView" :icon="'FullScreen'">适配视图</el-button>
+      <div class="status-legend">
+        <span class="legend-title">状态图例：</span>
+        <span class="legend-item"><span class="legend-circle pending"></span>待开始</span>
+        <span class="legend-item"><span class="legend-circle in-progress"></span>进行中</span>
+        <span class="legend-item"><span class="legend-circle completed"></span>已完成</span>
+      </div>
       <el-text type="info" size="small" style="margin-left: 10px;">左键查看详情 | 右键展开资源/人员</el-text>
     </div>
     <div class="graph-wrapper">
@@ -249,6 +255,7 @@ const initCytoscape = async () => {
   const elements = [
     ...props.data.nodes.map(node => {
       const pos = layoutResult.positions.get(node.id)
+      const statusClass = node.status ? `status-${node.status}` : ''
       return {
         data: { 
           id: node.id, 
@@ -257,7 +264,7 @@ const initCytoscape = async () => {
           rawData: node
         },
         position: pos || { x: 0, y: 0 },
-        classes: 'activity-node'
+        classes: `activity-node ${statusClass}`
       }
     }),
     ...props.data.edges.map(edge => ({
@@ -304,6 +311,24 @@ const initCytoscape = async () => {
         style: {
           'background-color': '#409EFF',
           'shape': 'ellipse'
+        }
+      },
+      {
+        selector: 'node.status-pending',
+        style: {
+          'background-color': '#909399'
+        }
+      },
+      {
+        selector: 'node.status-in_progress',
+        style: {
+          'background-color': '#409EFF'
+        }
+      },
+      {
+        selector: 'node.status-completed',
+        style: {
+          'background-color': '#67C23A'
         }
       },
       {
@@ -712,6 +737,51 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+}
+
+.status-legend {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-left: 20px;
+  padding: 5px 15px;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #dcdfe6;
+}
+
+.legend-title {
+  font-weight: 600;
+  color: #606266;
+  margin-right: 5px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: #606266;
+}
+
+.legend-circle {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid #fff;
+}
+
+.legend-circle.pending {
+  background-color: #909399;
+}
+
+.legend-circle.in-progress {
+  background-color: #409EFF;
+}
+
+.legend-circle.completed {
+  background-color: #67C23A;
 }
 
 .graph-wrapper {

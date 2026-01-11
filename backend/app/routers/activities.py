@@ -65,6 +65,96 @@ async def get_activity(activity_id: str):
     activity["_id"] = str(activity["_id"])
     return activity
 
+@router.get("/{activity_id}/details")
+async def get_activity_details(activity_id: str):
+    """获取活动详情（包含需求定义和实际分配）"""
+    db = get_database()
+    driver = get_neo4j_driver()
+    
+    # 步骤1: 从MongoDB获取活动基本信息和需求定义
+    activity = await db.activities.find_one({"_id": ObjectId(activity_id)})
+    if not activity:
+        raise HTTPException(status_code=404, detail="生产活动不存在")
+    
+    activity["_id"] = str(activity["_id"])
+    
+    # 步骤2: 从Neo4j查询实际分配情况
+    try:
+        async with driver.session() as session:
+            # 查询原料消耗
+            result = await session.run("""
+                MATCH (a:Activity {id: $activity_id})-[c:CONSUMES]->(m:Material)
+                RETURN m.id as asset_id, m.name as name, 
+                       c.consumption_rate_per_day as allocated_rate, 
+                       c.unit as unit
+            """, {"activity_id": activity_id})
+            
+            materials = []
+            async for record in result:
+                materials.append({
+                    "asset_id": record["asset_id"],
+                    "name": record["name"],
+                    "allocated_rate": record["allocated_rate"],
+                    "unit": record["unit"]
+                })
+            
+            # 查询人员分配
+            result = await session.run("""
+                MATCH (a:Activity {id: $activity_id})-[as:ASSIGNS]->(p:Personnel)
+                RETURN p.id as id, p.name as name, as.role as role
+            """, {"activity_id": activity_id})
+            
+            personnel = []
+            async for record in result:
+                personnel.append({
+                    "id": record["id"],
+                    "name": record["name"],
+                    "role": record["role"]
+                })
+            
+            # 查询设备占用
+            result = await session.run("""
+                MATCH (a:Activity {id: $activity_id})-[o:OCCUPIES]->(e:Equipment)
+                RETURN e.id as asset_id, e.name as name, e.model as model
+            """, {"activity_id": activity_id})
+            
+            equipment = []
+            async for record in result:
+                equipment.append({
+                    "asset_id": record["asset_id"],
+                    "name": record["name"],
+                    "model": record["model"]
+                })
+    except Exception as e:
+        print(f"Neo4j查询失败: {e}")
+        materials = []
+        personnel = []
+        equipment = []
+    
+    # 构建返回结果
+    result = {
+        # MongoDB 静态数据（需求定义）
+        "id": activity["_id"],
+        "name": activity.get("name"),
+        "description": activity.get("description"),
+        "status": activity.get("status"),
+        "process_id": activity.get("process_id"),
+        "domain": activity.get("domain"),
+        "estimated_duration": activity.get("estimated_duration"),
+        "material_requirements": activity.get("material_requirements", []),
+        "personnel_requirements": activity.get("personnel_requirements", []),
+        "equipment_requirements": activity.get("equipment_requirements", []),
+        
+        # Neo4j 实况数据（实际分配）
+        "actual_allocations": {
+            "materials": materials,
+            "personnel": personnel,
+            "equipment": equipment
+        }
+    }
+    
+    return result
+
 @router.put("/{activity_id}", response_model=ActivityResponse)
 async def update_activity(activity_id: str, activity: ActivityUpdate):
     db = get_database()
@@ -128,3 +218,67 @@ async def delete_activity(activity_id: str):
     
     return {"message": "删除成功"}
 
+@router.post("/batch-status")
+async def batch_update_status(
+    domain: str = Query(..., description="流程域"),
+    process_id: str = Query(..., description="流程实例ID"),
+    new_status: str = Query(..., description="新状态")
+):
+    """批量更新流程所有活动的状态"""
+    db = get_database()
+    driver = get_neo4j_driver()
+    
+    # 更新MongoDB中的活动状态
+    result = await db.activities.update_many(
+        {"domain": domain, "process_id": process_id},
+        {"$set": {"status": new_status, "updated_at": datetime.utcnow()}}
+    )
+    
+    # 同步更新Neo4j
+    try:
+        async with driver.session() as session:
+            await session.run("""
+                MATCH (a:Activity)
+                WHERE a.domain = $domain AND a.process_id = $process_id
+                SET a.status = $status
+            """, {"domain": domain, "process_id": process_id, "status": new_status})
+            
+            # 如果状态变为completed，释放所有资产
+            if new_status == "completed":
+                # 获取所有活动ID
+                activities = []
+                async for activity in db.activities.find({"domain": domain, "process_id": process_id}):
+                    activities.append(str(activity["_id"]))
+                
+                # 释放所有设备资产
+                for activity_id in activities:
+                    # 查询占用的设备
+                    result = await session.run("""
+                        MATCH (a:Activity {id: $activity_id})-[:OCCUPIES]->(e:Equipment)
+                        RETURN e.id as asset_id
+                    """, {"activity_id": activity_id})
+                    
+                    equipment_ids = []
+                    async for record in result:
+                        equipment_ids.append(record["asset_id"])
+                    
+                    # 更新MongoDB中的设备状态为idle
+                    for eq_id in equipment_ids:
+                        await db.assets.update_one(
+                            {"_id": ObjectId(eq_id)},
+                            {"$set": {"status": "idle", "updated_at": datetime.utcnow()}}
+                        )
+                    
+                    # 删除Neo4j关系
+                    await session.run("""
+                        MATCH (a:Activity {id: $activity_id})-[r]->(asset)
+                        WHERE type(r) IN ['OCCUPIES', 'CONSUMES', 'ASSIGNS']
+                        DELETE r
+                    """, {"activity_id": activity_id})
+    except Exception as e:
+        print(f"Neo4j同步失败: {e}")
+    
+    return {
+        "message": "批量更新成功",
+        "updated_count": result.modified_count
+    }
