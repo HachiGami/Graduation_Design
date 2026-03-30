@@ -40,14 +40,13 @@
       </el-card>
       
       <el-card class="kpi-card" shadow="hover" @click="handleKpiClick('resource')">
-        <div class="kpi-value">{{ metrics.resourceShortageCount }}</div>
-        <div class="kpi-label">{{ dataLevel === 'level1' ? '原料短缺' : '原料关联' }}</div>
+        <div class="kpi-value">{{ runnableTimeText }}</div>
+        <div class="kpi-label">可运行时间</div>
       </el-card>
       
       <el-card class="kpi-card" shadow="hover" @click="handleKpiClick('dynamic')">
-        <div class="kpi-value">{{ metrics.dynamicRiskCount }}</div>
-        <div class="kpi-label">动态风险</div>
-        <div class="kpi-sub">{{ dataLevel === 'level2' ? '真实事件' : '模拟数据' }}</div>
+        <div class="kpi-value">{{ props.riskCount }}</div>
+        <div class="kpi-label">风险数</div>
       </el-card>
     </div>
 
@@ -70,11 +69,11 @@
     <el-tabs v-if="props.mode === 'sidebar'" v-model="activeTab" class="sidebar-tabs">
       <el-tab-pane label="健康度" name="health">
         <div v-if="currentScope === 'global' && processSummary.length > 0" class="process-ranking">
-          <el-table :data="healthRanking" size="small" @row-click="handleProcessRankingClick" height="calc(100vh - 200px)">
-            <el-table-column prop="processName" label="流程" width="130" show-overflow-tooltip />
+          <el-table :data="healthRanking" size="small" style="width: 100%" @row-click="handleProcessRankingClick" height="calc(100vh - 200px)">
+            <el-table-column prop="processName" label="流程" min-width="140" show-overflow-tooltip />
             <el-table-column prop="healthScore" label="评分" width="70" />
             <el-table-column prop="issueCount" label="问题" width="70" />
-            <el-table-column prop="activityCount" label="活动" width="70" />
+            <el-table-column prop="activityCount" label="活动数" min-width="120" />
           </el-table>
         </div>
         <div v-else class="issue-list">
@@ -90,10 +89,10 @@
 
       <el-tab-pane label="关键路径" name="cpm">
         <div v-if="currentScope === 'global' && processSummary.length > 0" class="process-ranking">
-          <el-table :data="durationRanking" size="small" @row-click="handleProcessRankingClick" height="calc(100vh - 200px)">
-            <el-table-column prop="processName" label="流程" width="130" show-overflow-tooltip />
-            <el-table-column prop="totalDuration" label="工期" width="90" />
-            <el-table-column prop="criticalPathLength" label="路径长" width="80" />
+          <el-table :data="durationRanking" size="small" style="width: 100%" @row-click="handleProcessRankingClick" height="calc(100vh - 200px)">
+            <el-table-column prop="processName" label="流程" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="totalDuration" label="工期" width="80" />
+            <el-table-column prop="criticalPathLength" label="路径长度" min-width="120" />
           </el-table>
         </div>
         <div v-else>
@@ -123,33 +122,42 @@
       </el-tab-pane>
 
       <el-tab-pane label="风险" name="risk">
-        <div v-if="currentScope === 'global' && processSummary.length > 0" class="process-ranking">
-          <el-table :data="riskRanking" size="small" @row-click="handleProcessRankingClick" height="calc(100vh - 200px)">
-            <el-table-column prop="processName" label="流程" width="130" show-overflow-tooltip />
-            <el-table-column prop="shortageCount" label="原料" width="70" />
-            <el-table-column prop="dynamicRiskCount" label="动态" width="70" />
+        <div v-if="currentScope === 'global'" class="process-ranking">
+          <el-table :data="domainRiskSummary" size="small" style="width: 100%" @row-click="handleProcessRankingClick" height="calc(100vh - 200px)">
+            <el-table-column label="流程" min-width="140" show-overflow-tooltip>
+              <template #default="scope">
+                {{ formatProcessDisplay(scope.row.processId, scope.row.domain) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="riskCount" label="风险数" width="80" />
+            <el-table-column label="最短可运行时间" min-width="140">
+              <template #default="scope">
+                {{ formatRunnableDays(scope.row.minRunnableDays) }}
+              </template>
+            </el-table-column>
           </el-table>
         </div>
         <div v-else>
-          <div class="resource-risks">
-            <h4>{{ dataLevel === 'level1' ? '原料短缺' : '原料关联风险' }}</h4>
-            <div v-for="item in resourceRisks" :key="item.resourceId" class="risk-item" @click="handleResourceRiskClick(item)">
-              <span class="risk-name">{{ item.resourceName }}</span>
-              <el-tag size="small" :type="dataLevel === 'level1' && item.shortage > 0 ? 'danger' : 'info'">
-                {{ dataLevel === 'level1' ? `缺口${item.shortage}` : `关联${item.referenceCount}次` }}
-              </el-tag>
-            </div>
-            <el-empty v-if="resourceRisks.length === 0" description="无原料风险" :image-size="60" />
-          </div>
           <div class="dynamic-risks">
-            <h4>动态风险</h4>
-            <div v-for="event in dynamicRiskEvents" :key="event.description" class="risk-item" @click="handleDynamicRiskClick(event)">
-              <el-tag size="small" :type="event.type === 'equipment_shortage' ? 'warning' : 'danger'">
-                {{ event.type === 'equipment_shortage' ? '设备' : '人力' }}
-              </el-tag>
-              <span class="risk-text">{{ event.description }}</span>
-            </div>
-            <el-empty v-if="dynamicRiskEvents.length === 0" description="无动态风险" :image-size="60" />
+            <h4>风险明细</h4>
+            <el-collapse v-model="expandedRiskPanels" class="risk-collapse">
+              <el-collapse-item
+                v-for="(risk, idx) in currentDomainRisks"
+                :key="`${risk.process_id || 'na'}-${risk.activity_name}-${idx}`"
+                :name="String(idx)"
+              >
+                <template #title>
+                  <div class="risk-title-row">
+                    <el-tag size="small" :type="riskTagType(risk.risk_type)">
+                      {{ riskTypeLabel(risk.risk_type) }}
+                    </el-tag>
+                    <span class="risk-title-text">{{ risk.activity_name }}</span>
+                  </div>
+                </template>
+                <div class="risk-detail-text">{{ risk.message }}</div>
+              </el-collapse-item>
+            </el-collapse>
+            <el-empty v-if="currentDomainRisks.length === 0" description="暂无风险" :image-size="60" />
           </div>
         </div>
       </el-tab-pane>
@@ -262,9 +270,24 @@ import { getDynamicRisks, summarizeDynamicRisksByProcess, type DynamicRiskEvent 
 const props = withDefaults(defineProps<{
   graphData: GraphData
   currentProcessId?: string
+  currentDomain?: string
   mode?: 'full' | 'sidebar'
+  minRunnableDays?: number | string
+  riskCount?: number
+  riskList?: Array<{
+    risk_type: 'material_shortage' | 'allocation_shortage' | 'upcoming_absence'
+    level: 'high' | 'medium' | 'low'
+    activity_name: string
+    message: string
+    domain?: string | null
+    process_id?: string | null
+    runnable_days?: number | null
+  }>
 }>(), {
-  mode: 'full'
+  mode: 'full',
+  minRunnableDays: '',
+  riskCount: 0,
+  riskList: () => []
 })
 
 const emit = defineEmits<{
@@ -276,6 +299,7 @@ const emit = defineEmits<{
 const currentScope = ref<'global' | 'process'>('global')
 const activePanels = ref(['health', 'cpm', 'risk'])
 const activeTab = ref('health')
+const expandedRiskPanels = ref<string[]>([])
 const dataLevel = ref<'level0' | 'level1' | 'level2'>('level0')
 
 const analysisResult = ref<any>(null)
@@ -289,6 +313,16 @@ const dataLevelHint = computed(() => {
   if (dataLevel.value === 'level0') return '当前为关联风险分析'
   if (dataLevel.value === 'level1') return '当前为静态短缺分析'
   return ''
+})
+
+const runnableTimeText = computed(() => {
+  const raw = props.minRunnableDays
+  if (raw === null || raw === undefined || raw === '') return '充足'
+  const num = Number(raw)
+  if (!Number.isFinite(num)) return String(raw)
+  if (num > 999) return '无限制'
+  if (num < 0) return '充足'
+  return `${num.toFixed(1)}天`
 })
 
 const metrics = computed(() => {
@@ -387,6 +421,44 @@ const riskRanking = computed(() => {
   return Array.from(merged.values())
     .sort((a, b) => (b.shortageCount + b.dynamicRiskCount) - (a.shortageCount + a.dynamicRiskCount))
     .slice(0, 10)
+})
+
+const domainRiskSummary = computed(() => {
+  const grouped = new Map<string, { processId: string; domain: string; riskCount: number; minRunnableDays: number | null }>()
+  const list = props.riskList || []
+
+  for (const risk of list) {
+    const domain = risk.domain || '-'
+    const pid = risk.process_id || 'unknown'
+    const key = `${domain}::${pid}`
+    const existing = grouped.get(key) || {
+      processId: pid,
+      domain,
+      riskCount: 0,
+      minRunnableDays: null as number | null
+    }
+
+    existing.riskCount += 1
+    if (risk.risk_type === 'material_shortage' && typeof risk.runnable_days === 'number' && Number.isFinite(risk.runnable_days)) {
+      existing.minRunnableDays =
+        existing.minRunnableDays === null ? risk.runnable_days : Math.min(existing.minRunnableDays, risk.runnable_days)
+    }
+
+    grouped.set(key, existing)
+  }
+
+  return Array.from(grouped.values()).sort((a, b) => b.riskCount - a.riskCount)
+})
+
+const currentDomainRisks = computed(() => {
+  const list = props.riskList || []
+  if (props.currentProcessId) {
+    return list.filter((risk) => risk.process_id === props.currentProcessId)
+  }
+  if (props.currentDomain) {
+    return list.filter((risk) => risk.domain === props.currentDomain)
+  }
+  return list
 })
 
 const healthIssues = computed(() => analysisResult.value?.health.issues || [])
@@ -622,6 +694,49 @@ function getIssueTypeName(type: string): string {
   return typeMap[type] || type
 }
 
+function formatRunnableDays(value: number | null) {
+  if (value === null || value === undefined) return '>7天'
+  return `${value.toFixed(1)}天`
+}
+
+const processLabelMap: Record<string, string> = {
+  P001: 'P001 - 主生产线',
+  P002: 'P002 - 副生产线',
+  T001: 'T001 - 冷链运输',
+  T002: 'T002 - 常温运输',
+  S001: 'S001 - 线上销售',
+  S002: 'S002 - 线下销售',
+  Q001: 'Q001 - 常规质检',
+  Q002: 'Q002 - 专项质检',
+  W001: 'W001 - 主仓库',
+  W002: 'W002 - 分仓库'
+}
+
+function formatProcessDisplay(processId: string, domain?: string) {
+  if (processLabelMap[processId]) return processLabelMap[processId]
+  if (!processId) return domain || '-'
+  const prefix = processId[0]?.toUpperCase()
+  const domainHint =
+    prefix === 'P' ? '生产线' :
+    prefix === 'T' ? '运输' :
+    prefix === 'S' ? '销售' :
+    prefix === 'Q' ? '质检' :
+    prefix === 'W' ? '仓库' : (domain || '流程')
+  return `${processId} - ${domainHint}`
+}
+
+function riskTypeLabel(type: string) {
+  if (type === 'material_shortage') return '缺料'
+  if (type === 'allocation_shortage') return '缺人/缺设备'
+  return '请假/检修'
+}
+
+function riskTagType(type: string) {
+  if (type === 'material_shortage') return 'danger'
+  if (type === 'allocation_shortage') return 'warning'
+  return 'info'
+}
+
 onMounted(() => {
   performAnalysis()
 })
@@ -811,6 +926,31 @@ h4 {
   font-size: 12px;
   color: #909399;
   margin-left: auto;
+}
+
+.risk-collapse {
+  border: none;
+}
+
+.risk-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 24px);
+}
+
+.risk-title-text {
+  font-size: 13px;
+  color: #303133;
+}
+
+.risk-detail-text {
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.6;
+  white-space: normal;
+  word-break: break-word;
+  padding: 4px 0 8px;
 }
 
 @media (max-width: 1400px) {

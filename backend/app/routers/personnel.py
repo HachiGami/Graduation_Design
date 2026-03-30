@@ -7,6 +7,21 @@ from bson import ObjectId
 
 router = APIRouter(prefix="/api/personnel", tags=["人员管理"])
 
+
+def _normalize_personnel_for_response(personnel: dict) -> dict:
+    now = datetime.utcnow()
+    personnel.setdefault("name", "未知人员")
+    personnel.setdefault("role", "操作员")
+    personnel.setdefault("responsibility", personnel.get("department") or "")
+    personnel.setdefault("skills", [])
+    personnel.setdefault("work_hours", "")
+    personnel.setdefault("assigned_tasks", [])
+    personnel.setdefault("status", "active")
+    personnel.setdefault("upcoming_leaves", [])
+    personnel.setdefault("created_at", personnel.get("updated_at") or now)
+    personnel.setdefault("updated_at", personnel.get("created_at") or now)
+    return personnel
+
 @router.post("", response_model=PersonnelResponse)
 async def create_personnel(personnel: PersonnelCreate):
     db = get_database()
@@ -45,7 +60,7 @@ async def get_personnel():
         cursor = db.personnel.find()
         async for personnel in cursor:
             personnel["_id"] = str(personnel["_id"])
-            personnel_list.append(personnel)
+            personnel_list.append(_normalize_personnel_for_response(personnel))
     except Exception as e:
         raise
     
@@ -58,7 +73,7 @@ async def get_personnel_by_id(personnel_id: str):
     if not personnel:
         raise HTTPException(status_code=404, detail="人员不存在")
     personnel["_id"] = str(personnel["_id"])
-    return personnel
+    return _normalize_personnel_for_response(personnel)
 
 @router.put("/{personnel_id}", response_model=PersonnelResponse)
 async def update_personnel(personnel_id: str, personnel: PersonnelUpdate):

@@ -40,12 +40,12 @@
             <div class="mini-label">总工期</div>
           </div>
           <div class="mini-kpi-item" @click="handleKpiClick('resource')">
-            <div class="mini-value">{{ metrics.resourceShortageCount }}</div>
-            <div class="mini-label">原料</div>
+            <div class="mini-value">{{ miniRunnableTimeText }}</div>
+            <div class="mini-label">可运行时间</div>
           </div>
           <div class="mini-kpi-item" @click="handleKpiClick('dynamic')">
-            <div class="mini-value">{{ metrics.dynamicRiskCount }}</div>
-            <div class="mini-label">动态风险</div>
+            <div class="mini-value">{{ riskList.length }}</div>
+            <div class="mini-label">风险数</div>
           </div>
         </div>
       </div>
@@ -68,6 +68,10 @@
             mode="sidebar"
             :graph-data="graphData"
             :current-process-id="currentProcessId"
+            :current-domain="currentDomain"
+            :min-runnable-days="minRunnableDays"
+            :risk-count="riskList.length"
+            :risk-list="riskList"
             @highlight-request="handleDashboardHighlight"
             @process-select="handleProcessSelect"
             @clear-highlight="clearDashboardHighlight"
@@ -376,7 +380,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { createDependency, updateDependency, getGraphData } from '@/api/dependency'
@@ -390,7 +394,7 @@ import DashboardPanel from '@/components/DashboardPanel.vue'
 import { analyzeGraph, type AnalysisScope } from '@/utils/graphAnalyzer'
 import { calculateCPM } from '@/utils/cpmCalculator'
 import { checkResources } from '@/utils/resourceChecker'
-import { getDynamicRisks } from '@/api/analytics'
+import { getDynamicRisks, getRisks, type RiskItem } from '@/api/analytics'
 
 const route = useRoute()
 const router = useRouter()
@@ -438,6 +442,24 @@ const activities = ref<Activity[]>([])
 const resources = ref<Resource[]>([])
 const personnel = ref<Personnel[]>([])
 const graphData = ref<GraphData>({ nodes: [], edges: [] })
+const riskList = ref<RiskItem[]>([])
+
+const minRunnableDays = computed<number | string>(() => {
+  const list = riskList.value
+    .map((risk) => risk.runnable_days)
+    .filter((day): day is number => typeof day === 'number' && Number.isFinite(day))
+  if (list.length === 0) return ''
+  return Math.min(...list)
+})
+
+const miniRunnableTimeText = computed(() => {
+  const value = minRunnableDays.value
+  if (value === '' || value === null || value === undefined) return '充足'
+  const num = Number(value)
+  if (!Number.isFinite(num)) return String(value)
+  if (num > 999) return '无限制'
+  return `${num.toFixed(1)}天`
+})
 
 // 高亮状态：FlowHighlightSet（流程选择器）和 DashboardHighlightSet（仪表盘）
 const flowHighlightSet = ref<{nodeIds: Set<string>, edgeIds: Set<string>}>({
@@ -669,6 +691,15 @@ const loadGraphData = async () => {
   await loadGlobalGraphData()
   if (highlightActive.value && currentDomain.value && currentProcessId.value) {
     applyProcessHighlight()
+  }
+}
+
+const loadRiskList = async () => {
+  try {
+    riskList.value = await getRisks(currentDomain.value || undefined)
+  } catch (error) {
+    riskList.value = []
+    ElMessage.error('加载风险数据失败')
   }
 }
 
@@ -1066,6 +1097,11 @@ onMounted(async () => {
     await loadResources()
   }
   await loadPersonnel()
+  await loadRiskList()
+})
+
+watch([currentDomain, currentProcessId], async () => {
+  await loadRiskList()
 })
 </script>
 
@@ -1162,7 +1198,7 @@ onMounted(async () => {
 }
 
 .sidebar {
-  width: 350px;
+  width: 450px;
   background: #fff;
   border-left: 1px solid #e4e7ed;
   overflow-y: auto;

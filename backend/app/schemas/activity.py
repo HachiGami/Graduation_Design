@@ -9,8 +9,13 @@ class SOPStep(BaseModel):
 
 class MaterialRequirement(BaseModel):
     material_model: str = Field(..., description="原料型号（匹配Asset.model）")
-    consumption_rate_per_day: float = Field(..., description="日消耗速率")
+    hourly_consumption_rate: float = Field(default=10.0, description="每小时消耗速率")
     unit: str = Field(..., description="单位（仅展示）")
+
+
+class TimeWindow(BaseModel):
+    start_time: str
+    end_time: str
 
 class PersonnelRequirement(BaseModel):
     role: str = Field(..., description="角色")
@@ -35,6 +40,13 @@ class ActivityBase(BaseModel):
     process_id: str = Field(..., description="流程实例ID")
     version: Optional[int] = Field(1, description="流程版本号")
     is_active: Optional[bool] = Field(True, description="是否启用")
+    working_hours: List[TimeWindow] = Field(
+        default_factory=lambda: [
+            {"start_time": "08:00", "end_time": "11:00"},
+            {"start_time": "13:00", "end_time": "18:00"},
+        ],
+        description="工作时间段",
+    )
     
     # 资源需求定义
     material_requirements: List[MaterialRequirement] = Field(default=[], description="原料需求")
@@ -59,6 +71,7 @@ class ActivityUpdate(BaseModel):
     process_id: Optional[str] = None
     version: Optional[int] = None
     is_active: Optional[bool] = None
+    working_hours: Optional[List[TimeWindow]] = None
     material_requirements: Optional[List[MaterialRequirement]] = None
     personnel_requirements: Optional[List[PersonnelRequirement]] = None
     equipment_requirements: Optional[List[EquipmentRequirement]] = None

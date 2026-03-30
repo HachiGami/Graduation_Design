@@ -168,6 +168,25 @@
           </el-table-column>
         </el-table>
       </el-tab-pane>
+
+      <!-- 风险标签页 -->
+      <el-tab-pane label="风险" name="risks">
+        <el-table :data="riskTableRows" style="width: 100%" stripe>
+          <el-table-column
+            :label="isScopedRiskView ? '活动名称' : '流程域/流程'"
+            prop="name"
+            min-width="220"
+            show-overflow-tooltip
+          />
+          <el-table-column label="风险数" prop="riskCount" width="120" />
+          <el-table-column label="最短可运行时间" width="180">
+            <template #default="scope">
+              {{ formatRunnableDays(scope.row.minRunnableDays) }}
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="riskTableRows.length === 0" description="暂无风险数据" />
+      </el-tab-pane>
     </el-tabs>
 
     <!-- 详情抽屉 -->
@@ -500,6 +519,24 @@ import { getAssets } from '@/api/asset'
 import { getPersonnel } from '@/api/personnel'
 import type { ActivityDetails, ComplianceCheckResult } from '@/types'
 
+interface RiskItem {
+  risk_type: 'material_shortage' | 'allocation_shortage' | 'upcoming_absence'
+  level: 'high' | 'medium' | 'low'
+  activity_name: string
+  message: string
+  domain?: string | null
+  process_id?: string | null
+  runnable_days?: number | null
+}
+
+const props = withDefaults(defineProps<{
+  risks?: RiskItem[]
+  domain?: string
+  processId?: string
+}>(), {
+  risks: () => []
+})
+
 // 类型定义
 interface Activity {
   id: string
@@ -563,6 +600,46 @@ const activities = ref<Activity[]>([])
 const personnel = ref<Personnel[]>([])
 const equipment = ref<Equipment[]>([])
 const materials = ref<Material[]>([])
+
+const isScopedRiskView = computed(() => !!props.domain || !!props.processId)
+
+const riskTableRows = computed(() => {
+  const source = props.risks || []
+  const grouped = new Map<string, { name: string; riskCount: number; minRunnableDays: number | null }>()
+
+  for (const item of source) {
+    const runnable =
+      typeof item.runnable_days === 'number' && Number.isFinite(item.runnable_days)
+        ? item.runnable_days
+        : null
+
+    if (isScopedRiskView.value) {
+      const key = item.activity_name || '未知活动'
+      const existing = grouped.get(key) || { name: key, riskCount: 0, minRunnableDays: null }
+      existing.riskCount += 1
+      if (runnable !== null) {
+        existing.minRunnableDays =
+          existing.minRunnableDays === null ? runnable : Math.min(existing.minRunnableDays, runnable)
+      }
+      grouped.set(key, existing)
+      continue
+    }
+
+    const groupName = item.process_id
+      ? `${item.domain || '-'} / ${item.process_id}`
+      : (item.domain || '未知流程域')
+    const key = `${item.domain || ''}::${item.process_id || ''}`
+    const existing = grouped.get(key) || { name: groupName, riskCount: 0, minRunnableDays: null }
+    existing.riskCount += 1
+    if (runnable !== null) {
+      existing.minRunnableDays =
+        existing.minRunnableDays === null ? runnable : Math.min(existing.minRunnableDays, runnable)
+    }
+    grouped.set(key, existing)
+  }
+
+  return Array.from(grouped.values()).sort((a, b) => b.riskCount - a.riskCount)
+})
 
 // 计算属性
 const drawerTitle = computed(() => {
@@ -995,6 +1072,11 @@ function calculateUsagePercentage(allocations: Allocation[] | undefined, total: 
   if (!total || total === 0) return 0
   const used = calculateUsedAmount(allocations)
   return Math.round((used / total) * 100)
+}
+
+function formatRunnableDays(days: number | null) {
+  if (days === null || days === undefined) return '无限制'
+  return `${days.toFixed(1)} 天`
 }
 
 // 按型号分组设备

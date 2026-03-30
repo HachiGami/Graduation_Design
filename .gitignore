@@ -36,3 +36,15 @@ Thumbs.db
 build/
 *.log
 
+
+# AI Context
+.cobridge
+
+# .traerules
+.traerules
+
+# .cursorrules
+.cursorrules
+
+# GitHub Copilot Instructions
+.github/copilot-instructions.md

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from datetime import datetime
 
 class AssetBase(BaseModel):
@@ -13,6 +13,10 @@ class AssetBase(BaseModel):
     # 仅用于 material 类型
     quantity: Optional[float] = Field(None, description="库存数量（仅原料）")
     unit: Optional[str] = Field(None, description="单位（仅原料）")
+    upcoming_maintenance: List[str] = Field(
+        default=[],
+        description="未来7天内的设备检修日期列表，不需要具体几月几号，标记几天后检修就可以",
+    )
 
 class AssetCreate(AssetBase):
     pass
@@ -26,6 +30,7 @@ class AssetUpdate(BaseModel):
     status: Optional[Literal["idle", "in_use", "maintenance", "available"]] = None
     quantity: Optional[float] = None
     unit: Optional[str] = None
+    upcoming_maintenance: Optional[List[str]] = None
 
 class AssetResponse(AssetBase):
     id: str = Field(..., alias="_id")

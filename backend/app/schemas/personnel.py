@@ -10,6 +10,10 @@ class PersonnelBase(BaseModel):
     work_hours: str = Field(..., description="工作时间")
     assigned_tasks: List[str] = Field(default=[], description="分配的任务")
     status: str = Field(default="active", description="状态")
+    upcoming_leaves: List[str] = Field(
+        default=[],
+        description="未来7天内的请假日期列表，不需要具体几月几号，标记几天后请假就可以",
+    )
 
 class PersonnelCreate(PersonnelBase):
     pass
@@ -22,6 +26,7 @@ class PersonnelUpdate(BaseModel):
     work_hours: Optional[str] = None
     assigned_tasks: Optional[List[str]] = None
     status: Optional[str] = None
+    upcoming_leaves: Optional[List[str]] = None
 
 class PersonnelResponse(BaseModel):
     id: str = Field(..., alias="_id")
@@ -32,6 +37,10 @@ class PersonnelResponse(BaseModel):
     work_hours: Optional[str] = Field(None, description="工作时间")
     assigned_tasks: Optional[List[str]] = Field(default=[], description="分配的任务")
     status: str = Field(default="active", description="状态")
+    upcoming_leaves: Optional[List[str]] = Field(
+        default=[],
+        description="未来7天内的请假日期列表，不需要具体几月几号，标记几天后请假就可以",
+    )
     created_at: datetime
     updated_at: datetime
 

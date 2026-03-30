@@ -285,8 +285,10 @@ async def get_graph_data(
         
         # 获取活动-资源使用关系（每个活动的资源单独一个节点）
         usage_query = """
-        MATCH (a:Activity)-[u:USES]->(r:Resource)
-        RETURN a.id as activity_id, r.id as resource_id, u
+        MATCH (a:Activity)-[u]->(r:Resource)
+        WHERE type(u) IN ['USES', 'CONSUMES']
+        RETURN a.id as activity_id, r.id as resource_id, r.name as resource_name,
+               r.resource_type as resource_type, type(u) as relation_type, u
         ORDER BY a.id, r.id
         """
         
@@ -299,6 +301,7 @@ async def get_graph_data(
             async for record in result:
                 activity_id = record["activity_id"]
                 resource_id = record["resource_id"]
+                relation_type = record["relation_type"]
                 rel = record["u"]
                 
                 activity_ids.add(activity_id)
@@ -311,8 +314,11 @@ async def get_graph_data(
                 
                 resource_instance_id = f"{resource_id}_inst_{activity_id}"
                 
-                # 获取资源详情
-                resource = await db.resources.find_one({"_id": ObjectId(resource_id)})
+                # 优先从 MongoDB 取资源详情；若 resource_id 不是 ObjectId（例如 UUID），回退到 Neo4j 属性
+                resource = None
+                if resource_id and ObjectId.is_valid(resource_id):
+                    resource = await db.resources.find_one({"_id": ObjectId(resource_id)})
+
                 if resource:
                     resource_nodes.append({
                         "id": resource_instance_id,
@@ -328,11 +334,26 @@ async def get_graph_data(
                         "unit": resource.get("unit", ""),
                         "expiry_date": resource.get("expiry_date")
                     })
+                else:
+                    resource_nodes.append({
+                        "id": resource_instance_id,
+                        "original_id": resource_id,
+                        "name": record.get("resource_name", "未知资源"),
+                        "category": "Resource",
+                        "type": (record.get("resource_type") or "material").lower(),
+                        "status": "available",
+                        "parent_activity": activity_id,
+                        "specification": "",
+                        "supplier": "",
+                        "quantity": 0,
+                        "unit": rel.get("unit", ""),
+                        "expiry_date": None
+                    })
                 
                 resource_edges.append({
                     "source": activity_id,
                     "target": resource_instance_id,
-                    "relation": "USES",
+                    "relation": relation_type,
                     "quantity": rel.get("quantity", 1),
                     "unit": rel.get("unit", "unit"),
                     "stage": rel.get("stage")

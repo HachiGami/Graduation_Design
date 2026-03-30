@@ -1,3 +1,5 @@
+import request from './request'
+
 export interface DynamicRiskEvent {
   type: 'equipment_shortage' | 'personnel_overload'
   timeWindow: string
@@ -9,6 +11,20 @@ export interface DynamicRiskEvent {
 export interface DynamicRisksResponse {
   equipmentShortages: DynamicRiskEvent[]
   personnelOverloads: DynamicRiskEvent[]
+}
+
+export interface RiskItem {
+  risk_type: 'material_shortage' | 'allocation_shortage' | 'upcoming_absence'
+  level: 'high' | 'medium' | 'low'
+  activity_name: string
+  message: string
+  domain?: string | null
+  process_id?: string | null
+  runnable_days?: number | null
+}
+
+export const getRisks = (domain?: string) => {
+  return request.get('/analytics/risks', { params: { domain } })
 }
 
 /**

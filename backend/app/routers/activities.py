@@ -7,6 +7,57 @@ from bson import ObjectId
 
 router = APIRouter(prefix="/api/activities", tags=["生产活动"])
 
+
+def _normalize_sop_steps(raw_steps):
+    if not raw_steps:
+        return []
+    normalized = []
+    for index, step in enumerate(raw_steps):
+        if isinstance(step, dict):
+            normalized.append({
+                "step_number": int(step.get("step_number", index + 1)),
+                "description": str(step.get("description", "")),
+                "duration": int(step.get("duration", 0)),
+            })
+        else:
+            normalized.append({
+                "step_number": index + 1,
+                "description": str(step),
+                "duration": 0,
+            })
+    return normalized
+
+
+def _normalize_activity_for_response(activity: dict) -> dict:
+    now = datetime.utcnow()
+    activity.setdefault("name", "未命名活动")
+    activity.setdefault("description", "")
+    activity.setdefault("activity_type", "production")
+    activity["sop_steps"] = _normalize_sop_steps(activity.get("sop_steps", []))
+    activity.setdefault("estimated_duration", 0)
+    activity.setdefault("duration_minutes", None)
+    activity.setdefault("deadline", None)
+    activity.setdefault("required_resources", [])
+    activity.setdefault("required_personnel", [])
+    activity.setdefault("status", "pending")
+    activity.setdefault("domain", "production")
+    activity.setdefault("process_id", "P001")
+    activity.setdefault("version", 1)
+    activity.setdefault("is_active", True)
+    activity.setdefault(
+        "working_hours",
+        [
+            {"start_time": "08:00", "end_time": "11:00"},
+            {"start_time": "13:00", "end_time": "18:00"},
+        ],
+    )
+    activity.setdefault("material_requirements", [])
+    activity.setdefault("personnel_requirements", [])
+    activity.setdefault("equipment_requirements", [])
+    activity.setdefault("created_at", activity.get("updated_at") or now)
+    activity.setdefault("updated_at", activity.get("created_at") or now)
+    return activity
+
 @router.post("", response_model=ActivityResponse)
 async def create_activity(activity: ActivityCreate):
     db = get_database()
@@ -53,7 +104,7 @@ async def get_activities(
     activities = []
     async for activity in db.activities.find(query_filter):
         activity["_id"] = str(activity["_id"])
-        activities.append(activity)
+        activities.append(_normalize_activity_for_response(activity))
     return activities
 
 @router.get("/{activity_id}", response_model=ActivityResponse)
@@ -63,7 +114,7 @@ async def get_activity(activity_id: str):
     if not activity:
         raise HTTPException(status_code=404, detail="生产活动不存在")
     activity["_id"] = str(activity["_id"])
-    return activity
+    return _normalize_activity_for_response(activity)
 
 @router.get("/{activity_id}/details")
 async def get_activity_details(activity_id: str):
