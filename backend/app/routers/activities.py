@@ -4,8 +4,25 @@ from datetime import datetime
 from ..database import get_database, get_neo4j_driver
 from ..schemas.activity import ActivityCreate, ActivityUpdate, ActivityResponse
 from bson import ObjectId
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/api/activities", tags=["生产活动"])
+
+
+class PersonnelRequirementPayload(BaseModel):
+    role: str = Field(..., min_length=1, description="角色")
+    count: int = Field(..., ge=1, description="需要人数")
+
+
+class EquipmentRequirementPayload(BaseModel):
+    equipment_model: str = Field(..., min_length=1, description="设备型号")
+    count: int = Field(..., ge=1, description="需要数量")
+
+
+class MaterialRequirementPayload(BaseModel):
+    material_model: str = Field(..., min_length=1, description="原料型号")
+    hourly_consumption_rate: float = Field(..., ge=0, description="每小时消耗")
+    unit: Optional[str] = Field(default="", description="单位")
 
 
 def _normalize_sop_steps(raw_steps):
@@ -58,6 +75,12 @@ def _normalize_activity_for_response(activity: dict) -> dict:
     activity.setdefault("updated_at", activity.get("created_at") or now)
     return activity
 
+
+def _parse_activity_object_id(activity_id: str) -> ObjectId:
+    if not ObjectId.is_valid(activity_id):
+        raise HTTPException(status_code=400, detail="无效的活动ID")
+    return ObjectId(activity_id)
+
 @router.post("", response_model=ActivityResponse)
 async def create_activity(activity: ActivityCreate):
     db = get_database()
@@ -96,7 +119,6 @@ async def get_activities(
     process_id: Optional[str] = Query(None, description="流程实例ID")
 ):
     db = get_database()
-    
     query_filter = {"domain": domain}
     if process_id:
         query_filter["process_id"] = process_id
@@ -205,6 +227,161 @@ async def get_activity_details(activity_id: str):
     }
     
     return result
+
+
+@router.post("/{activity_id}/personnel", response_model=ActivityResponse)
+async def add_personnel_requirement(activity_id: str, payload: PersonnelRequirementPayload):
+    db = get_database()
+    obj_id = _parse_activity_object_id(activity_id)
+    activity = await db.activities.find_one({"_id": obj_id})
+    if not activity:
+        raise HTTPException(status_code=404, detail="生产活动不存在")
+
+    requirements = activity.get("personnel_requirements", [])
+    updated = False
+    for req in requirements:
+        if req.get("role") == payload.role:
+            req["count"] = payload.count
+            updated = True
+            break
+    if not updated:
+        requirements.append({"role": payload.role, "count": payload.count})
+
+    await db.activities.update_one(
+        {"_id": obj_id},
+        {"$set": {"personnel_requirements": requirements, "updated_at": datetime.utcnow()}},
+    )
+    latest = await db.activities.find_one({"_id": obj_id})
+    latest["_id"] = str(latest["_id"])
+    return _normalize_activity_for_response(latest)
+
+
+@router.delete("/{activity_id}/personnel/{role}", response_model=ActivityResponse)
+async def remove_personnel_requirement(activity_id: str, role: str):
+    db = get_database()
+    obj_id = _parse_activity_object_id(activity_id)
+    activity = await db.activities.find_one({"_id": obj_id})
+    if not activity:
+        raise HTTPException(status_code=404, detail="生产活动不存在")
+
+    requirements = activity.get("personnel_requirements", [])
+    new_requirements = [req for req in requirements if req.get("role") != role]
+    if len(new_requirements) == len(requirements):
+        raise HTTPException(status_code=404, detail="人员需求不存在")
+
+    await db.activities.update_one(
+        {"_id": obj_id},
+        {"$set": {"personnel_requirements": new_requirements, "updated_at": datetime.utcnow()}},
+    )
+    latest = await db.activities.find_one({"_id": obj_id})
+    latest["_id"] = str(latest["_id"])
+    return _normalize_activity_for_response(latest)
+
+
+@router.post("/{activity_id}/equipment", response_model=ActivityResponse)
+async def add_equipment_requirement(activity_id: str, payload: EquipmentRequirementPayload):
+    db = get_database()
+    obj_id = _parse_activity_object_id(activity_id)
+    activity = await db.activities.find_one({"_id": obj_id})
+    if not activity:
+        raise HTTPException(status_code=404, detail="生产活动不存在")
+
+    requirements = activity.get("equipment_requirements", [])
+    updated = False
+    for req in requirements:
+        if req.get("equipment_model") == payload.equipment_model:
+            req["count"] = payload.count
+            updated = True
+            break
+    if not updated:
+        requirements.append({"equipment_model": payload.equipment_model, "count": payload.count})
+
+    await db.activities.update_one(
+        {"_id": obj_id},
+        {"$set": {"equipment_requirements": requirements, "updated_at": datetime.utcnow()}},
+    )
+    latest = await db.activities.find_one({"_id": obj_id})
+    latest["_id"] = str(latest["_id"])
+    return _normalize_activity_for_response(latest)
+
+
+@router.delete("/{activity_id}/equipment/{model}", response_model=ActivityResponse)
+async def remove_equipment_requirement(activity_id: str, model: str):
+    db = get_database()
+    obj_id = _parse_activity_object_id(activity_id)
+    activity = await db.activities.find_one({"_id": obj_id})
+    if not activity:
+        raise HTTPException(status_code=404, detail="生产活动不存在")
+
+    requirements = activity.get("equipment_requirements", [])
+    new_requirements = [req for req in requirements if req.get("equipment_model") != model]
+    if len(new_requirements) == len(requirements):
+        raise HTTPException(status_code=404, detail="设备需求不存在")
+
+    await db.activities.update_one(
+        {"_id": obj_id},
+        {"$set": {"equipment_requirements": new_requirements, "updated_at": datetime.utcnow()}},
+    )
+    latest = await db.activities.find_one({"_id": obj_id})
+    latest["_id"] = str(latest["_id"])
+    return _normalize_activity_for_response(latest)
+
+
+@router.post("/{activity_id}/materials", response_model=ActivityResponse)
+async def add_material_requirement(activity_id: str, payload: MaterialRequirementPayload):
+    db = get_database()
+    obj_id = _parse_activity_object_id(activity_id)
+    activity = await db.activities.find_one({"_id": obj_id})
+    if not activity:
+        raise HTTPException(status_code=404, detail="生产活动不存在")
+
+    requirements = activity.get("material_requirements", [])
+    updated = False
+    for req in requirements:
+        if req.get("material_model") == payload.material_model:
+            req["hourly_consumption_rate"] = payload.hourly_consumption_rate
+            if payload.unit is not None:
+                req["unit"] = payload.unit
+            updated = True
+            break
+    if not updated:
+        requirements.append(
+            {
+                "material_model": payload.material_model,
+                "hourly_consumption_rate": payload.hourly_consumption_rate,
+                "unit": payload.unit or "",
+            }
+        )
+
+    await db.activities.update_one(
+        {"_id": obj_id},
+        {"$set": {"material_requirements": requirements, "updated_at": datetime.utcnow()}},
+    )
+    latest = await db.activities.find_one({"_id": obj_id})
+    latest["_id"] = str(latest["_id"])
+    return _normalize_activity_for_response(latest)
+
+
+@router.delete("/{activity_id}/materials/{material_model}", response_model=ActivityResponse)
+async def remove_material_requirement(activity_id: str, material_model: str):
+    db = get_database()
+    obj_id = _parse_activity_object_id(activity_id)
+    activity = await db.activities.find_one({"_id": obj_id})
+    if not activity:
+        raise HTTPException(status_code=404, detail="生产活动不存在")
+
+    requirements = activity.get("material_requirements", [])
+    new_requirements = [req for req in requirements if req.get("material_model") != material_model]
+    if len(new_requirements) == len(requirements):
+        raise HTTPException(status_code=404, detail="原料需求不存在")
+
+    await db.activities.update_one(
+        {"_id": obj_id},
+        {"$set": {"material_requirements": new_requirements, "updated_at": datetime.utcnow()}},
+    )
+    latest = await db.activities.find_one({"_id": obj_id})
+    latest["_id"] = str(latest["_id"])
+    return _normalize_activity_for_response(latest)
 
 @router.put("/{activity_id}", response_model=ActivityResponse)
 async def update_activity(activity_id: str, activity: ActivityUpdate):

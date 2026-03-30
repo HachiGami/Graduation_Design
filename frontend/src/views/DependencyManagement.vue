@@ -3,7 +3,7 @@
     <el-card class="fullscreen-container">
       <template #header>
         <div class="card-header">
-          <span>生产流程依赖与资源关联视图</span>
+          <span>节点关联视图</span>
           <div class="header-actions">
             <el-button @click="loadGraphData" :icon="'Refresh'">刷新</el-button>
             <el-button type="primary" @click="handleAddDependency" :icon="'Plus'">添加依赖</el-button>
@@ -402,11 +402,15 @@ const router = useRouter()
 // 当前选择的流程
 const currentDomain = ref<string>('')
 const currentProcessId = ref<string>('')
+const highlightDomainFromQuery = ref<string>('')
+const focusActivityFromQuery = ref<string>('')
 
 // 从URL读取初始值
 const initFromUrl = () => {
   const domain = route.query.domain as string
   const processId = route.query.process_id as string
+  const highlightDomain = route.query.highlightDomain as string
+  const focusActivity = route.query.focusActivity as string
   
   if (domain) {
     currentDomain.value = domain
@@ -414,6 +418,8 @@ const initFromUrl = () => {
   if (processId) {
     currentProcessId.value = processId
   }
+  highlightDomainFromQuery.value = highlightDomain || ''
+  focusActivityFromQuery.value = focusActivity || ''
 }
 
 // 更新URL参数
@@ -610,6 +616,29 @@ const clearFlowHighlight = () => {
 // 清除仪表盘高亮
 const clearDashboardHighlight = () => {
   dashboardHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+  updateHighlightUnion()
+}
+
+const applyRouteFocusHighlight = () => {
+  const focusId = focusActivityFromQuery.value
+  const domain = highlightDomainFromQuery.value
+  if (!focusId && !domain) return
+
+  if (domain) {
+    currentDomain.value = domain
+  }
+
+  if (!focusId) return
+  const node = graphData.value.nodes.find((item: any) => item.id === focusId)
+  if (node) {
+    if (node.domain) currentDomain.value = node.domain
+    if (node.process_id) currentProcessId.value = node.process_id
+  }
+
+  dashboardHighlightSet.value = {
+    nodeIds: new Set([focusId]),
+    edgeIds: new Set()
+  }
   updateHighlightUnion()
 }
 
@@ -1089,8 +1118,8 @@ const handleDeletePersonnel = async () => {
 
 onMounted(async () => {
   initFromUrl()
-  
   await loadGlobalGraphData()
+  applyRouteFocusHighlight()
   
   if (currentDomain.value && currentProcessId.value) {
     await loadActivities()
@@ -1103,6 +1132,16 @@ onMounted(async () => {
 watch([currentDomain, currentProcessId], async () => {
   await loadRiskList()
 })
+
+watch(
+  () => [route.query.highlightDomain, route.query.focusActivity],
+  async () => {
+    highlightDomainFromQuery.value = (route.query.highlightDomain as string) || ''
+    focusActivityFromQuery.value = (route.query.focusActivity as string) || ''
+    await loadGlobalGraphData()
+    applyRouteFocusHighlight()
+  }
+)
 </script>
 
 <style scoped>

@@ -89,6 +89,11 @@ export interface SOPStep {
   duration: number
 }
 
+export interface TimeWindow {
+  start_time: string
+  end_time: string
+}
+
 export interface Activity {
   id?: string
   name: string
@@ -105,6 +110,7 @@ export interface Activity {
   process_id: string
   version?: number
   is_active?: boolean
+  working_hours?: TimeWindow[]
   created_at?: string
   updated_at?: string
   material_requirements?: MaterialRequirement[]
@@ -130,7 +136,8 @@ export interface Asset {
 // 资源需求类型
 export interface MaterialRequirement {
   material_model: string
-  consumption_rate_per_day: number
+  hourly_consumption_rate: number
+  consumption_rate_per_day?: number
   unit: string
 }
 

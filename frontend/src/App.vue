@@ -10,10 +10,10 @@
           active-text-color="#ffd04b"
         >
           <el-menu-item index="/">
-            <span>数据面板</span>
+            <span>活动管理面板</span>
           </el-menu-item>
           <el-menu-item index="/dependencies">
-            <span>生产流程依赖与资源关联视图</span>
+            <span>节点关联视图</span>
           </el-menu-item>
         </el-menu>
       </el-aside>

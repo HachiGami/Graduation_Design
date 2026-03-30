@@ -2,11 +2,16 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 from datetime import datetime
 from bson import ObjectId
+from pydantic import BaseModel, Field
 
 from ..database import get_database, get_neo4j_driver
 from ..schemas.asset import AssetCreate, AssetUpdate, AssetResponse
 
 router = APIRouter(prefix="/api/assets", tags=["资产管理"])
+
+
+class MaterialReplenishPayload(BaseModel):
+    added_quantity: float = Field(..., gt=0, description="补充数量")
 
 @router.post("", response_model=AssetResponse)
 async def create_asset(asset: AssetCreate):
@@ -261,3 +266,45 @@ async def release_asset(
         print(f"Neo4j关系删除失败: {e}")
     
     return {"message": "释放成功"}
+
+
+@router.put("/materials/{material_model}/replenish")
+async def replenish_material_stock(material_model: str, payload: MaterialReplenishPayload):
+    """补充原料库存"""
+    db = get_database()
+    driver = get_neo4j_driver()
+
+    material = await db.assets.find_one(
+        {"asset_type": "material", "model": material_model}
+    )
+    if not material:
+        raise HTTPException(status_code=404, detail="未找到对应原料型号")
+
+    material_id = str(material["_id"])
+    old_quantity = float(material.get("quantity") or 0.0)
+    new_quantity = old_quantity + float(payload.added_quantity)
+
+    await db.assets.update_one(
+        {"_id": material["_id"]},
+        {"$set": {"quantity": new_quantity, "updated_at": datetime.utcnow()}}
+    )
+
+    # 同步 Neo4j 的原料库存
+    try:
+        async with driver.session() as session:
+            await session.run(
+                """
+                MATCH (m:Material {id: $id})
+                SET m.quantity = $quantity
+                """,
+                {"id": material_id, "quantity": new_quantity},
+            )
+    except Exception as e:
+        print(f"Neo4j同步失败: {e}")
+
+    return {
+        "message": "补货成功",
+        "material_model": material_model,
+        "added_quantity": payload.added_quantity,
+        "new_quantity": new_quantity
+    }

@@ -1,5 +1,5 @@
 import request from './request'
-import type { Activity, ActivityDetails } from '@/types'
+import type { Activity, ActivityDetails, EquipmentRequirement, MaterialRequirement, PersonnelRequirement } from '@/types'
 
 export const getActivities = (params: { domain: string, process_id?: string }) => {
   return request.get<any, Activity[]>('/activities', { params })
@@ -31,6 +31,32 @@ export const batchUpdateStatus = (domain: string, processId: string, newStatus: 
   })
 }
 
+export const addActivityPersonnelRequirement = (activityId: string, data: PersonnelRequirement) => {
+  return request.post<any, Activity>(`/activities/${activityId}/personnel`, data)
+}
+
+export const removeActivityPersonnelRequirement = (activityId: string, role: string) => {
+  return request.delete<any, Activity>(`/activities/${activityId}/personnel/${encodeURIComponent(role)}`)
+}
+
+export const addActivityEquipmentRequirement = (activityId: string, data: EquipmentRequirement) => {
+  return request.post<any, Activity>(`/activities/${activityId}/equipment`, data)
+}
+
+export const removeActivityEquipmentRequirement = (activityId: string, model: string) => {
+  return request.delete<any, Activity>(`/activities/${activityId}/equipment/${encodeURIComponent(model)}`)
+}
+
+export const addActivityMaterialRequirement = (
+  activityId: string,
+  data: Pick<MaterialRequirement, 'material_model' | 'hourly_consumption_rate' | 'unit'>
+) => {
+  return request.post<any, Activity>(`/activities/${activityId}/materials`, data)
+}
+
+export const removeActivityMaterialRequirement = (activityId: string, materialModel: string) => {
+  return request.delete<any, Activity>(`/activities/${activityId}/materials/${encodeURIComponent(materialModel)}`)
+}
 
 
 

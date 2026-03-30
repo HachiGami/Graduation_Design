@@ -32,3 +32,9 @@ export const releaseAsset = (activityId: string, assetId: string) => {
     params: { activity_id: activityId, asset_id: assetId }
   })
 }
+
+export const replenishMaterialStock = (materialModel: string, addedQuantity: number) => {
+  return request.put(`/assets/materials/${encodeURIComponent(materialModel)}/replenish`, {
+    added_quantity: addedQuantity
+  })
+}

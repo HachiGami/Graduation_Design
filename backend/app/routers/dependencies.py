@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
-from datetime import datetime
 from bson import ObjectId
 
 from ..database import get_database, get_neo4j_driver
@@ -200,7 +199,6 @@ async def get_graph_data(
     """
     driver = get_neo4j_driver()
     db = get_database()
-    
     try:
         edges = []
         activity_ids = set()

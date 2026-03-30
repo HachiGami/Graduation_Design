@@ -11,6 +11,7 @@ const router = createRouter({
     {
       path: '/dependencies',
       name: 'Dependencies',
+      // 支持 query 参数: highlightDomain, focusActivity
       component: () => import('@/views/DependencyManagement.vue')
     }
   ]
