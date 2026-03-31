@@ -5,7 +5,7 @@
         <div class="header-left">
           <span class="name">{{ personnel.name }}</span>
           <el-tag size="small" type="info" class="ml-2">{{ personnel.role }}</el-tag>
-          <el-tag size="small" type="warning" class="ml-2" v-if="personnel.responsibility">{{ personnel.responsibility }}</el-tag>
+          <el-tag size="small" type="warning" class="ml-2" v-if="personnel.department">{{ personnel.department }}</el-tag>
           <el-tag size="small" :type="personnel.status === 'active' ? 'success' : 'info'" class="ml-2">
             {{ personnel.status === 'active' ? '在职' : '离职' }}
           </el-tag>

@@ -20,6 +20,7 @@ export interface Personnel {
   id?: string
   name: string
   role: string
+  department?: string
   responsibility: string
   skills: string[]
   work_hours: string

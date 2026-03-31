@@ -44,6 +44,7 @@ class PersonnelResponse(BaseModel):
     id: str = Field(..., alias="_id")
     name: str
     role: str
+    department: Optional[str] = Field(None, description="所属部门")
     responsibility: Optional[str] = Field(None, description="职责")
     skills: Optional[List[str]] = Field(default=[], description="技能列表")
     work_hours: Optional[str] = Field(None, description="工作时间")

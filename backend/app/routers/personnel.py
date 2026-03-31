@@ -12,6 +12,7 @@ def _normalize_personnel_for_response(personnel: dict) -> dict:
     now = datetime.utcnow()
     personnel.setdefault("name", "未知人员")
     personnel.setdefault("role", "操作员")
+    personnel.setdefault("department", None)
     personnel.setdefault("responsibility", personnel.get("department") or "")
     personnel.setdefault("skills", [])
     personnel.setdefault("work_hours", "")

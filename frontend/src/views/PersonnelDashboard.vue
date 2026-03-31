@@ -37,7 +37,7 @@
 
         <div class="filter-item">
           <span class="label">部门:</span>
-          <el-select v-model="filters.responsibility" placeholder="全部" clearable style="width: 150px">
+          <el-select v-model="filters.department" placeholder="全部" clearable style="width: 150px">
             <el-option label="全部(ALL)" value="" />
             <el-option v-for="dept in uniqueDepartments" :key="dept" :label="dept" :value="dept" />
           </el-select>
@@ -105,7 +105,7 @@ const filters = ref({
   role: '',
   gender: '',
   status: '',
-  responsibility: '',
+  department: '',
   education: ''
 })
 
@@ -127,7 +127,7 @@ const uniqueRoles = computed(() => {
   return Array.from(roles)
 })
 const uniqueDepartments = computed(() => {
-  const depts = new Set(rawPersonnelList.value.map(p => p.responsibility).filter(Boolean))
+  const depts = new Set(rawPersonnelList.value.map(p => p.department).filter(Boolean))
   return Array.from(depts)
 })
 const uniqueEducations = computed(() => {
@@ -155,8 +155,8 @@ const filteredAndSortedPersonnel = computed(() => {
   if (filters.value.status) {
     result = result.filter(p => p.status === filters.value.status)
   }
-  if (filters.value.responsibility) {
-    result = result.filter(p => p.responsibility === filters.value.responsibility)
+  if (filters.value.department) {
+    result = result.filter(p => p.department === filters.value.department)
   }
   if (filters.value.education) {
     result = result.filter(p => p.education === filters.value.education)
