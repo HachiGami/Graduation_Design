@@ -78,33 +78,8 @@
         <el-form-item label="原料名称">
           <el-input v-model="editForm.name" />
         </el-form-item>
-        <el-form-item label="规格">
-          <el-input v-model="editForm.specification" />
-        </el-form-item>
-        <el-form-item label="供应商">
-          <el-input v-model="editForm.supplier" />
-        </el-form-item>
-        <el-form-item label="生产厂家">
-          <el-input v-model="editForm.manufacturer" />
-        </el-form-item>
         <el-form-item label="单位">
           <el-input v-model="editForm.unit" />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-input v-model="editForm.status" />
-        </el-form-item>
-        <el-form-item label="流程域">
-          <el-input v-model="editForm.domain" />
-        </el-form-item>
-        <el-form-item label="流程ID">
-          <el-select v-model="editForm.process_id" placeholder="选择流程" clearable style="width: 100%">
-            <el-option
-              v-for="(name, id) in processMap"
-              :key="id"
-              :label="`${id} - ${name}`"
-              :value="id"
-            />
-          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -125,11 +100,16 @@ import MaterialAccordionItem from '../components/MaterialAccordionItem.vue';
 import axios from 'axios';
 
 const processMap: Record<string, string> = {
-  'P001': '主生产线', 'P002': '副生产线',
-  'Q001': '常规质检', 'Q002': '专项质检',
-  'S001': '线上销售', 'S002': '线下销售',
-  'W001': '主仓库', 'W002': '分仓库',
-  'T001': '主运输线', 'T002': '副运输线'
+  'P001': '主生产线',
+  'P002': '副生产线',
+  'T001': '冷链运输',
+  'T002': '常温运输',
+  'S001': '线上销售',
+  'S002': '线下销售',
+  'Q001': '常规质检',
+  'Q002': '专项质检',
+  'W001': '主仓库',
+  'W002': '分仓库'
 };
 
 const materials = ref<any[]>([]);
@@ -153,13 +133,7 @@ const replenishForm = ref({
 
 const editForm = ref({
   name: '',
-  specification: '',
-  supplier: '',
-  manufacturer: '',
-  unit: '',
-  status: '',
-  domain: '',
-  process_id: ''
+  unit: ''
 });
 
 const fetchMaterials = async () => {
@@ -198,7 +172,7 @@ const processedMaterials = computed(() => {
 
   // 3. Process Filter
   if (processFilter.value) {
-    result = result.filter(m => m.process_id === processFilter.value);
+    result = result.filter(m => m.serving_processes && m.serving_processes.includes(processFilter.value));
   }
 
   // 4. Sort
@@ -244,13 +218,7 @@ const openEditDialog = (material: any) => {
   currentMaterial.value = material;
   editForm.value = {
     name: material.name || '',
-    specification: material.specification || '',
-    supplier: material.supplier || '',
-    manufacturer: material.manufacturer || '',
-    unit: material.unit || '',
-    status: material.status || '',
-    domain: material.domain || '',
-    process_id: material.process_id || ''
+    unit: material.unit || ''
   };
   editDialogVisible.value = true;
 };

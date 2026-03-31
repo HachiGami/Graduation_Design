@@ -4,14 +4,21 @@
       <template #header>
         <div class="toolbar">
           <span class="toolbar-title">数据管理面板</span>
-          <el-select v-model="selectedFilter" style="width: 320px">
-            <el-option
-              v-for="item in processOptions"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
+          <div class="filter-group">
+            <el-select v-model="selectedProcessId" placeholder="流程筛选" style="width: 200px;" class="mr-4">
+              <el-option
+                v-for="item in processOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+            <el-select v-model="selectedFilter" style="width: 200px">
+              <el-option label="全部状态" value="ALL" />
+              <el-option label="待机" value="pending" />
+              <el-option label="进行中" value="in_progress" />
+            </el-select>
+          </div>
         </div>
       </template>
 
@@ -36,59 +43,61 @@ import ActivityAccordionItem from '@/components/ActivityAccordionItem.vue'
 const DOMAIN_LIST = ['production', 'transport', 'sales', 'quality', 'warehouse']
 const activities = ref<Activity[]>([])
 const selectedFilter = ref('ALL')
+const selectedProcessId = ref('ALL')
+
+const processMap: Record<string, string> = {
+  'P001': '主生产线',
+  'P002': '副生产线',
+  'T001': '冷链运输',
+  'T002': '常温运输',
+  'S001': '线上销售',
+  'S002': '线下销售',
+  'Q001': '常规质检',
+  'Q002': '专项质检',
+  'W001': '主仓库',
+  'W002': '分仓库'
+}
 
 /**
  * 格式化流程名称
- * @param processId 流程ID (如 P001)
+ * @param id 流程ID (如 P001)
  */
-const formatProcessName = (processId: string) => {
-  const mapping: Record<string, string> = {
-    P001: '主生产线',
-    P002: '副生产线',
-    T001: '冷链运输',
-    T002: '常温运输',
-    S001: '线上销售',
-    S002: '线下销售',
-    Q001: '常规质检',
-    Q002: '专项质检',
-    W001: '主仓库',
-    W002: '分仓库'
-  }
-  return mapping[processId] ? `${processId} - ${mapping[processId]}` : processId
+const formatProcessName = (id: string) => {
+  if (!id || id === 'ALL') return '全部流程'
+  return processMap[id] ? `${id} - ${processMap[id]}` : id
 }
 
 // 新增或替换下拉选项的计算属性
 const processOptions = computed(() => {
-  // 1. 提取所有的 process_id 并去重，排除空值和 domain
   const ids = new Set<string>()
   activities.value.forEach((act) => {
-    // 防御性处理：有些脏数据可能存成了 "production/P001"，这里只取纯 ID
-    const rawId = act.process_id
-    if (rawId) {
-      const cleanId = rawId.includes('/') ? rawId.split('/').pop() : rawId
-      if (cleanId && !cleanId.includes('production') && !cleanId.includes('transport')) {
-        ids.add(cleanId)
-      }
+    if (act.process_id) {
+      ids.add(act.process_id)
     }
   })
 
-  // 2. 构造下拉框需要的 label 和 value，强制使用 formatProcessName 翻译成中文
   const options = Array.from(ids).map((id) => ({
     value: id,
-    label: formatProcessName(id) // 这里会生成 "P001 - 主生产线" 这样的文本
+    label: formatProcessName(id)
   }))
 
-  // 3. 在最前面加上“全部”选项
   return [{ value: 'ALL', label: '全部流程' }, ...options]
 })
 
 const filteredActivities = computed(() => {
-  if (selectedFilter.value === 'ALL') return activities.value
-  return activities.value.filter((item) => {
-    const rawId = item.process_id
-    const cleanId = rawId?.includes('/') ? rawId.split('/').pop() : rawId
-    return cleanId === selectedFilter.value
-  })
+  let result = activities.value
+
+  // 1. 状态过滤
+  if (selectedFilter.value !== 'ALL') {
+    result = result.filter((item) => item.status === selectedFilter.value)
+  }
+
+  // 2. 流程 ID 过滤
+  if (selectedProcessId.value !== 'ALL') {
+    result = result.filter((item) => item.process_id === selectedProcessId.value)
+  }
+
+  return result
 })
 
 const loadAllActivities = async () => {
@@ -118,6 +127,15 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+}
+
+.mr-4 {
+  margin-right: 16px;
 }
 
 .toolbar-title {

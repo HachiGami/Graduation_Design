@@ -7,11 +7,12 @@ from bson import ObjectId
 
 router = APIRouter(prefix="/api/materials", tags=["原料管理"])
 
+
 def parse_working_hours(working_hours) -> float:
     total_hours = 0.0
     if not working_hours:
         return total_hours
-    
+
     if isinstance(working_hours, list):
         for period in working_hours:
             if isinstance(period, dict):
@@ -25,8 +26,7 @@ def parse_working_hours(working_hours) -> float:
                     except Exception:
                         pass
     elif isinstance(working_hours, str):
-        periods = working_hours.split(",")
-        for period in periods:
+        for period in working_hours.split(","):
             parts = period.strip().split("-")
             if len(parts) == 2:
                 try:
@@ -37,89 +37,87 @@ def parse_working_hours(working_hours) -> float:
                     pass
     return total_hours
 
+
 @router.get("", response_model=List[MaterialResponse])
 async def get_materials():
     db = get_database()
     driver = get_neo4j_driver()
-    
-    # 1. 查 Mongo 库存
-    materials_cursor = db.resources.find({"type": "原料"})
+
+    # 1. 从 MongoDB 获取所有原料
     materials = []
-    async for mat in materials_cursor:
+    names = []
+    async for mat in db.resources.find({"type": "原料"}):
         mat["_id"] = str(mat["_id"])
         materials.append(mat)
-        
-    # 2. 查 Mongo 活动时效
-    activities_cursor = db.activities.find({"status": {"$in": ["运行中", "in_progress"]}})
-    activities = {}
-    async for act in activities_cursor:
-        act_id = str(act["_id"])
-        daily_hours = parse_working_hours(act.get("working_hours"))
-        activities[act_id] = {
-            "name": act.get("name", "未知活动"),
-            "daily_hours": daily_hours
-        }
-        
-    # 3. 查 Neo4j 消耗率
-    # 查找所有运行中活动与原料的关联
-    active_activity_ids = list(activities.keys())
-    
-    consumption_map = {} # material_id -> list of {activity_id, hourly_consumption}
-    
-    if active_activity_ids:
+        if mat.get("name"):
+            names.append(mat["name"])
+
+    # 2. 从 Neo4j 动态查询关联活动（按实体名称匹配）
+    entity_activities_map: dict = {}
+
+    if names and driver:
         try:
             async with driver.session() as session:
-                result = await session.run("""
-                    MATCH (a:Activity)-[r]->(m:Resource)
-                    WHERE a.id IN $activity_ids AND (m.type = '原料' OR m.resource_type = 'RawMaterial')
-                    RETURN a.id AS activity_id, m.id AS material_id, r.hourly_consumption AS hourly_consumption
-                """, {"activity_ids": active_activity_ids})
-                
-                async for record in result:
-                    mat_id = record["material_id"]
-                    act_id = record["activity_id"]
-                    hc = record["hourly_consumption"]
-                    if hc is None:
-                        hc = 0.0
-                    else:
-                        hc = float(hc)
-                        
-                    if mat_id not in consumption_map:
-                        consumption_map[mat_id] = []
-                    consumption_map[mat_id].append({
-                        "activity_id": act_id,
-                        "hourly_consumption": hc
-                    })
+                result = await session.run(
+                    """
+                    MATCH (a:Activity)-[r]-(e)
+                    WHERE e.name IN $names
+                    RETURN e.name AS entity_name,
+                           a.name AS activity_name,
+                           r.hourly_consumption AS hourly_consumption
+                    """,
+                    {"names": names},
+                )
+                neo4j_records = await result.data()
+
+            activity_names = list({rec["activity_name"] for rec in neo4j_records if rec.get("activity_name")})
+
+            activities_mongo_map: dict = {}
+            if activity_names:
+                async for act in db.activities.find({"name": {"$in": activity_names}}):
+                    activities_mongo_map[act["name"]] = {
+                        "process_id": act.get("process_id", ""),
+                        "working_hours": act.get("working_hours", []),
+                    }
+
+            for rec in neo4j_records:
+                entity_name = rec.get("entity_name")
+                activity_name = rec.get("activity_name")
+                if not entity_name or not activity_name:
+                    continue
+
+                act_info = activities_mongo_map.get(activity_name, {})
+                process_id = act_info.get("process_id", "")
+                working_hours = act_info.get("working_hours", [])
+                hourly_consumption = float(rec.get("hourly_consumption") or 0.0)
+                total_hours = parse_working_hours(working_hours)
+                daily_consumption = round(hourly_consumption * total_hours, 4)
+
+                entity_activities_map.setdefault(entity_name, []).append(
+                    {
+                        "activity_name": activity_name,
+                        "process_id": process_id,
+                        "working_hours": working_hours,
+                        "hourly_consumption": hourly_consumption,
+                        "daily_consumption": daily_consumption,
+                    }
+                )
         except Exception as e:
             print(f"Neo4j查询失败: {e}")
 
-    # 4. 核心计算逻辑
+    # 3. 组装返回数据
     response_data = []
     for mat in materials:
-        mat_id = mat["_id"]
-        daily_consumption = 0.0
-        serving_activities = []
-        
-        if mat_id in consumption_map:
-            for usage in consumption_map[mat_id]:
-                act_id = usage["activity_id"]
-                hc = usage["hourly_consumption"]
-                act_info = activities.get(act_id)
-                if act_info:
-                    daily_consumption += hc * act_info["daily_hours"]
-                    serving_activities.append({
-                        "activity_name": act_info["name"],
-                        "hourly_consumption": hc
-                    })
-                    
+        mat_name = mat.get("name", "")
+        details = entity_activities_map.get(mat_name, [])
+        serving_processes = list({d["process_id"] for d in details if d["process_id"]})
+
+        total_daily_consumption = round(sum(d["daily_consumption"] for d in details), 4)
         quantity = float(mat.get("quantity", 0))
-        if daily_consumption > 0:
-            remaining_days = quantity / daily_consumption
-        else:
-            remaining_days = -1.0 # 表示充足
-            
+        remaining_days = round(quantity / total_daily_consumption, 2) if total_daily_consumption > 0 else -1.0
+
         mat_response = MaterialResponse(
-            _id=mat_id,
+            _id=mat["_id"],
             name=mat.get("name", ""),
             type=mat.get("type", "原料"),
             specification=mat.get("specification"),
@@ -128,71 +126,67 @@ async def get_materials():
             quantity=quantity,
             unit=mat.get("unit", ""),
             status=mat.get("status"),
-            domain=mat.get("domain"),
-            process_id=mat.get("process_id"),
-            daily_consumption=daily_consumption,
+            daily_consumption=total_daily_consumption,
             remaining_days=remaining_days,
-            serving_activities=serving_activities
+            serving_activities_details=details,
+            serving_processes=serving_processes,
         )
         response_data.append(mat_response)
-        
+
     return response_data
+
 
 @router.post("/{material_id}/add_stock", response_model=MaterialResponse)
 async def add_stock(material_id: str, payload: MaterialAddStock):
     db = get_database()
     obj_id = ObjectId(material_id)
-    
+
     material = await db.resources.find_one({"_id": obj_id, "type": "原料"})
     if not material:
         raise HTTPException(status_code=404, detail="原料不存在")
-        
+
     new_quantity = float(material.get("quantity", 0)) + payload.add_amount
-    
+
     await db.resources.update_one(
         {"_id": obj_id},
-        {"$set": {"quantity": new_quantity, "updated_at": datetime.utcnow()}}
+        {"$set": {"quantity": new_quantity, "updated_at": datetime.utcnow()}},
     )
-    
-    # 重新获取完整信息需要调用 get_materials 逻辑，但为了简化，这里只返回基础信息或重新计算
-    # 简单起见，直接返回基础信息，前端重新拉取列表
+
     updated_material = await db.resources.find_one({"_id": obj_id})
     updated_material["_id"] = str(updated_material["_id"])
-    
+
     return MaterialResponse(
         _id=updated_material["_id"],
         name=updated_material.get("name", ""),
         type=updated_material.get("type", "原料"),
         quantity=new_quantity,
         unit=updated_material.get("unit", ""),
-        daily_consumption=0.0, # 简化返回
+        daily_consumption=0.0,
         remaining_days=-1.0,
-        serving_activities=[]
+        serving_activities_details=[],
+        serving_processes=[],
     )
+
 
 @router.put("/{material_id}", response_model=MaterialResponse)
 async def update_material(material_id: str, payload: MaterialUpdate):
     db = get_database()
     obj_id = ObjectId(material_id)
-    
+
     material = await db.resources.find_one({"_id": obj_id, "type": "原料"})
     if not material:
         raise HTTPException(status_code=404, detail="原料不存在")
-        
+
     update_data = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="没有提供更新数据")
-        
+
     update_data["updated_at"] = datetime.utcnow()
-    
-    await db.resources.update_one(
-        {"_id": obj_id},
-        {"$set": update_data}
-    )
-    
+    await db.resources.update_one({"_id": obj_id}, {"$set": update_data})
+
     updated_material = await db.resources.find_one({"_id": obj_id})
     updated_material["_id"] = str(updated_material["_id"])
-    
+
     return MaterialResponse(
         _id=updated_material["_id"],
         name=updated_material.get("name", ""),
@@ -201,5 +195,6 @@ async def update_material(material_id: str, payload: MaterialUpdate):
         unit=updated_material.get("unit", ""),
         daily_consumption=0.0,
         remaining_days=-1.0,
-        serving_activities=[]
+        serving_activities_details=[],
+        serving_processes=[],
     )

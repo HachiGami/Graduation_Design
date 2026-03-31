@@ -12,8 +12,20 @@
             <div class="sub-row">工作时间：{{ workingHoursText }}</div>
           </div>
           <div class="header-right" @click.stop>
-            <el-button size="small" @click="openEditDialog">✏️修改活动</el-button>
-            <el-button type="primary" size="small" @click="locateInDependencyView">👁️在视图中定位</el-button>
+            <el-button 
+              v-if="localActivity.status === 'pending'" 
+              type="primary" 
+              size="small" 
+              @click="toggleActivityStatus"
+            >▶️ 启动</el-button>
+            <el-button 
+              v-else-if="localActivity.status === 'in_progress'" 
+              type="warning" 
+              size="small" 
+              @click="toggleActivityStatus"
+            >⏸️ 停机</el-button>
+            <el-button size="small" @click="openEditDialog">✏️修改</el-button>
+            <el-button type="primary" size="small" @click="locateInDependencyView">👁️视图</el-button>
           </div>
         </div>
       </template>
@@ -126,11 +138,8 @@
       <el-form-item label="活动描述"><el-input v-model="editForm.description" type="textarea" /></el-form-item>
       <el-form-item label="状态">
         <el-select v-model="editForm.status">
-          <el-option label="待处理" value="pending" />
+          <el-option label="待机" value="pending" />
           <el-option label="进行中" value="in_progress" />
-          <el-option label="已完成" value="completed" />
-          <el-option label="已暂停" value="paused" />
-          <el-option label="已取消" value="cancelled" />
         </el-select>
       </el-form-item>
       <el-form-item label="流程域"><el-input v-model="editForm.domain" /></el-form-item>
@@ -197,11 +206,8 @@ const workingHoursText = computed(() => {
 
 const statusText = (status: string) => {
   const map: Record<string, string> = {
-    pending: '待处理',
-    in_progress: '进行中',
-    completed: '已完成',
-    paused: '已暂停',
-    cancelled: '已取消'
+    pending: '待机',
+    in_progress: '进行中'
   }
   return map[status] || status
 }
@@ -209,12 +215,21 @@ const statusText = (status: string) => {
 const statusTagType = (status: string) => {
   const map: Record<string, '' | 'success' | 'warning' | 'danger' | 'info'> = {
     pending: 'info',
-    in_progress: 'warning',
-    completed: 'success',
-    paused: 'warning',
-    cancelled: 'danger'
+    in_progress: 'primary'
   }
   return map[status] || ''
+}
+
+const toggleActivityStatus = async () => {
+  if (!activityId.value) return
+  const newStatus = localActivity.value.status === 'pending' ? 'in_progress' : 'pending'
+  try {
+    await updateActivity(activityId.value, { status: newStatus })
+    ElMessage.success(`活动已${newStatus === 'in_progress' ? '启动' : '停机'}`)
+    await refreshActivityAndRisk()
+  } catch (error) {
+    ElMessage.error('操作失败')
+  }
 }
 
 const perDayToHourly = (perDay?: number) => {

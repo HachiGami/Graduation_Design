@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Literal
 from datetime import datetime
 
 class SOPStep(BaseModel):
@@ -33,7 +33,7 @@ class ActivityBase(BaseModel):
     estimated_duration: int = Field(..., description="预计时长（分钟）")
     duration_minutes: Optional[int] = Field(None, description="实际耗时（分钟）")
     deadline: Optional[datetime] = Field(None, description="截止时间")
-    status: str = Field(default="pending", description="状态")
+    status: Literal["pending", "in_progress"] = Field(default="pending", description="活动状态：pending(待机) 或 in_progress(进行中)")
     domain: str = Field(..., description="流程域")
     process_id: str = Field(..., description="流程实例ID")
     version: Optional[int] = Field(1, description="流程版本号")
@@ -62,7 +62,7 @@ class ActivityUpdate(BaseModel):
     estimated_duration: Optional[int] = None
     duration_minutes: Optional[int] = None
     deadline: Optional[datetime] = None
-    status: Optional[str] = None
+    status: Optional[Literal["pending", "in_progress"]] = None
     domain: Optional[str] = None
     process_id: Optional[str] = None
     version: Optional[int] = None

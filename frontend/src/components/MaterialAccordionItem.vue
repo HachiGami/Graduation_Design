@@ -32,17 +32,23 @@
           </div>
         </div>
         
-        <div class="activities-section" v-if="material.serving_activities && material.serving_activities.length > 0">
+        <div class="activities-section" v-if="material.serving_activities_details && material.serving_activities_details.length > 0">
           <div class="section-title">正在使用的活动:</div>
           <ul class="activity-list">
-            <li v-for="(act, index) in material.serving_activities" :key="index">
-              <span class="act-name">{{ act.activity_name }}</span>
-              <span class="act-rate">{{ act.hourly_consumption.toFixed(2) }} {{ material.unit }}/小时</span>
+            <li v-for="(detail, index) in material.serving_activities_details" :key="index">
+              <span class="act-name">
+                {{ detail.activity_name }}
+                <span class="act-process">(归属: {{ formatProcessName(detail.process_id) }})</span>
+              </span>
+              <span class="act-rate">
+                消耗速率: {{ detail.hourly_consumption.toFixed(2) }} {{ material.unit }}/小时,
+                共 {{ detail.daily_consumption.toFixed(1) }} {{ material.unit }}/天
+              </span>
             </li>
           </ul>
         </div>
         <div class="activities-section" v-else>
-          <div class="empty-text">当前没有活动正在使用该原料</div>
+          <div class="empty-text">无关联活动，空闲</div>
         </div>
         
         <div class="actions-section">
@@ -64,6 +70,30 @@ const props = defineProps({
     required: true
   }
 });
+
+const processMap: Record<string, string> = {
+  'P001': '主生产线',
+  'P002': '副生产线',
+  'T001': '冷链运输',
+  'T002': '常温运输',
+  'S001': '线上销售',
+  'S002': '线下销售',
+  'Q001': '常规质检',
+  'Q002': '专项质检',
+  'W001': '主仓库',
+  'W002': '分仓库'
+}
+
+const formatProcessName = (processId: string) => {
+  if (!processId) return '未知流程'
+  if (processMap[processId]) return `${processId} - ${processMap[processId]}`
+  const prefix = processId.charAt(0).toUpperCase()
+  const typeMap: Record<string, string> = {
+    'P': '生产流程', 'Q': '质检流程',
+    'S': '销售流程', 'W': '仓储流程', 'T': '运输流程'
+  }
+  return `${processId} - ${typeMap[prefix] || '未知流程'}`
+}
 
 const emit = defineEmits(['replenish', 'edit']);
 
@@ -184,10 +214,22 @@ const handleEdit = () => {
 
 .activity-list li {
   display: flex;
-  justify-content: space-between;
-  padding: 4px 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
   font-size: 13px;
   color: #606266;
+}
+
+.act-process {
+  font-size: 12px;
+  color: #909399;
+  margin-left: 4px;
+}
+
+.act-rate {
+  font-size: 12px;
+  color: #409eff;
 }
 
 .activity-list li:not(:last-child) {

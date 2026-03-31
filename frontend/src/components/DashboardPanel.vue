@@ -666,18 +666,18 @@ function handleClearHighlight() {
 
 function getProcessName(processId: string): string {
   const processMap: Record<string, string> = {
-    'P001': 'P001 - 主生产线',
-    'P002': 'P002 - 副生产线',
-    'T001': 'T001 - 冷链运输',
-    'T002': 'T002 - 常温运输',
-    'S001': 'S001 - 线上销售',
-    'S002': 'S002 - 线下销售',
-    'Q001': 'Q001 - 常规质检',
-    'Q002': 'Q002 - 专项质检',
-    'W001': 'W001 - 主仓库',
-    'W002': 'W002 - 分仓库'
+    'P001': '主生产线',
+    'P002': '副生产线',
+    'T001': '冷链运输',
+    'T002': '常温运输',
+    'S001': '线上销售',
+    'S002': '线下销售',
+    'Q001': '常规质检',
+    'Q002': '专项质检',
+    'W001': '主仓库',
+    'W002': '分仓库'
   }
-  return processMap[processId] || processId
+  return processMap[processId] ? `${processId} - ${processMap[processId]}` : processId
 }
 
 function getActivityName(actId: string): string {

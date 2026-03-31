@@ -44,21 +44,28 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <div class="serving-activities" v-if="equipment.serving_activities && equipment.serving_activities.length > 0">
+        <div class="serving-activities-block" v-if="equipment.serving_activities_details && equipment.serving_activities_details.length > 0">
           <span class="label">正在服务活动：</span>
-          <el-tag 
-            v-for="activity in equipment.serving_activities" 
-            :key="activity" 
-            size="small" 
-            type="success" 
-            class="activity-tag"
+          <div
+            v-for="(detail, index) in equipment.serving_activities_details"
+            :key="index"
+            class="activity-detail-row"
           >
-            {{ activity }}
-          </el-tag>
+            <el-tag size="small" type="success" class="activity-name-tag">
+              {{ detail.activity_name }}
+            </el-tag>
+            <span class="activity-meta">
+              归属: {{ formatProcessName(detail.process_id) }}
+            </span>
+            <span class="activity-hours" v-if="detail.working_hours && detail.working_hours.length > 0">
+              | 运行时间:
+              {{ detail.working_hours.map((wh: any) => `${wh.start_time}-${wh.end_time}`).join(', ') }}
+            </span>
+          </div>
         </div>
         <div class="serving-activities empty" v-else>
           <span class="label">正在服务活动：</span>
-          <span class="empty-text">无关联活动，安全</span>
+          <span class="empty-text">无关联活动，空闲</span>
         </div>
       </div>
     </el-collapse-item>
@@ -169,6 +176,30 @@ const getStatusLabel = (status: string) => {
   return map[status] || status
 }
 
+const processMap: Record<string, string> = {
+  'P001': '主生产线',
+  'P002': '副生产线',
+  'T001': '冷链运输',
+  'T002': '常温运输',
+  'S001': '线上销售',
+  'S002': '线下销售',
+  'Q001': '常规质检',
+  'Q002': '专项质检',
+  'W001': '主仓库',
+  'W002': '分仓库'
+}
+
+const formatProcessName = (processId: string) => {
+  if (!processId) return '未知流程'
+  if (processMap[processId]) return `${processId} - ${processMap[processId]}`
+  const prefix = processId.charAt(0).toUpperCase()
+  const typeMap: Record<string, string> = {
+    'P': '生产流程', 'Q': '质检流程',
+    'S': '销售流程', 'W': '仓储流程', 'T': '运输流程'
+  }
+  return `${processId} - ${typeMap[prefix] || '未知流程'}`
+}
+
 const openEditModal = () => {
   editForm.name = props.equipment.name || ''
   editForm.specification = props.equipment.specification || ''
@@ -241,17 +272,43 @@ const submitEdit = async () => {
   padding: 0 16px 16px;
 }
 
-.serving-activities {
+.serving-activities-block {
   margin-top: 16px;
+}
+
+.serving-activities.empty {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-detail-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  margin-top: 6px;
+}
+
+.activity-name-tag {
+  flex-shrink: 0;
+}
+
+.activity-meta {
+  font-size: 12px;
+  color: #606266;
+}
+
+.activity-hours {
+  font-size: 12px;
+  color: #409eff;
 }
 
 .label {
   font-size: 13px;
   color: #606266;
+  font-weight: 500;
 }
 
 .empty-text {

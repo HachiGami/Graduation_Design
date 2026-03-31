@@ -5,9 +5,8 @@
       <el-button @click="fitToView" :icon="'FullScreen'">适配视图</el-button>
       <div class="status-legend">
         <span class="legend-title">状态图例：</span>
-        <span class="legend-item"><span class="legend-circle pending"></span>待开始</span>
+        <span class="legend-item"><span class="legend-circle pending"></span>待机</span>
         <span class="legend-item"><span class="legend-circle in-progress"></span>进行中</span>
-        <span class="legend-item"><span class="legend-circle completed"></span>已完成</span>
       </div>
       <el-text type="info" size="small" style="margin-left: 10px;">左键查看详情 | 右键展开资源/人员</el-text>
     </div>
@@ -162,32 +161,29 @@ const getDomainName = (domain: string) => {
 
 const getProcessName = (processId: string) => {
   const processMap: Record<string, string> = {
-    'P001': 'P001 - 主生产线',
-    'P002': 'P002 - 副生产线',
-    'T001': 'T001 - 冷链运输',
-    'T002': 'T002 - 常温运输',
-    'S001': 'S001 - 线上销售',
-    'S002': 'S002 - 线下销售',
-    'Q001': 'Q001 - 常规质检',
-    'Q002': 'Q002 - 专项质检',
-    'W001': 'W001 - 主仓库',
-    'W002': 'W002 - 分仓库'
+    'P001': '主生产线',
+    'P002': '副生产线',
+    'T001': '冷链运输',
+    'T002': '常温运输',
+    'S001': '线上销售',
+    'S002': '线下销售',
+    'Q001': '常规质检',
+    'Q002': '专项质检',
+    'W001': '主仓库',
+    'W002': '分仓库'
   }
-  return processMap[processId] || processId
+  return processMap[processId] ? `${processId} - ${processMap[processId]}` : processId
 }
 
 const getStatusName = (status: string) => {
   const statusMap: Record<string, string> = {
-    'pending': '待处理',
-    'in_progress': '进行中',
-    'completed': '已完成',
-    'paused': '已暂停',
-    'cancelled': '已取消',
-    'available': '可用',
-    'in_use': '使用中',
-    'maintenance': '维护中',
-    'active': '活跃',
-    'inactive': '非活跃'
+    pending: '待机',
+    in_progress: '进行中',
+    available: '可用',
+    in_use: '使用中',
+    maintenance: '维护中',
+    active: '活跃',
+    inactive: '非活跃'
   }
   return statusMap[status] || status
 }
@@ -323,12 +319,6 @@ const initCytoscape = async () => {
         selector: 'node.status-in_progress',
         style: {
           'background-color': '#409EFF'
-        }
-      },
-      {
-        selector: 'node.status-completed',
-        style: {
-          'background-color': '#67C23A'
         }
       },
       {
@@ -667,24 +657,20 @@ const fitToView = () => {
   }
 }
 
-watch([() => props.highlightActive, () => props.highlightSet], ([active]) => {
+const applyCurrentHighlight = () => {
   if (!cy) return
+  const hasHighlight = props.highlightActive && props.highlightSet &&
+    (props.highlightSet.nodeIds.size > 0 || props.highlightSet.edgeIds.size > 0)
 
-  // 如果highlightActive为false，或者highlightSet为空，则恢复全亮状态
-  const hasHighlight = active && props.highlightSet && (props.highlightSet.nodeIds.size > 0 || props.highlightSet.edgeIds.size > 0)
-  
   if (hasHighlight) {
     cy.elements().removeClass('highlighted')
     cy.elements().addClass('dimmed')
-    
     props.highlightSet.nodeIds.forEach(nodeId => {
       cy.$id(nodeId).removeClass('dimmed').addClass('highlighted')
     })
-    
     props.highlightSet.edgeIds.forEach(edgeId => {
       cy.$id(edgeId).removeClass('dimmed').addClass('highlighted')
     })
-
     const highlightedElements = cy.$('.highlighted')
     if (highlightedElements.length > 0) {
       const currentZoom = cy.zoom()
@@ -698,6 +684,11 @@ watch([() => props.highlightActive, () => props.highlightSet], ([active]) => {
   } else {
     cy.elements().removeClass('dimmed highlighted')
   }
+}
+
+watch([() => props.highlightActive, () => props.highlightSet], () => {
+  if (!cy) return
+  applyCurrentHighlight()
 }, { immediate: true })
 
 watch(() => props.data, async () => {
@@ -707,6 +698,7 @@ watch(() => props.data, async () => {
   }
   await nextTick()
   await initCytoscape()
+  applyCurrentHighlight()
 }, { deep: true })
 
 onMounted(async () => {
@@ -778,10 +770,6 @@ onUnmounted(() => {
 
 .legend-circle.in-progress {
   background-color: #409EFF;
-}
-
-.legend-circle.completed {
-  background-color: #67C23A;
 }
 
 .graph-wrapper {

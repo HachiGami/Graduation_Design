@@ -51,6 +51,15 @@
           </el-select>
         </div>
 
+        <!-- 流程筛选 -->
+        <div class="filter-item">
+          <span class="label">流程:</span>
+          <el-select v-model="filters.process" placeholder="全部" clearable style="width: 150px">
+            <el-option label="全部(ALL)" value="" />
+            <el-option v-for="(name, id) in processMap" :key="id" :label="formatProcessName(id)" :value="id" />
+          </el-select>
+        </div>
+
         <!-- 复合排序 -->
         <div class="filter-item">
           <span class="label">排序:</span>
@@ -215,8 +224,27 @@ const filters = ref({
   gender: '',
   status: '',
   department: '',
-  education: ''
+  education: '',
+  process: ''
 })
+
+// 流程映射字典
+const processMap: Record<string, string> = {
+  'P001': '主生产线',
+  'P002': '副生产线',
+  'T001': '冷链运输',
+  'T002': '常温运输',
+  'S001': '线上销售',
+  'S002': '线下销售',
+  'Q001': '常规质检',
+  'Q002': '专项质检',
+  'W001': '主仓库',
+  'W002': '分仓库'
+};
+const formatProcessName = (id: string) => {
+  if (!id || id === 'ALL') return '全部';
+  return processMap[id] ? `${id} - ${processMap[id]}` : id;
+};
 
 // 排序状态
 const sortBy = ref('NONE')
@@ -269,6 +297,9 @@ const filteredAndSortedPersonnel = computed(() => {
   }
   if (filters.value.education) {
     result = result.filter(p => p.education === filters.value.education)
+  }
+  if (filters.value.process) {
+    result = result.filter(p => p.serving_processes && p.serving_processes.includes(filters.value.process))
   }
 
   // 第三阶：动态排序

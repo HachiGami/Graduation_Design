@@ -59,18 +59,82 @@ async def create_personnel(personnel: PersonnelCreate):
     
     return personnel_dict
 
+def _parse_working_hours(working_hours) -> float:
+    total_hours = 0.0
+    if not working_hours:
+        return total_hours
+    if isinstance(working_hours, list):
+        for period in working_hours:
+            if isinstance(period, dict):
+                start = period.get("start_time")
+                end = period.get("end_time")
+                if start and end:
+                    try:
+                        fmt = "%H:%M"
+                        td = datetime.strptime(end, fmt) - datetime.strptime(start, fmt)
+                        total_hours += td.total_seconds() / 3600
+                    except Exception:
+                        pass
+    return total_hours
+
+
 @router.get("", response_model=List[PersonnelResponse])
 async def get_personnel():
     db = get_database()
+    driver = get_neo4j_driver()
+
     personnel_list = []
+    names = []
     try:
         cursor = db.personnel.find()
         async for personnel in cursor:
             personnel["_id"] = str(personnel["_id"])
-            personnel_list.append(_normalize_personnel_for_response(personnel))
-    except Exception as e:
+            _normalize_personnel_for_response(personnel)
+            personnel_list.append(personnel)
+            if personnel.get("name"):
+                names.append(personnel["name"])
+    except Exception:
         raise
-    
+
+    # 从 Neo4j 动态查询关联活动
+    entity_activities_map: dict = {}
+    if names and driver:
+        try:
+            async with driver.session() as session:
+                result = await session.run(
+                    """
+                    MATCH (a:Activity)-[]-(p:Personnel)
+                    WHERE p.name IN $names
+                    RETURN p.name AS entity_name,
+                           a.name AS activity_name,
+                           a.process_id AS process_id
+                    """,
+                    {"names": names},
+                )
+                neo4j_records = await result.data()
+
+            for rec in neo4j_records:
+                entity_name = rec.get("entity_name")
+                activity_name = rec.get("activity_name")
+                process_id = rec.get("process_id")
+                if not entity_name or not activity_name:
+                    continue
+
+                entity_activities_map.setdefault(entity_name, []).append(
+                    {
+                        "activity_name": activity_name,
+                        "process_id": process_id,
+                    }
+                )
+        except Exception as e:
+            print(f"Neo4j查询失败: {e}")
+
+    for person in personnel_list:
+        name = person.get("name", "")
+        details = entity_activities_map.get(name, [])
+        person["serving_activities_details"] = details
+        person["serving_processes"] = list({d["process_id"] for d in details if d["process_id"]})
+
     return personnel_list
 
 @router.get("/{personnel_id}", response_model=PersonnelResponse)
@@ -80,7 +144,10 @@ async def get_personnel_by_id(personnel_id: str):
     if not personnel:
         raise HTTPException(status_code=404, detail="人员不存在")
     personnel["_id"] = str(personnel["_id"])
-    return _normalize_personnel_for_response(personnel)
+    _normalize_personnel_for_response(personnel)
+    personnel.setdefault("serving_activities_details", [])
+    personnel.setdefault("serving_processes", [])
+    return personnel
 
 @router.put("/{personnel_id}", response_model=PersonnelResponse)
 async def update_personnel(personnel_id: str, personnel: PersonnelUpdate):
@@ -100,7 +167,9 @@ async def update_personnel(personnel_id: str, personnel: PersonnelUpdate):
     
     updated_personnel = await db.personnel.find_one({"_id": ObjectId(personnel_id)})
     updated_personnel["_id"] = str(updated_personnel["_id"])
-    
+    updated_personnel.setdefault("serving_activities_details", [])
+    updated_personnel.setdefault("serving_processes", [])
+
     # 同步到Neo4j：如果name更新了，同步更新；如果status变为resigned，删除分配关系
     if personnel.name or personnel.status == "resigned":
         try:

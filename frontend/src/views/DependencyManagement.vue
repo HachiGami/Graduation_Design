@@ -502,7 +502,6 @@ const updateHighlightUnion = () => {
     nodeIds = new Set(flowHighlightSet.value.nodeIds)
     edgeIds = new Set(flowHighlightSet.value.edgeIds)
   }
-  
   highlightSet.value = { nodeIds, edgeIds }
   highlightActive.value = nodeIds.size > 0 || edgeIds.size > 0
 }
@@ -597,6 +596,8 @@ const applyProcessHighlight = () => {
     return
   }
   
+  // 清除仪表盘高亮（如导航带来的 focusActivity），让流程高亮生效
+  dashboardHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
   flowHighlightSet.value = { nodeIds, edgeIds }
   updateHighlightUnion()
   
@@ -608,6 +609,8 @@ const clearFlowHighlight = () => {
   currentDomain.value = ''
   currentProcessId.value = ''
   flowHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+  // 同时清除仪表盘高亮，确保完全恢复全局视图
+  dashboardHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
   updateHighlightUnion()
   updateUrl()
   ElMessage.success('已恢复全局视图')
@@ -1136,10 +1139,16 @@ watch([currentDomain, currentProcessId], async () => {
 watch(
   () => [route.query.highlightDomain, route.query.focusActivity],
   async () => {
-    highlightDomainFromQuery.value = (route.query.highlightDomain as string) || ''
-    focusActivityFromQuery.value = (route.query.focusActivity as string) || ''
-    await loadGlobalGraphData()
-    applyRouteFocusHighlight()
+    const newHighlightDomain = (route.query.highlightDomain as string) || ''
+    const newFocusActivity = (route.query.focusActivity as string) || ''
+    highlightDomainFromQuery.value = newHighlightDomain
+    focusActivityFromQuery.value = newFocusActivity
+    // 只有在新参数非空时（真正从外部导航过来）才重载图，
+    // 避免 updateUrl() 清除参数时触发不必要的图重建并导致高亮丢失
+    if (newHighlightDomain || newFocusActivity) {
+      await loadGlobalGraphData()
+      applyRouteFocusHighlight()
+    }
   }
 )
 </script>

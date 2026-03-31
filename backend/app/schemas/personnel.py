@@ -60,6 +60,14 @@ class PersonnelResponse(BaseModel):
     salary: Optional[float] = Field(None, description="薪资(元/月)")
     created_at: datetime
     updated_at: datetime
+    serving_activities_details: Optional[List[dict]] = Field(
+        default=[],
+        description="动态从Neo4j计算出的服务活动详情"
+    )
+    serving_processes: Optional[List[str]] = Field(
+        default=[],
+        description="动态从Neo4j计算出的所涉流程ID数组"
+    )
 
     class Config:
         populate_by_name = True

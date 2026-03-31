@@ -93,15 +93,15 @@
             <el-table-column prop="specification" label="设备种类" width="150" />
             <el-table-column label="受影响的占用活动">
               <template #default="scope">
-                <template v-if="scope.row.serving_activities && scope.row.serving_activities.length > 0">
-                  <el-tag 
-                    v-for="activity in scope.row.serving_activities" 
-                    :key="activity"
+                <template v-if="scope.row.serving_activities_details && scope.row.serving_activities_details.length > 0">
+                  <el-tag
+                    v-for="detail in scope.row.serving_activities_details"
+                    :key="detail.activity_name"
                     type="danger"
                     size="small"
                     class="activity-tag"
                   >
-                    {{ activity }}
+                    {{ detail.activity_name }}
                   </el-tag>
                 </template>
                 <span v-else class="safe-text">无关联活动，安全</span>
@@ -134,14 +134,14 @@ const isMaintenanceModalVisible = ref(false)
 const processMap: Record<string, string> = {
   'P001': '主生产线',
   'P002': '副生产线',
-  'Q001': '常规质检',
-  'Q002': '专项质检',
+  'T001': '冷链运输',
+  'T002': '常温运输',
   'S001': '线上销售',
   'S002': '线下销售',
+  'Q001': '常规质检',
+  'Q002': '专项质检',
   'W001': '主仓库',
-  'W002': '分仓库',
-  'T001': '主运输线', 
-  'T002': '副运输线'
+  'W002': '分仓库'
 };
 
 // 格式化流程名称，包含兜底逻辑
@@ -202,13 +202,7 @@ const uniqueSpecs = computed(() => {
   return Array.from(specs)
 })
 
-const uniqueProcesses = computed(() => {
-  const processes = new Set<string>()
-  equipments.value.forEach(eq => {
-    if (eq.process_id) processes.add(eq.process_id)
-  })
-  return Array.from(processes)
-})
+const uniqueProcesses = computed(() => Object.keys(processMap))
 
 const processedEquipments = computed(() => {
   let result = [...equipments.value]
@@ -227,7 +221,7 @@ const processedEquipments = computed(() => {
     result = result.filter(eq => eq.specification === specFilter.value)
   }
   if (processFilter.value) {
-    result = result.filter(eq => eq.process_id === processFilter.value)
+    result = result.filter(eq => eq.serving_processes && eq.serving_processes.includes(processFilter.value))
   }
 
   // 3. 排序
@@ -298,8 +292,8 @@ const totalMaintenanceEquipments = computed(() => {
 const totalAffectedActivities = computed(() => {
   let count = 0
   maintenanceEquipments.value.forEach(eq => {
-    if (eq.serving_activities && eq.serving_activities.length > 0) {
-      count += eq.serving_activities.length
+    if (eq.serving_activities_details && eq.serving_activities_details.length > 0) {
+      count += eq.serving_activities_details.length
     }
   })
   return count

@@ -30,11 +30,13 @@
       </el-descriptions>
 
       <div class="tasks-section mt-3">
-        <h4>从事的工作 (分配的任务)</h4>
-        <el-empty v-if="!personnel.assigned_tasks || personnel.assigned_tasks.length === 0" description="暂无分配任务" :image-size="60"></el-empty>
-        <ul v-else>
-          <li v-for="(task, index) in personnel.assigned_tasks" :key="index">{{ task }}</li>
-        </ul>
+        <h4>从事的工作 (参与的活动)</h4>
+        <el-empty v-if="!personnel.serving_activities_details || personnel.serving_activities_details.length === 0" description="目前无分配任务，待命中" :image-size="60"></el-empty>
+        <div v-else class="flex flex-wrap gap-2 mt-2">
+          <el-tag v-for="(act, index) in personnel.serving_activities_details" :key="index" type="success" effect="light">
+            {{ act.activity_name }} (归属: {{ formatProcessName(act.process_id) }})
+          </el-tag>
+        </div>
       </div>
     </div>
 
@@ -112,6 +114,24 @@ const emit = defineEmits(['updated'])
 const editDialogVisible = ref(false)
 const submitting = ref(false)
 const editForm = ref<Partial<Personnel>>({})
+
+// 流程映射字典
+const processMap: Record<string, string> = {
+  'P001': '主生产线',
+  'P002': '副生产线',
+  'T001': '冷链运输',
+  'T002': '常温运输',
+  'S001': '线上销售',
+  'S002': '线下销售',
+  'Q001': '常规质检',
+  'Q002': '专项质检',
+  'W001': '主仓库',
+  'W002': '分仓库'
+};
+const formatProcessName = (id: string) => {
+  if (!id || id === 'ALL') return '全部';
+  return processMap[id] ? `${id} - ${processMap[id]}` : id;
+};
 
 const handleEdit = () => {
   editForm.value = { ...props.personnel }
