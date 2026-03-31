@@ -9,6 +9,11 @@ const router = createRouter({
       component: () => import('@/views/DataDashboard.vue')
     },
     {
+      path: '/personnel',
+      name: 'Personnel',
+      component: () => import('@/views/PersonnelDashboard.vue')
+    },
+    {
       path: '/dependencies',
       name: 'Dependencies',
       // 支持 query 参数: highlightDomain, focusActivity

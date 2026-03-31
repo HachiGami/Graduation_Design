@@ -14,6 +14,12 @@ class PersonnelBase(BaseModel):
         default=[],
         description="未来7天内的请假日期列表，不需要具体几月几号，标记几天后请假就可以",
     )
+    age: Optional[int] = Field(None, description="年龄")
+    gender: Optional[str] = Field(None, description="性别")
+    native_place: Optional[str] = Field(None, description="籍贯")
+    hire_date: Optional[str] = Field(None, description="入职日期 (YYYY-MM-DD)")
+    education: Optional[str] = Field(None, description="学历")
+    salary: Optional[float] = Field(None, description="薪资(元/月)")
 
 class PersonnelCreate(PersonnelBase):
     pass
@@ -27,6 +33,12 @@ class PersonnelUpdate(BaseModel):
     assigned_tasks: Optional[List[str]] = None
     status: Optional[str] = None
     upcoming_leaves: Optional[List[str]] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    native_place: Optional[str] = None
+    hire_date: Optional[str] = None
+    education: Optional[str] = None
+    salary: Optional[float] = None
 
 class PersonnelResponse(BaseModel):
     id: str = Field(..., alias="_id")
@@ -41,6 +53,12 @@ class PersonnelResponse(BaseModel):
         default=[],
         description="未来7天内的请假日期列表，不需要具体几月几号，标记几天后请假就可以",
     )
+    age: Optional[int] = Field(None, description="年龄")
+    gender: Optional[str] = Field(None, description="性别")
+    native_place: Optional[str] = Field(None, description="籍贯")
+    hire_date: Optional[str] = Field(None, description="入职日期 (YYYY-MM-DD)")
+    education: Optional[str] = Field(None, description="学历")
+    salary: Optional[float] = Field(None, description="薪资(元/月)")
     created_at: datetime
     updated_at: datetime
 

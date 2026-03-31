@@ -1,7 +1,7 @@
 import request from './request'
 import type { Personnel } from '@/types'
 
-export const getPersonnel = () => {
+export const getPersonnelList = () => {
   return request.get<any, Personnel[]>('/personnel')
 }
 

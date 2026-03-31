@@ -25,6 +25,13 @@ export interface Personnel {
   work_hours: string
   assigned_tasks: string[]
   status: string
+  upcoming_leaves?: string[]
+  age?: number
+  gender?: string
+  native_place?: string
+  hire_date?: string
+  education?: string
+  salary?: number
   created_at?: string
   updated_at?: string
 }

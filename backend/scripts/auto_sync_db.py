@@ -138,10 +138,10 @@ class AutoSyncDB:
             if not mongo_people:
                 now = datetime.utcnow()
                 seed_people = [
-                    {"name": "王强", "role": "操作员"},
-                    {"name": "李敏", "role": "操作员"},
-                    {"name": "赵工", "role": "维修工"},
-                    {"name": "陈洁", "role": "清洁工"},
+                    {"name": "王强", "role": "操作员", "age": 28, "gender": "男", "native_place": "山东", "hire_date": "2020-05-12", "education": "大专", "salary": 6500.0},
+                    {"name": "李敏", "role": "操作员", "age": 25, "gender": "女", "native_place": "江苏", "hire_date": "2021-08-20", "education": "本科", "salary": 7000.0},
+                    {"name": "赵工", "role": "维修工", "age": 45, "gender": "男", "native_place": "河南", "hire_date": "2015-03-10", "education": "高中", "salary": 8500.0},
+                    {"name": "陈洁", "role": "清洁工", "age": 50, "gender": "女", "native_place": "四川", "hire_date": "2018-11-05", "education": "初中", "salary": 4000.0},
                 ]
                 for seed in seed_people:
                     result = self.db.personnel.insert_one(
@@ -154,6 +154,12 @@ class AutoSyncDB:
                             "assigned_tasks": [],
                             "status": "active",
                             "upcoming_leaves": [],
+                            "age": seed["age"],
+                            "gender": seed["gender"],
+                            "native_place": seed["native_place"],
+                            "hire_date": seed["hire_date"],
+                            "education": seed["education"],
+                            "salary": seed["salary"],
                             "created_at": now,
                             "updated_at": now,
                         }
@@ -463,6 +469,12 @@ class AutoSyncDB:
                     "assigned_tasks": [],
                     "status": person.get("status") or "active",
                     "upcoming_leaves": upcoming_leaves,
+                    "age": person.get("age") or random.randint(20, 50),
+                    "gender": person.get("gender") or random.choice(["男", "女"]),
+                    "native_place": person.get("native_place") or random.choice(["北京", "上海", "广东", "江苏", "浙江", "四川", "湖北", "山东", "河南", "湖南"]),
+                    "hire_date": person.get("hire_date") or f"{random.randint(2015, 2023)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}",
+                    "education": person.get("education") or random.choice(["本科", "大专", "高中"]),
+                    "salary": person.get("salary") or round(random.uniform(4000, 15000), 2),
                     "updated_at": now,
                 }
                 self.db.personnel.update_one(

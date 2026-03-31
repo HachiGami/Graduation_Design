@@ -18,6 +18,12 @@ def _normalize_personnel_for_response(personnel: dict) -> dict:
     personnel.setdefault("assigned_tasks", [])
     personnel.setdefault("status", "active")
     personnel.setdefault("upcoming_leaves", [])
+    personnel.setdefault("age", None)
+    personnel.setdefault("gender", None)
+    personnel.setdefault("native_place", None)
+    personnel.setdefault("hire_date", None)
+    personnel.setdefault("education", None)
+    personnel.setdefault("salary", None)
     personnel.setdefault("created_at", personnel.get("updated_at") or now)
     personnel.setdefault("updated_at", personnel.get("created_at") or now)
     return personnel
@@ -94,19 +100,29 @@ async def update_personnel(personnel_id: str, personnel: PersonnelUpdate):
     updated_personnel = await db.personnel.find_one({"_id": ObjectId(personnel_id)})
     updated_personnel["_id"] = str(updated_personnel["_id"])
     
-    # 同步到Neo4j：如果name更新了，同步更新
-    if personnel.name:
-        neo4j_query = """
-        MATCH (p:Personnel {id: $personnel_id})
-        SET p.name = $name
-        RETURN p
-        """
+    # 同步到Neo4j：如果name更新了，同步更新；如果status变为resigned，删除分配关系
+    if personnel.name or personnel.status == "resigned":
         try:
             async with driver.session() as session:
-                await session.run(neo4j_query, {
-                    "personnel_id": personnel_id,
-                    "name": personnel.name
-                })
+                if personnel.name:
+                    neo4j_query_name = """
+                    MATCH (p:Personnel {id: $personnel_id})
+                    SET p.name = $name
+                    RETURN p
+                    """
+                    await session.run(neo4j_query_name, {
+                        "personnel_id": personnel_id,
+                        "name": personnel.name
+                    })
+                
+                if personnel.status == "resigned":
+                    neo4j_query_resign = """
+                    MATCH (p:Personnel {id: $personnel_id})-[r:ASSIGNED_TO]->()
+                    DELETE r
+                    """
+                    await session.run(neo4j_query_resign, {
+                        "personnel_id": personnel_id
+                    })
         except Exception as e:
             print(f"Neo4j同步失败: {e}")
     
