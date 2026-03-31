@@ -63,6 +63,14 @@
             />
           </el-select>
         </div>
+
+        <!-- 请假预警按钮 -->
+        <div class="filter-item ml-auto">
+          <el-button type="warning" @click="isLeaveModalVisible = true">
+            <i class="fas fa-calendar-alt mr-2"></i> 七天请假预警
+            <el-badge :value="leaveStats.total" class="ml-2" type="danger" />
+          </el-button>
+        </div>
       </div>
     </el-card>
 
@@ -86,6 +94,61 @@
         <el-empty v-else description="暂无符合条件的员工数据" />
       </div>
     </el-card>
+
+    <!-- 请假预警弹窗 -->
+    <el-dialog v-model="isLeaveModalVisible" title="未来7天请假与排班预警" width="70%" top="5vh">
+      <!-- 风险提示 Banner -->
+      <div class="bg-orange-50 border-l-4 border-orange-400 p-4 mb-6 rounded-r-md flex items-start">
+        <i class="fas fa-exclamation-triangle text-orange-400 mt-1 mr-3"></i>
+        <p class="text-sm text-orange-700">
+          未来 7 天内共有 <strong>{{ leaveStats.total }}</strong> 人次请假，其中 <strong>{{ leaveStats.affectedTasks }}</strong> 项生产活动可能面临人员短缺风险，请及时在面板中重新调配资源！
+        </p>
+      </div>
+
+      <!-- 按日期分组显示 -->
+      <div v-if="Object.keys(groupedLeaves).length > 0" class="max-h-[60vh] overflow-y-auto pr-2">
+        <div v-for="(group, date) in groupedLeaves" :key="date" class="mb-6">
+          <div class="flex items-center mb-3">
+            <el-tag effect="dark" type="primary" size="large" class="font-bold">
+              <i class="far fa-calendar mr-1"></i> {{ formatLeaveDate(date) }}
+            </el-tag>
+            <div class="h-px bg-gray-200 flex-1 ml-4"></div>
+          </div>
+          
+          <el-table :data="group" border stripe style="width: 100%">
+            <el-table-column label="员工姓名" width="150">
+              <template #default="{ row }">
+                <span class="font-bold">{{ row.name }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="所属部门/岗位" width="200">
+              <template #default="{ row }">
+                <div class="text-gray-900">{{ row.department }}</div>
+                <div class="text-gray-500 text-xs">{{ row.role }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="受影响的占用活动">
+              <template #default="{ row }">
+                <div v-if="row.assigned_tasks && row.assigned_tasks.length > 0" class="flex flex-wrap gap-2">
+                  <el-tag v-for="task in row.assigned_tasks" :key="task" type="danger" size="small" effect="light">
+                    <i class="fas fa-link mr-1"></i> {{ task }}
+                  </el-tag>
+                </div>
+                <span v-else class="text-green-600 text-sm"><i class="fas fa-check-circle mr-1"></i> 无关联活动，安全</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
+      
+      <el-empty v-else description="未来 7 天内没有员工请假" />
+      
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="isLeaveModalVisible = false">关闭</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -98,6 +161,52 @@ import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
 const rawPersonnelList = ref<Personnel[]>([])
+
+// 请假预警状态与逻辑
+const isLeaveModalVisible = ref(false)
+
+const groupedLeaves = computed(() => {
+  const list = rawPersonnelList.value || []
+  const groups: Record<string, any[]> = {}
+  
+  list.forEach(person => {
+    if (person.upcoming_leaves && person.upcoming_leaves.length > 0) {
+      person.upcoming_leaves.forEach((date: string) => {
+        if (!groups[date]) groups[date] = []
+        groups[date].push(person)
+      })
+    }
+  })
+  
+  // 按日期正序排列
+  return Object.keys(groups).sort().reduce((acc, key) => {
+    acc[key] = groups[key]
+    return acc
+  }, {} as Record<string, any[]>)
+})
+
+// 统计受影响的总人次和被波及的活动数
+const leaveStats = computed(() => {
+  let total = 0
+  let affectedTasks = 0
+  Object.values(groupedLeaves.value).forEach(group => {
+    total += group.length
+    group.forEach(p => {
+      if (p.assigned_tasks && p.assigned_tasks.length > 0) {
+        affectedTasks += p.assigned_tasks.length
+      }
+    })
+  })
+  return { total, affectedTasks }
+})
+
+// 格式化日期的辅助函数
+const formatLeaveDate = (dateStr: string) => {
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return dateStr
+  const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+  return `${date.getMonth() + 1}月${date.getDate()}日 (${days[date.getDay()]})`
+}
 
 // 搜索和筛选状态
 const searchQuery = ref('')
