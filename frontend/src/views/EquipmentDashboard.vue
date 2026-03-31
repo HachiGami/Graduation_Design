@@ -130,14 +130,37 @@ const processFilter = ref('')
 
 const isMaintenanceModalVisible = ref(false)
 
-// 模拟已有的 formatProcessName 函数
+// 真实的流程映射字典
+const processMap: Record<string, string> = {
+  'P001': '主生产线',
+  'P002': '副生产线',
+  'Q001': '常规质检',
+  'Q002': '专项质检',
+  'S001': '线上销售',
+  'S002': '线下销售',
+  'W001': '主仓库',
+  'W002': '分仓库',
+  'T001': '主运输线', 
+  'T002': '副运输线'
+};
+
+// 格式化流程名称，包含兜底逻辑
 const formatProcessName = (processId: string) => {
-  const map: Record<string, string> = {
-    'P001': 'P001 - 主生产线',
-    'P002': 'P002 - 包装线',
-    'P003': 'P003 - 质检线'
+  if (processMap[processId]) {
+    return `${processId} - ${processMap[processId]}`;
   }
-  return map[processId] || processId
+  
+  // 兜底逻辑：根据首字母判断类型
+  const prefix = processId.charAt(0).toUpperCase();
+  const typeMap: Record<string, string> = {
+    'P': '生产流程',
+    'Q': '质检流程',
+    'S': '销售流程',
+    'W': '仓储流程',
+    'T': '运输流程'
+  };
+  
+  return `${processId} - ${typeMap[prefix] || '未知流程'}`;
 }
 
 const formatDateLabel = (dateStr: string) => {

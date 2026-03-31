@@ -74,10 +74,7 @@
         <el-form-item label="设备名称">
           <el-input v-model="editForm.name" />
         </el-form-item>
-        <el-form-item label="设备型号">
-          <el-input v-model="editForm.model" />
-        </el-form-item>
-        <el-form-item label="技术规格">
+        <el-form-item label="设备种类">
           <el-input v-model="editForm.specification" />
         </el-form-item>
         <el-form-item label="生产厂家">
@@ -92,46 +89,19 @@
             style="width: 100%"
           />
         </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="editForm.status" style="width: 100%">
-            <el-option label="空闲" value="idle" />
-            <el-option label="使用中" value="in_use" />
-            <el-option label="维护中" value="maintenance" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="正在服务活动">
-          <el-select
-            v-model="editForm.serving_activities"
-            multiple
-            filterable
-            allow-create
-            default-first-option
-            placeholder="请选择或输入活动"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="item in equipment.serving_activities || []"
-              :key="item"
-              :label="item"
-              :value="item"
-            />
-          </el-select>
-        </el-form-item>
         <el-form-item label="未来检修日期">
           <el-select
             v-model="editForm.upcoming_maintenance"
             multiple
-            filterable
-            allow-create
-            default-first-option
-            placeholder="请选择或输入日期(YYYY-MM-DD)"
+            clearable
+            placeholder="请选择未来七天内的检修状态 (可多选)"
             style="width: 100%"
           >
             <el-option
-              v-for="item in equipment.upcoming_maintenance || []"
-              :key="item"
-              :label="item"
-              :value="item"
+              v-for="item in maintenanceOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
             />
           </el-select>
         </el-form-item>
@@ -150,7 +120,7 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { Edit, Warning } from '@element-plus/icons-vue'
+import { Edit, Warning, Plus, Delete } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
 const props = defineProps<{
@@ -163,14 +133,21 @@ const isEditModalVisible = ref(false)
 const isSubmitting = ref(false)
 const editForm = reactive({
   name: '',
-  model: '',
   specification: '',
   manufacturer: '',
   production_date: '',
-  status: '',
-  serving_activities: [] as string[],
   upcoming_maintenance: [] as string[]
 })
+
+const maintenanceOptions = [
+  { label: '1天后', value: '1天后' },
+  { label: '2天后', value: '2天后' },
+  { label: '3天后', value: '3天后' },
+  { label: '4天后', value: '4天后' },
+  { label: '5天后', value: '5天后' },
+  { label: '6天后', value: '6天后' },
+  { label: '7天后', value: '7天后' }
+]
 
 const getStatusType = (status: string) => {
   const map: Record<string, string> = {
@@ -194,12 +171,9 @@ const getStatusLabel = (status: string) => {
 
 const openEditModal = () => {
   editForm.name = props.equipment.name || ''
-  editForm.model = props.equipment.model || ''
   editForm.specification = props.equipment.specification || ''
   editForm.manufacturer = props.equipment.manufacturer || ''
   editForm.production_date = props.equipment.production_date || ''
-  editForm.status = props.equipment.status || 'idle'
-  editForm.serving_activities = [...(props.equipment.serving_activities || [])]
   editForm.upcoming_maintenance = [...(props.equipment.upcoming_maintenance || [])]
   isEditModalVisible.value = true
 }
@@ -214,12 +188,9 @@ const submitEdit = async () => {
       },
       body: JSON.stringify({
         name: editForm.name,
-        model: editForm.model,
         specification: editForm.specification,
         manufacturer: editForm.manufacturer,
         production_date: editForm.production_date,
-        status: editForm.status,
-        serving_activities: editForm.serving_activities,
         upcoming_maintenance: editForm.upcoming_maintenance
       })
     })

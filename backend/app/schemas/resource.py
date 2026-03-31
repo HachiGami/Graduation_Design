@@ -39,8 +39,6 @@ class ResourceUpdate(BaseModel):
     manufacturer: Optional[str] = None
     production_date: Optional[str] = None
     upcoming_maintenance: Optional[list[str]] = None
-    serving_activities: Optional[list[str]] = None
-
 class ResourceResponse(ResourceBase):
     id: str = Field(..., alias="_id")
     created_at: datetime

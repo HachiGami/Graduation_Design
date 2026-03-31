@@ -8,7 +8,6 @@ class PersonnelBase(BaseModel):
     responsibility: str = Field(..., description="职责")
     skills: List[str] = Field(default=[], description="技能列表")
     work_hours: str = Field(..., description="工作时间")
-    assigned_tasks: List[str] = Field(default=[], description="分配的任务")
     status: str = Field(default="active", description="状态")
     upcoming_leaves: List[str] = Field(
         default=[],
@@ -30,7 +29,6 @@ class PersonnelUpdate(BaseModel):
     responsibility: Optional[str] = None
     skills: Optional[List[str]] = None
     work_hours: Optional[str] = None
-    assigned_tasks: Optional[List[str]] = None
     status: Optional[str] = None
     upcoming_leaves: Optional[List[str]] = None
     age: Optional[int] = None

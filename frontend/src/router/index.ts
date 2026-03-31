@@ -19,6 +19,11 @@ const router = createRouter({
       component: () => import('@/views/EquipmentDashboard.vue')
     },
     {
+      path: '/material',
+      name: 'Material',
+      component: () => import('@/views/MaterialDashboard.vue')
+    },
+    {
       path: '/dependencies',
       name: 'Dependencies',
       // 支持 query 参数: highlightDomain, focusActivity

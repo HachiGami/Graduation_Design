@@ -18,6 +18,9 @@
           <el-menu-item index="/equipment">
             <span>设备管理面板</span>
           </el-menu-item>
+          <el-menu-item index="/material">
+            <span>原料管理面板</span>
+          </el-menu-item>
           <el-menu-item index="/dependencies">
             <span>节点关联视图</span>
           </el-menu-item>
