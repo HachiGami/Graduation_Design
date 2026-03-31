@@ -87,7 +87,10 @@
       <template #header>
         <div class="card-header">
           <span>员工列表 (共 {{ filteredAndSortedPersonnel.length }} 人)</span>
-          <el-button type="primary" icon="Refresh" @click="fetchData" circle />
+          <div style="display: flex; gap: 8px;">
+            <el-button type="primary" :icon="Plus" @click="openAddPersonnelDialog">添加员工</el-button>
+            <el-button type="primary" icon="Refresh" @click="fetchData" circle />
+          </div>
         </div>
       </template>
 
@@ -103,6 +106,58 @@
         <el-empty v-else description="暂无符合条件的员工数据" />
       </div>
     </el-card>
+
+    <!-- 添加员工弹窗 -->
+    <el-dialog v-model="addPersonnelDialogVisible" title="添加员工" width="520px">
+      <el-form :model="addPersonnelForm" label-width="100px" size="default">
+        <el-form-item label="姓名" required>
+          <el-input v-model="addPersonnelForm.name" placeholder="请输入姓名" />
+        </el-form-item>
+        <el-form-item label="角色" required>
+          <el-input v-model="addPersonnelForm.role" placeholder="如：操作员、班长" />
+        </el-form-item>
+        <el-form-item label="职责/部门" required>
+          <el-input v-model="addPersonnelForm.responsibility" placeholder="如：生产部" />
+        </el-form-item>
+        <el-form-item label="工作时间" required>
+          <el-input v-model="addPersonnelForm.work_hours" placeholder="如：08:00-18:00" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="addPersonnelForm.status" style="width: 100%">
+            <el-option label="在职" value="active" />
+            <el-option label="离职" value="resigned" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="年龄">
+          <el-input-number v-model="addPersonnelForm.age" :min="18" :max="100" />
+        </el-form-item>
+        <el-form-item label="性别">
+          <el-select v-model="addPersonnelForm.gender" placeholder="请选择" style="width: 100%">
+            <el-option label="男" value="男" />
+            <el-option label="女" value="女" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="学历">
+          <el-select v-model="addPersonnelForm.education" placeholder="请选择" style="width: 100%">
+            <el-option label="初中" value="初中" />
+            <el-option label="高中" value="高中" />
+            <el-option label="大专" value="大专" />
+            <el-option label="本科" value="本科" />
+            <el-option label="硕士及以上" value="硕士及以上" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="薪资(元/月)">
+          <el-input-number v-model="addPersonnelForm.salary" :min="0" :step="100" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="入职日期">
+          <el-date-picker v-model="addPersonnelForm.hire_date" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="addPersonnelDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitAddPersonnel" :loading="addPersonnelSubmitting">确定添加</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 请假预警弹窗 -->
     <el-dialog v-model="isLeaveModalVisible" title="未来7天请假与排班预警" width="70%" top="5vh">
@@ -163,10 +218,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getPersonnelList } from '@/api/personnel'
+import { getPersonnelList, createPersonnel } from '@/api/personnel'
 import type { Personnel } from '@/types'
 import PersonnelAccordionItem from '@/components/PersonnelAccordionItem.vue'
 import { ElMessage } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const rawPersonnelList = ref<Personnel[]>([])
@@ -327,6 +383,57 @@ const filteredAndSortedPersonnel = computed(() => {
 
   return result
 })
+
+const addPersonnelDialogVisible = ref(false)
+const addPersonnelSubmitting = ref(false)
+
+const defaultAddPersonnelForm = () => ({
+  name: '',
+  role: '',
+  responsibility: '',
+  work_hours: '08:00-18:00',
+  status: 'active',
+  skills: [] as string[],
+  upcoming_leaves: [] as string[],
+  age: undefined as number | undefined,
+  gender: '',
+  education: '',
+  salary: undefined as number | undefined,
+  hire_date: ''
+})
+
+const addPersonnelForm = ref(defaultAddPersonnelForm())
+
+const openAddPersonnelDialog = () => {
+  addPersonnelForm.value = defaultAddPersonnelForm()
+  addPersonnelDialogVisible.value = true
+}
+
+const submitAddPersonnel = async () => {
+  if (!addPersonnelForm.value.name.trim()) {
+    ElMessage.warning('姓名不能为空')
+    return
+  }
+  if (!addPersonnelForm.value.role.trim()) {
+    ElMessage.warning('角色不能为空')
+    return
+  }
+  if (!addPersonnelForm.value.responsibility.trim()) {
+    ElMessage.warning('职责/部门不能为空')
+    return
+  }
+  addPersonnelSubmitting.value = true
+  try {
+    await createPersonnel(addPersonnelForm.value as Personnel)
+    ElMessage.success('员工添加成功')
+    addPersonnelDialogVisible.value = false
+    await fetchData()
+  } catch (error) {
+    ElMessage.error('添加失败，请检查表单数据')
+  } finally {
+    addPersonnelSubmitting.value = false
+  }
+}
 
 const fetchData = async () => {
   loading.value = true

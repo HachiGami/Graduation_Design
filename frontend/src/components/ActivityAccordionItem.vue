@@ -163,8 +163,13 @@
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="editDialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="saveActivityEdit">保存</el-button>
+      <div style="display: flex; justify-content: space-between; width: 100%;">
+        <el-button type="danger" @click="handleDeleteActivity">删除该活动</el-button>
+        <div>
+          <el-button @click="editDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="saveActivityEdit">保存</el-button>
+        </div>
+      </div>
     </template>
   </el-dialog>
 
@@ -224,8 +229,10 @@ import {
   removeActivityEquipmentRequirement,
   removeActivityMaterialRequirement,
   removeActivityPersonnelRequirement,
-  updateActivity
+  updateActivity,
+  deleteActivity
 } from '@/api/activity'
+import { ElMessageBox } from 'element-plus'
 
 const props = defineProps<{ activity: Activity }>()
 const emit = defineEmits<{ refreshed: [] }>()
@@ -451,6 +458,23 @@ const saveActivityEdit = async () => {
     await refreshActivityAndRisk()
   } catch (error) {
     ElMessage.error('更新活动失败')
+  }
+}
+
+const handleDeleteActivity = async () => {
+  if (!activityId.value) return
+  try {
+    await ElMessageBox.confirm(
+      '此操作将从数据库和图谱中永久删除该活动及其所有关联数据，是否继续？',
+      '警告',
+      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
+    )
+    await deleteActivity(activityId.value)
+    ElMessage.success('活动已删除')
+    editDialogVisible.value = false
+    emit('refreshed')
+  } catch (error: any) {
+    if (error !== 'cancel') ElMessage.error('删除失败')
   }
 }
 

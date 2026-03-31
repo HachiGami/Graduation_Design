@@ -101,12 +101,13 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="isEditModalVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitEdit" :loading="isSubmitting">
-            保存
-          </el-button>
-        </span>
+        <div style="display: flex; justify-content: space-between; width: 100%;">
+          <el-button type="danger" @click="handleDeleteEquipment">删除该设备</el-button>
+          <div>
+            <el-button @click="isEditModalVisible = false">取消</el-button>
+            <el-button type="primary" @click="submitEdit" :loading="isSubmitting">保存</el-button>
+          </div>
+        </div>
       </template>
     </el-dialog>
 
@@ -149,7 +150,8 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { Edit, Warning, Tools, Plus, Delete } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { deleteResource } from '@/api/resource'
 
 const props = defineProps<{
   equipment: any
@@ -293,6 +295,24 @@ const submitEdit = async () => {
     ElMessage.error('更新失败，请重试')
   } finally {
     isSubmitting.value = false
+  }
+}
+
+const handleDeleteEquipment = async () => {
+  const id = props.equipment._id || props.equipment.id
+  if (!id) return
+  try {
+    await ElMessageBox.confirm(
+      '此操作将从数据库和图谱中永久删除该设备数据，是否继续？',
+      '警告',
+      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
+    )
+    await deleteResource(id)
+    ElMessage.success('设备已删除')
+    isEditModalVisible.value = false
+    emit('update')
+  } catch (error: any) {
+    if (error !== 'cancel') ElMessage.error('删除失败')
   }
 }
 </script>

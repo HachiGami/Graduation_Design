@@ -38,6 +38,7 @@
       </div>
       
       <div class="right-actions">
+        <el-button type="primary" :icon="Plus" @click="openAddEquipmentDialog">添加设备</el-button>
         <el-badge :value="maintenanceEquipments.length" :hidden="maintenanceEquipments.length === 0" class="item">
           <el-button type="danger" @click="isMaintenanceModalVisible = true">
             <el-icon><Tools /></el-icon> 七天检修预警
@@ -57,6 +58,40 @@
       </el-collapse>
       <el-empty v-else description="暂无匹配的设备数据" />
     </div>
+
+    <!-- 添加设备弹窗 -->
+    <el-dialog v-model="addEquipmentDialogVisible" title="添加设备" width="520px">
+      <el-form :model="addEquipmentForm" label-width="100px" size="default">
+        <el-form-item label="设备名称" required>
+          <el-input v-model="addEquipmentForm.name" placeholder="如：灌装机-03" />
+        </el-form-item>
+        <el-form-item label="设备种类" required>
+          <el-input v-model="addEquipmentForm.specification" placeholder="如：灌装设备" />
+        </el-form-item>
+        <el-form-item label="型号规格" required>
+          <el-input v-model="addEquipmentForm.model" placeholder="如：GZ-2000" />
+        </el-form-item>
+        <el-form-item label="供应商" required>
+          <el-input v-model="addEquipmentForm.supplier" placeholder="供应商名称" />
+        </el-form-item>
+        <el-form-item label="生产厂家">
+          <el-input v-model="addEquipmentForm.manufacturer" placeholder="生产厂家" />
+        </el-form-item>
+        <el-form-item label="生产时间">
+          <el-date-picker v-model="addEquipmentForm.production_date" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="单位" required>
+          <el-input v-model="addEquipmentForm.unit" placeholder="如：台" />
+        </el-form-item>
+        <el-form-item label="数量" required>
+          <el-input-number v-model="addEquipmentForm.quantity" :min="1" style="width: 100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="addEquipmentDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitAddEquipment" :loading="addEquipmentSubmitting">确定添加</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 七天检修预警弹窗 -->
     <el-dialog
@@ -117,8 +152,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Search, Tools } from '@element-plus/icons-vue'
+import { Search, Tools, Plus } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import EquipmentAccordionItem from '../components/EquipmentAccordionItem.vue'
+import { createResource } from '@/api/resource'
 
 const equipments = ref<any[]>([])
 const loading = ref(false)
@@ -173,6 +210,51 @@ const formatDateLabel = (dateStr: string) => {
     return `${date.getMonth() + 1}月${date.getDate()}日 (${days[date.getDay()]})`
   } catch {
     return dateStr
+  }
+}
+
+const addEquipmentDialogVisible = ref(false)
+const addEquipmentSubmitting = ref(false)
+
+const defaultAddEquipmentForm = () => ({
+  name: '',
+  type: '设备',
+  specification: '',
+  model: '',
+  supplier: '',
+  manufacturer: '',
+  production_date: '',
+  unit: '台',
+  quantity: 1,
+  status: 'available'
+})
+
+const addEquipmentForm = ref(defaultAddEquipmentForm())
+
+const openAddEquipmentDialog = () => {
+  addEquipmentForm.value = defaultAddEquipmentForm()
+  addEquipmentDialogVisible.value = true
+}
+
+const submitAddEquipment = async () => {
+  if (!addEquipmentForm.value.name.trim()) {
+    ElMessage.warning('设备名称不能为空')
+    return
+  }
+  if (!addEquipmentForm.value.specification.trim()) {
+    ElMessage.warning('设备种类不能为空')
+    return
+  }
+  addEquipmentSubmitting.value = true
+  try {
+    await createResource(addEquipmentForm.value as any)
+    ElMessage.success('设备添加成功')
+    addEquipmentDialogVisible.value = false
+    await fetchEquipments()
+  } catch (error) {
+    ElMessage.error('添加失败，请检查表单数据')
+  } finally {
+    addEquipmentSubmitting.value = false
   }
 }
 

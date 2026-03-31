@@ -88,10 +88,13 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="editDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitEdit" :loading="submitting">保存</el-button>
-        </span>
+        <div style="display: flex; justify-content: space-between; width: 100%;">
+          <el-button type="danger" @click="handleDeletePersonnel">删除该员工</el-button>
+          <div>
+            <el-button @click="editDialogVisible = false">取消</el-button>
+            <el-button type="primary" @click="submitEdit" :loading="submitting">保存</el-button>
+          </div>
+        </div>
       </template>
     </el-dialog>
 
@@ -127,8 +130,8 @@
 <script setup lang="ts">
 import { ref, PropType } from 'vue'
 import { Calendar, Edit } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import { updatePersonnel } from '@/api/personnel'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { updatePersonnel, deletePersonnel } from '@/api/personnel'
 import type { Personnel } from '@/types'
 
 const props = defineProps({
@@ -217,6 +220,23 @@ const submitEdit = async () => {
     ElMessage.error('更新失败')
   } finally {
     submitting.value = false
+  }
+}
+
+const handleDeletePersonnel = async () => {
+  if (!props.personnel.id) return
+  try {
+    await ElMessageBox.confirm(
+      '此操作将从数据库和图谱中永久删除该员工数据，是否继续？',
+      '警告',
+      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
+    )
+    await deletePersonnel(props.personnel.id)
+    ElMessage.success('员工已删除')
+    editDialogVisible.value = false
+    emit('updated')
+  } catch (error: any) {
+    if (error !== 'cancel') ElMessage.error('删除失败')
   }
 }
 </script>

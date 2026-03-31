@@ -1,7 +1,10 @@
 <template>
   <div class="material-dashboard">
     <div class="dashboard-header">
-      <h2>原料管理面板</h2>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h2 style="margin: 0;">原料管理面板</h2>
+        <el-button type="primary" :icon="Plus" @click="openAddMaterialDialog">添加原料</el-button>
+      </div>
       <div class="filters-container">
         <el-input
           v-model="searchQuery"
@@ -83,10 +86,38 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="editDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitEdit" :loading="submitting">保存修改</el-button>
-        </span>
+        <div style="display: flex; justify-content: space-between; width: 100%;">
+          <el-button type="danger" @click="handleDeleteMaterial">删除该原料</el-button>
+          <div>
+            <el-button @click="editDialogVisible = false">取消</el-button>
+            <el-button type="primary" @click="submitEdit" :loading="submitting">保存修改</el-button>
+          </div>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 添加原料弹窗 -->
+    <el-dialog v-model="addMaterialDialogVisible" title="添加原料" width="520px">
+      <el-form :model="addMaterialForm" label-width="100px" size="default">
+        <el-form-item label="原料名称" required>
+          <el-input v-model="addMaterialForm.name" placeholder="如：全脂生牛乳" />
+        </el-form-item>
+        <el-form-item label="型号/规格" required>
+          <el-input v-model="addMaterialForm.specification" placeholder="如：生乳-A级" />
+        </el-form-item>
+        <el-form-item label="供应商" required>
+          <el-input v-model="addMaterialForm.supplier" placeholder="供应商名称" />
+        </el-form-item>
+        <el-form-item label="初始库存" required>
+          <el-input-number v-model="addMaterialForm.quantity" :min="0" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="单位" required>
+          <el-input v-model="addMaterialForm.unit" placeholder="如：吨、升、kg" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="addMaterialDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitAddMaterial" :loading="addMaterialSubmitting">确定添加</el-button>
       </template>
     </el-dialog>
   </div>
@@ -94,10 +125,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { Search } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { Search, Plus } from '@element-plus/icons-vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import MaterialAccordionItem from '../components/MaterialAccordionItem.vue';
 import axios from 'axios';
+import { createResource, deleteResource } from '@/api/resource';
 
 const processMap: Record<string, string> = {
   'P001': '主生产线',
@@ -139,7 +171,9 @@ const editForm = ref({
 const fetchMaterials = async () => {
   loading.value = true;
   try {
-    const response = await axios.get('http://localhost:8000/api/materials');
+    const response = await axios.get('http://localhost:8000/api/resources', {
+      params: { type: '原料' }
+    });
     materials.value = response.data;
   } catch (error) {
     console.error('Failed to fetch materials:', error);
@@ -200,12 +234,13 @@ const submitReplenish = async () => {
   
   submitting.value = true;
   try {
-    await axios.post(`http://localhost:8000/api/materials/${currentMaterial.value._id}/add_stock`, {
-      add_amount: replenishForm.value.add_amount
+    const currentQty = Number(currentMaterial.value.quantity) || 0;
+    await axios.put(`http://localhost:8000/api/resources/${currentMaterial.value._id}`, {
+      quantity: currentQty + Number(replenishForm.value.add_amount)
     });
     ElMessage.success('补货成功');
     replenishDialogVisible.value = false;
-    fetchMaterials(); // Reload to get updated remaining days
+    fetchMaterials();
   } catch (error) {
     console.error('Failed to replenish:', error);
     ElMessage.error('补货失败');
@@ -228,7 +263,7 @@ const submitEdit = async () => {
   
   submitting.value = true;
   try {
-    await axios.put(`http://localhost:8000/api/materials/${currentMaterial.value._id}`, editForm.value);
+    await axios.put(`http://localhost:8000/api/resources/${currentMaterial.value._id}`, editForm.value);
     ElMessage.success('修改成功');
     editDialogVisible.value = false;
     fetchMaterials();
@@ -237,6 +272,65 @@ const submitEdit = async () => {
     ElMessage.error('修改失败');
   } finally {
     submitting.value = false;
+  }
+};
+
+const handleDeleteMaterial = async () => {
+  if (!currentMaterial.value?._id) return;
+  try {
+    await ElMessageBox.confirm(
+      '此操作将从数据库和图谱中永久删除该原料数据，是否继续？',
+      '警告',
+      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
+    );
+    await deleteResource(currentMaterial.value._id);
+    ElMessage.success('原料已删除');
+    editDialogVisible.value = false;
+    fetchMaterials();
+  } catch (error: any) {
+    if (error !== 'cancel') ElMessage.error('删除失败');
+  }
+};
+
+const addMaterialDialogVisible = ref(false);
+const addMaterialSubmitting = ref(false);
+
+const defaultAddMaterialForm = () => ({
+  name: '',
+  type: '原料',
+  specification: '',
+  supplier: '',
+  quantity: 0,
+  unit: '',
+  status: 'available'
+});
+
+const addMaterialForm = ref(defaultAddMaterialForm());
+
+const openAddMaterialDialog = () => {
+  addMaterialForm.value = defaultAddMaterialForm();
+  addMaterialDialogVisible.value = true;
+};
+
+const submitAddMaterial = async () => {
+  if (!addMaterialForm.value.name.trim()) {
+    ElMessage.warning('原料名称不能为空');
+    return;
+  }
+  if (!addMaterialForm.value.unit.trim()) {
+    ElMessage.warning('单位不能为空');
+    return;
+  }
+  addMaterialSubmitting.value = true;
+  try {
+    await createResource(addMaterialForm.value as any);
+    ElMessage.success('原料添加成功');
+    addMaterialDialogVisible.value = false;
+    fetchMaterials();
+  } catch (error) {
+    ElMessage.error('添加失败，请检查表单数据');
+  } finally {
+    addMaterialSubmitting.value = false;
   }
 };
 </script>
