@@ -31,15 +31,15 @@ def _normalize_sop_steps(raw_steps):
     normalized = []
     for index, step in enumerate(raw_steps):
         if isinstance(step, dict):
+            # 兼容旧格式 {step_number, description} 和新格式 {content}
+            content = step.get("content") or step.get("description", "")
             normalized.append({
-                "step_number": int(step.get("step_number", index + 1)),
-                "description": str(step.get("description", "")),
+                "content": str(content),
                 "duration": int(step.get("duration", 0)),
             })
         else:
             normalized.append({
-                "step_number": index + 1,
-                "description": str(step),
+                "content": str(step),
                 "duration": 0,
             })
     return normalized

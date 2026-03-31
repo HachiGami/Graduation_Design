@@ -2,10 +2,9 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Literal
 from datetime import datetime
 
-class SOPStep(BaseModel):
-    step_number: int
-    description: str
-    duration: int
+class SopStep(BaseModel):
+    content: str
+    duration: int = 0  # 步骤耗时(分钟)
 
 class MaterialRequirement(BaseModel):
     material_model: str = Field(..., description="原料型号（匹配Asset.model）")
@@ -29,7 +28,7 @@ class ActivityBase(BaseModel):
     name: str = Field(..., description="活动名称")
     description: str = Field(..., description="活动描述")
     activity_type: str = Field(..., description="活动类型")
-    sop_steps: List[SOPStep] = Field(default=[], description="SOP流程步骤")
+    sop_steps: Optional[List[SopStep]] = Field(default=[], description="SOP流程步骤")
     estimated_duration: int = Field(..., description="预计时长（分钟）")
     duration_minutes: Optional[int] = Field(None, description="实际耗时（分钟）")
     deadline: Optional[datetime] = Field(None, description="截止时间")
@@ -58,7 +57,7 @@ class ActivityUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     activity_type: Optional[str] = None
-    sop_steps: Optional[List[SOPStep]] = None
+    sop_steps: Optional[List[SopStep]] = None
     estimated_duration: Optional[int] = None
     duration_minutes: Optional[int] = None
     deadline: Optional[datetime] = None

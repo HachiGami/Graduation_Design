@@ -92,8 +92,7 @@ export interface GraphData {
 }
 
 export interface SOPStep {
-  step_number: number
-  description: string
+  content: string
   duration: number
 }
 

@@ -35,10 +35,14 @@
           <el-descriptions :column="1" border>
             <el-descriptions-item label="活动描述">{{ localActivity.description || '无' }}</el-descriptions-item>
             <el-descriptions-item label="SOP步骤">
+              <div class="sop-header">
+                <span>总耗时: {{ totalSopDuration }} 分钟</span>
+                <el-button type="primary" size="small" @click="openSopEditDialog">编辑 SOP</el-button>
+              </div>
               <div v-if="localActivity.sop_steps?.length">
-                <div v-for="step in localActivity.sop_steps" :key="`${step.step_number}-${step.description}`" class="sop-row">
-                  <el-tag size="small" type="info">步骤{{ step.step_number }}</el-tag>
-                  <span>{{ step.description }}（{{ step.duration }}分钟）</span>
+                <div v-for="(step, index) in localActivity.sop_steps" :key="index" class="sop-row">
+                  <el-tag size="small" type="info">步骤 {{ index + 1 }}</el-tag>
+                  <span>{{ step.content }} (耗时: {{ step.duration }} 分钟)</span>
                 </div>
               </div>
               <span v-else>暂无SOP步骤</span>
@@ -172,6 +176,36 @@
       <el-button type="primary" @click="submitReplenish">提交补货</el-button>
     </template>
   </el-dialog>
+
+  <el-dialog v-model="sopDialogVisible" title="编辑活动 SOP 与详情" width="700px">
+    <el-form :model="sopEditForm" label-width="100px">
+      <el-form-item label="活动描述">
+        <el-input type="textarea" v-model="sopEditForm.description" :rows="3" />
+      </el-form-item>
+      
+      <div class="sop-edit-section">
+        <div class="section-title">
+          <span>SOP 步骤列表</span>
+          <span class="total-hint">当前总耗时: {{ currentSopTotalDuration }} 分钟</span>
+        </div>
+        
+        <div v-for="(step, index) in sopEditForm.sop_steps" :key="index" class="sop-step-item">
+          <el-tag type="info" class="step-tag">步骤 {{ index + 1 }}</el-tag>
+          <el-input v-model="step.content" placeholder="请输入步骤详情" class="flex-1" />
+          <el-input-number v-model="step.duration" :min="0" placeholder="耗时(分)" class="duration-input" />
+          <el-button type="danger" icon="Delete" circle @click="removeSopStep(index)" />
+        </div>
+        
+        <el-button type="primary" plain class="w-full mt-4" @click="addSopStep">
+          + 添加新步骤
+        </el-button>
+      </div>
+    </el-form>
+    <template #footer>
+      <el-button @click="sopDialogVisible = false">取消</el-button>
+      <el-button type="primary" @click="saveSopEdit">保存 SOP</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -201,6 +235,7 @@ const localActivity = ref<Activity>({ ...props.activity })
 const activeTab = ref('basic')
 const activityRisks = ref<RiskItem[]>([])
 const editDialogVisible = ref(false)
+const sopDialogVisible = ref(false)
 const replenishDialogVisible = ref(false)
 const materialModelOptions = ref<string[]>([])
 
@@ -209,6 +244,14 @@ const equipmentForm = ref({ equipment_model: '', count: 1 })
 const materialForm = ref({ material_model: '', hourly_consumption_rate: 1, unit: '' })
 const replenishForm = ref({ material_model: '', added_quantity: 1 })
 const editForm = ref<Partial<Activity>>({})
+const sopEditForm = ref({
+  description: '',
+  sop_steps: [] as { content: string, duration: number }[]
+})
+
+const currentSopTotalDuration = computed(() => {
+  return sopEditForm.value.sop_steps.reduce((sum, step) => sum + (step.duration || 0), 0)
+})
 
 // 定义流程域下拉选项
 const domainOptions = [
@@ -252,6 +295,10 @@ const handleProcessIdChange = (newProcessId: string) => {
 };
 
 const activityId = computed(() => localActivity.value.id || '')
+const totalSopDuration = computed(() => {
+  if (!localActivity.value.sop_steps || localActivity.value.sop_steps.length === 0) return localActivity.value.estimated_duration || 0;
+  return localActivity.value.sop_steps.reduce((sum, step) => sum + (step.duration || 0), 0);
+});
 const workingHoursText = computed(() => {
   const windows = localActivity.value.working_hours || []
   if (windows.length === 0) return '未配置'
@@ -316,6 +363,39 @@ const openEditDialog = () => {
     process_id: localActivity.value.process_id
   }
   editDialogVisible.value = true
+}
+
+const openSopEditDialog = () => {
+  sopEditForm.value = {
+    description: localActivity.value.description || '',
+    sop_steps: localActivity.value.sop_steps ? JSON.parse(JSON.stringify(localActivity.value.sop_steps)) : []
+  }
+  sopDialogVisible.value = true
+}
+
+const addSopStep = () => {
+  sopEditForm.value.sop_steps.push({ content: '', duration: 0 })
+}
+
+const removeSopStep = (index: number) => {
+  sopEditForm.value.sop_steps.splice(index, 1)
+}
+
+const saveSopEdit = async () => {
+  if (!activityId.value) return
+  try {
+    const payload = {
+      description: sopEditForm.value.description,
+      sop_steps: sopEditForm.value.sop_steps,
+      estimated_duration: currentSopTotalDuration.value
+    }
+    await updateActivity(activityId.value, payload)
+    ElMessage.success('SOP 已更新')
+    sopDialogVisible.value = false
+    await refreshActivityAndRisk()
+  } catch (error) {
+    ElMessage.error('更新 SOP 失败')
+  }
 }
 
 const refreshActivityAndRisk = async () => {
@@ -507,6 +587,66 @@ const submitReplenish = async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.sop-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  background: #f5f7fa;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.sop-edit-section {
+  margin-top: 20px;
+  border-top: 1px solid #ebeef5;
+  padding-top: 20px;
+}
+
+.section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  font-weight: bold;
+  color: #303133;
+}
+
+.total-hint {
+  color: #409eff;
+  font-size: 14px;
+}
+
+.sop-step-item {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+
+.step-tag {
+  flex-shrink: 0;
+  width: 60px;
+  text-align: center;
+}
+
+.duration-input {
+  width: 130px;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.mt-4 {
+  margin-top: 16px;
+}
+
+.flex-1 {
+  flex: 1;
 }
 
 .risk-alert {
