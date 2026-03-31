@@ -19,6 +19,9 @@
             </el-tag>
           </div>
           <div class="right-actions" @click.stop>
+            <el-button type="warning" link size="small" @click="openMaintenanceModal">
+              <el-icon><Tools /></el-icon> 检修
+            </el-button>
             <el-button type="primary" link size="small" @click="openEditModal">
               <el-icon><Edit /></el-icon> 编辑设备
             </el-button>
@@ -96,12 +99,30 @@
             style="width: 100%"
           />
         </el-form-item>
-        <el-form-item label="未来检修日期">
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="isEditModalVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitEdit" :loading="isSubmitting">
+            保存
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <!-- 检修弹窗 -->
+    <el-dialog
+      v-model="isMaintenanceModalVisible"
+      title="安排设备检修"
+      width="400px"
+      append-to-body
+    >
+      <el-form label-width="100px">
+        <el-form-item label="检修日期">
           <el-select
-            v-model="editForm.upcoming_maintenance"
+            v-model="selectedMaintenanceDays"
             multiple
-            clearable
-            placeholder="请选择未来七天内的检修状态 (可多选)"
+            placeholder="请选择检修日期"
             style="width: 100%"
           >
             <el-option
@@ -115,9 +136,9 @@
       </el-form>
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="isEditModalVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitEdit" :loading="isSubmitting">
-            保存
+          <el-button @click="isMaintenanceModalVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitMaintenance" :loading="isSubmittingMaintenance">
+            确定
           </el-button>
         </span>
       </template>
@@ -127,7 +148,7 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { Edit, Warning, Plus, Delete } from '@element-plus/icons-vue'
+import { Edit, Warning, Tools, Plus, Delete } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
 const props = defineProps<{
@@ -142,9 +163,12 @@ const editForm = reactive({
   name: '',
   specification: '',
   manufacturer: '',
-  production_date: '',
-  upcoming_maintenance: [] as string[]
+  production_date: ''
 })
+
+const isMaintenanceModalVisible = ref(false)
+const isSubmittingMaintenance = ref(false)
+const selectedMaintenanceDays = ref<string[]>([])
 
 const maintenanceOptions = [
   { label: '1天后', value: '1天后' },
@@ -205,8 +229,40 @@ const openEditModal = () => {
   editForm.specification = props.equipment.specification || ''
   editForm.manufacturer = props.equipment.manufacturer || ''
   editForm.production_date = props.equipment.production_date || ''
-  editForm.upcoming_maintenance = [...(props.equipment.upcoming_maintenance || [])]
   isEditModalVisible.value = true
+}
+
+const openMaintenanceModal = () => {
+  selectedMaintenanceDays.value = [...(props.equipment.upcoming_maintenance || [])]
+  isMaintenanceModalVisible.value = true
+}
+
+const submitMaintenance = async () => {
+  isSubmittingMaintenance.value = true
+  try {
+    const response = await fetch(`http://localhost:8000/api/resources/${props.equipment._id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        upcoming_maintenance: selectedMaintenanceDays.value
+      })
+    })
+    
+    if (!response.ok) {
+      throw new Error('更新失败')
+    }
+    
+    ElMessage.success('设备检修计划更新成功')
+    isMaintenanceModalVisible.value = false
+    emit('update')
+  } catch (error) {
+    console.error('Failed to update maintenance:', error)
+    ElMessage.error('更新失败，请重试')
+  } finally {
+    isSubmittingMaintenance.value = false
+  }
 }
 
 const submitEdit = async () => {
@@ -221,8 +277,7 @@ const submitEdit = async () => {
         name: editForm.name,
         specification: editForm.specification,
         manufacturer: editForm.manufacturer,
-        production_date: editForm.production_date,
-        upcoming_maintenance: editForm.upcoming_maintenance
+        production_date: editForm.production_date
       })
     })
     

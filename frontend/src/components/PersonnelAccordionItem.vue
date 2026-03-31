@@ -14,7 +14,8 @@
           </el-tag>
         </div>
         <div class="header-right" @click.stop>
-          <el-button type="primary" link icon="Edit" @click="handleEdit">✏️编辑</el-button>
+          <el-button type="warning" link icon="Calendar" @click="handleLeave">请假</el-button>
+          <el-button type="primary" link icon="Edit" @click="handleEdit">编辑</el-button>
         </div>
       </div>
     </template>
@@ -93,11 +94,39 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 请假弹窗 -->
+    <el-dialog v-model="leaveDialogVisible" title="安排员工请假" width="400px" append-to-body>
+      <el-form label-width="100px">
+        <el-form-item label="请假日期">
+          <el-select
+            v-model="selectedLeaveDays"
+            multiple
+            placeholder="请选择请假日期"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="item in leaveOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="leaveDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitLeave" :loading="submittingLeave">确定</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </el-collapse-item>
 </template>
 
 <script setup lang="ts">
 import { ref, PropType } from 'vue'
+import { Calendar, Edit } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { updatePersonnel } from '@/api/personnel'
 import type { Personnel } from '@/types'
@@ -114,6 +143,20 @@ const emit = defineEmits(['updated'])
 const editDialogVisible = ref(false)
 const submitting = ref(false)
 const editForm = ref<Partial<Personnel>>({})
+
+const leaveDialogVisible = ref(false)
+const submittingLeave = ref(false)
+const selectedLeaveDays = ref<string[]>([])
+
+const leaveOptions = [
+  { label: '1天后', value: '1天后' },
+  { label: '2天后', value: '2天后' },
+  { label: '3天后', value: '3天后' },
+  { label: '4天后', value: '4天后' },
+  { label: '5天后', value: '5天后' },
+  { label: '6天后', value: '6天后' },
+  { label: '7天后', value: '7天后' }
+]
 
 // 流程映射字典
 const processMap: Record<string, string> = {
@@ -136,6 +179,29 @@ const formatProcessName = (id: string) => {
 const handleEdit = () => {
   editForm.value = { ...props.personnel }
   editDialogVisible.value = true
+}
+
+const handleLeave = () => {
+  selectedLeaveDays.value = [...(props.personnel.upcoming_leaves || [])]
+  leaveDialogVisible.value = true
+}
+
+const submitLeave = async () => {
+  if (!props.personnel.id) return
+  submittingLeave.value = true
+  try {
+    await updatePersonnel(props.personnel.id, {
+      upcoming_leaves: selectedLeaveDays.value
+    })
+    ElMessage.success('请假计划更新成功')
+    leaveDialogVisible.value = false
+    emit('updated')
+  } catch (error) {
+    console.error('Update leave failed:', error)
+    ElMessage.error('更新失败')
+  } finally {
+    submittingLeave.value = false
+  }
 }
 
 const submitEdit = async () => {
