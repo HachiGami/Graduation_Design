@@ -13,10 +13,11 @@ class AssetBase(BaseModel):
     # 仅用于 material 类型
     quantity: Optional[float] = Field(None, description="库存数量（仅原料）")
     unit: Optional[str] = Field(None, description="单位（仅原料）")
-    upcoming_maintenance: List[str] = Field(
-        default=[],
-        description="未来7天内的设备检修日期列表，不需要具体几月几号，标记几天后检修就可以",
-    )
+    upcoming_maintenance: Optional[List[str]] = Field(default=[], description="未来检修日期数组")
+    manufacturer: Optional[str] = Field(None, description="生产厂家")
+    production_date: Optional[str] = Field(None, description="生产时间 (YYYY-MM-DD)")
+    serving_activities: Optional[List[str]] = Field(default=[], description="正在服务于哪项活动")
+    process_id: Optional[str] = Field(None, description="流程ID")
 
 class AssetCreate(AssetBase):
     pass
@@ -31,6 +32,10 @@ class AssetUpdate(BaseModel):
     quantity: Optional[float] = None
     unit: Optional[str] = None
     upcoming_maintenance: Optional[List[str]] = None
+    manufacturer: Optional[str] = None
+    production_date: Optional[str] = None
+    serving_activities: Optional[List[str]] = None
+    process_id: Optional[str] = None
 
 class AssetResponse(AssetBase):
     id: str = Field(..., alias="_id")

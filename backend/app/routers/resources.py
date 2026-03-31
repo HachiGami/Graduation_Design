@@ -41,20 +41,48 @@ async def create_resource(resource: ResourceCreate):
 @router.get("", response_model=List[ResourceResponse])
 async def get_resources(
     domain: Optional[str] = Query(None, description="按流程域筛选"),
-    process_id: Optional[str] = Query(None, description="按流程实例ID筛选")
+    process_id: Optional[str] = Query(None, description="按流程实例ID筛选"),
+    type: Optional[str] = Query(None, description="按资源类型筛选")
 ):
     db = get_database()
+    driver = get_neo4j_driver()
     
     query_filter = {}
     if domain:
         query_filter["domain"] = domain
     if process_id:
         query_filter["process_id"] = process_id
+    if type:
+        query_filter["type"] = type
     
     resources = []
+    resource_ids = []
     async for resource in db.resources.find(query_filter):
         resource["_id"] = str(resource["_id"])
+        resource["serving_activities"] = []
         resources.append(resource)
+        resource_ids.append(resource["_id"])
+        
+    if type == "设备" and resource_ids:
+        # 查询 Neo4j 获取 serving_activities
+        neo4j_query = """
+        MATCH (e)-[:USED_BY|OCCUPIES]-(a:Activity)
+        WHERE (e:Resource OR e:Equipment) AND e.id IN $resource_ids
+        RETURN e.id AS resource_id, collect(a.name) AS activities
+        """
+        try:
+            async with driver.session() as session:
+                result = await session.run(neo4j_query, {"resource_ids": resource_ids})
+                activities_map = {}
+                async for record in result:
+                    activities_map[record["resource_id"]] = record["activities"]
+                
+                for resource in resources:
+                    if resource["_id"] in activities_map:
+                        resource["serving_activities"] = activities_map[resource["_id"]]
+        except Exception as e:
+            print(f"Neo4j查询失败: {e}")
+            
     return resources
 
 @router.get("/{resource_id}", response_model=ResourceResponse)
