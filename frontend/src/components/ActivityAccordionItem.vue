@@ -142,8 +142,21 @@
           <el-option label="进行中" value="in_progress" />
         </el-select>
       </el-form-item>
-      <el-form-item label="流程域"><el-input v-model="editForm.domain" /></el-form-item>
-      <el-form-item label="流程ID"><el-input v-model="editForm.process_id" /></el-form-item>
+      <el-form-item label="流程ID" prop="process_id">
+        <el-select 
+          v-model="editForm.process_id" 
+          placeholder="请选择所属流程ID" 
+          style="width: 100%"
+          @change="handleProcessIdChange"
+        >
+          <el-option
+            v-for="item in processOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+      </el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="editDialogVisible = false">取消</el-button>
@@ -196,6 +209,47 @@ const equipmentForm = ref({ equipment_model: '', count: 1 })
 const materialForm = ref({ material_model: '', hourly_consumption_rate: 1, unit: '' })
 const replenishForm = ref({ material_model: '', added_quantity: 1 })
 const editForm = ref<Partial<Activity>>({})
+
+// 定义流程域下拉选项
+const domainOptions = [
+  { label: '生产 (production)', value: 'production' },
+  { label: '质检 (quality)', value: 'quality' },
+  { label: '仓储 (warehouse)', value: 'warehouse' },
+  { label: '运输 (transport)', value: 'transport' },
+  { label: '销售 (sales)', value: 'sales' }
+];
+
+// 定义/引入黄金映射字典
+const processMap: Record<string, string> = {
+  'P001': '主生产线', 'P002': '副生产线',
+  'T001': '冷链运输', 'T002': '常温运输',
+  'S001': '线上销售', 'S002': '线下销售',
+  'Q001': '常规质检', 'Q002': '专项质检',
+  'W001': '主仓库', 'W002': '分仓库'
+};
+
+// 将字典转换为 el-select 需要的数组格式
+const processOptions = Object.entries(processMap).map(([value, label]) => ({
+  value,
+  label: `${value} - ${label}`
+}));
+
+const prefixToDomainMap: Record<string, string> = {
+  'P': 'production',
+  'T': 'transport',
+  'S': 'sales',
+  'Q': 'quality',
+  'W': 'warehouse'
+};
+
+const handleProcessIdChange = (newProcessId: string) => {
+  if (!newProcessId) return;
+  const prefix = newProcessId.charAt(0).toUpperCase();
+  if (prefixToDomainMap[prefix]) {
+    // 自动将隐藏的 domain 字段设置为对应的值，以便提交给后端
+    editForm.value.domain = prefixToDomainMap[prefix];
+  }
+};
 
 const activityId = computed(() => localActivity.value.id || '')
 const workingHoursText = computed(() => {
