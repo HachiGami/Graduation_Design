@@ -26,6 +26,20 @@
             :value="pid"
           />
         </el-select>
+
+        <el-select
+          v-model="filterSpecification"
+          placeholder="请选择设备种类"
+          clearable
+          class="filter-select"
+        >
+          <el-option
+            v-for="spec in availableSpecifications"
+            :key="spec"
+            :label="spec"
+            :value="spec"
+          />
+        </el-select>
       </div>
       
       <div class="right-actions">
@@ -56,8 +70,8 @@
         <el-form-item label="设备名称" required>
           <el-input v-model="addEquipmentForm.name" placeholder="如：灌装机-03" />
         </el-form-item>
-        <el-form-item label="型号规格" required>
-          <el-input v-model="addEquipmentForm.model" placeholder="如：GZ-2000" />
+        <el-form-item label="设备种类" required>
+          <el-input v-model="addEquipmentForm.specification" placeholder="如：灌装设备" />
         </el-form-item>
         <el-form-item label="生产厂家">
           <el-input v-model="addEquipmentForm.manufacturer" placeholder="生产厂家" />
@@ -144,6 +158,7 @@ const loading = ref(false)
 const searchQuery = ref('')
 const sortOption = ref('default')
 const processFilter = ref('')
+const filterSpecification = ref('')
 
 const isMaintenanceModalVisible = ref(false)
 
@@ -199,7 +214,7 @@ const addEquipmentSubmitting = ref(false)
 const defaultAddEquipmentForm = () => ({
   name: '',
   type: '设备',
-  model: '',
+  specification: '',
   manufacturer: '',
   production_date: '',
   unit: '台',
@@ -216,6 +231,10 @@ const openAddEquipmentDialog = () => {
 const submitAddEquipment = async () => {
   if (!addEquipmentForm.value.name.trim()) {
     ElMessage.warning('设备名称不能为空')
+    return
+  }
+  if (!addEquipmentForm.value.specification.trim()) {
+    ElMessage.warning('请输入或选择设备种类')
     return
   }
   addEquipmentSubmitting.value = true
@@ -252,6 +271,11 @@ onMounted(() => {
 
 const uniqueProcesses = computed(() => Object.keys(processMap))
 
+const availableSpecifications = computed(() => {
+  const specs = equipments.value.map(item => item.specification).filter(Boolean)
+  return [...new Set(specs)]
+})
+
 const processedEquipments = computed(() => {
   let result = [...equipments.value]
 
@@ -267,6 +291,11 @@ const processedEquipments = computed(() => {
   // 2. 过滤
   if (processFilter.value) {
     result = result.filter(eq => eq.serving_processes && eq.serving_processes.includes(processFilter.value))
+  }
+
+  if (filterSpecification.value) {
+    const specQuery = filterSpecification.value.toLowerCase()
+    result = result.filter(eq => eq.specification && eq.specification.toLowerCase().includes(specQuery))
   }
 
   // 3. 排序

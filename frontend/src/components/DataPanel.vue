@@ -99,6 +99,7 @@
           highlight-current-row
         >
           <el-table-column prop="name" label="名称" width="180" />
+          <el-table-column prop="specification" label="设备种类" width="150" />
           <el-table-column label="状态" width="120">
             <template #default="scope">
               <el-tag :type="getStatusTagType(scope.row.status)">
@@ -401,6 +402,7 @@
           
           <el-descriptions v-if="!isEditing" :column="2" border>
             <el-descriptions-item label="名称">{{ currentItem.name }}</el-descriptions-item>
+            <el-descriptions-item label="设备种类">{{ currentItem.specification }}</el-descriptions-item>
             <el-descriptions-item label="状态">
               <el-tag :type="getStatusTagType(currentItem.status)">
                 {{ getStatusText(currentItem.status) }}
@@ -411,6 +413,9 @@
           <el-form v-else :model="editForm" label-width="120px">
             <el-form-item label="名称">
               <el-input v-model="editForm.name" />
+            </el-form-item>
+            <el-form-item label="设备种类">
+              <el-input v-model="editForm.specification" />
             </el-form-item>
             <el-form-item label="状态">
               <el-select v-model="editForm.status">
@@ -686,6 +691,7 @@ async function loadEquipment() {
       id: asset.id || asset._id,
       name: asset.name,
       model: asset.model,
+      specification: asset.specification || '',
       status: asset.status || 'available',
       allocations: []
     }))

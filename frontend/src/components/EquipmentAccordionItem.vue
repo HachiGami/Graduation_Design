@@ -31,6 +31,9 @@
           <el-descriptions-item label="生产厂家">
             {{ equipment.manufacturer || '暂无' }}
           </el-descriptions-item>
+          <el-descriptions-item label="设备种类">
+            {{ equipment.specification || '暂无' }}
+          </el-descriptions-item>
           <el-descriptions-item label="生产时间">
             {{ equipment.production_date || '暂无' }}
           </el-descriptions-item>
@@ -38,9 +41,6 @@
             <el-tag :type="getStatusType(equipment.status)" size="small">
               {{ getStatusLabel(equipment.status) }}
             </el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="型号">
-            {{ equipment.model || '暂无' }}
           </el-descriptions-item>
         </el-descriptions>
 
@@ -78,8 +78,11 @@
       append-to-body
     >
       <el-form :model="editForm" label-width="100px" size="default">
-        <el-form-item label="设备名称">
+        <el-form-item label="设备名称" required>
           <el-input v-model="editForm.name" />
+        </el-form-item>
+        <el-form-item label="设备种类" required>
+          <el-input v-model="editForm.specification" />
         </el-form-item>
         <el-form-item label="生产厂家">
           <el-input v-model="editForm.manufacturer" />
@@ -157,6 +160,7 @@ const isEditModalVisible = ref(false)
 const isSubmitting = ref(false)
 const editForm = reactive({
   name: '',
+  specification: '',
   manufacturer: '',
   production_date: ''
 })
@@ -221,6 +225,7 @@ const formatProcessName = (processId: string) => {
 
 const openEditModal = () => {
   editForm.name = props.equipment.name || ''
+  editForm.specification = props.equipment.specification || ''
   editForm.manufacturer = props.equipment.manufacturer || ''
   editForm.production_date = props.equipment.production_date || ''
   isEditModalVisible.value = true
@@ -260,6 +265,14 @@ const submitMaintenance = async () => {
 }
 
 const submitEdit = async () => {
+  if (!editForm.name.trim()) {
+    ElMessage.warning('设备名称不能为空')
+    return
+  }
+  if (!editForm.specification.trim()) {
+    ElMessage.warning('请输入或选择设备种类')
+    return
+  }
   isSubmitting.value = true
   try {
     const response = await fetch(`http://localhost:8000/api/resources/${props.equipment._id}`, {
@@ -269,6 +282,7 @@ const submitEdit = async () => {
       },
       body: JSON.stringify({
         name: editForm.name,
+        specification: editForm.specification,
         manufacturer: editForm.manufacturer,
         production_date: editForm.production_date
       })

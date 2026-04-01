@@ -7,6 +7,7 @@ class AssetBase(BaseModel):
     name: str = Field(..., description="资产个体名称（如'灌装机-01'）")
     asset_type: Literal["equipment", "material"] = Field(..., description="资产类型")
     status: Literal["idle", "in_use", "maintenance", "available"] = Field(default="idle", description="状态")
+    specification: Optional[str] = Field(None, description="设备种类")
     
     # 仅用于 material 类型
     unit: Optional[str] = Field(None, description="单位（仅原料）")
@@ -30,6 +31,7 @@ class AssetUpdate(BaseModel):
     production_date: Optional[str] = None
     serving_activities: Optional[List[str]] = None
     process_id: Optional[str] = None
+    specification: Optional[str] = None
 
 class AssetResponse(AssetBase):
     id: str = Field(..., alias="_id")
