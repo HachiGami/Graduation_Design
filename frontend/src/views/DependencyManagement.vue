@@ -450,12 +450,50 @@ const minRunnableDays = computed<number | string>(() => {
 })
 
 const miniRunnableTimeText = computed(() => {
-  const value = minRunnableDays.value
-  if (value === '' || value === null || value === undefined) return '充足'
-  const num = Number(value)
-  if (!Number.isFinite(num)) return String(value)
-  if (num > 999) return '无限制'
-  return `${num.toFixed(1)}天`
+  const runningStatuses = new Set(['in_progress', '进行中'])
+  const activityNodes = (graphData.value.nodes || []).filter((node: any) =>
+    (node?.type === 'activity' || node?.category === 'Activity') &&
+    runningStatuses.has(node?.status) &&
+    (!currentProcessId.value || node?.process_id === currentProcessId.value)
+  )
+
+  const runningActivityIds = new Set(activityNodes.map((node: any) => node.id))
+  const usageEdges = ((graphData.value as any).resource_edges || []) as any[]
+  const consumedRateByOriginalResourceId = new Map<string, number>()
+
+  for (const edge of usageEdges) {
+    const relation = String(edge?.relation || edge?.type || '').toUpperCase()
+    if (relation !== 'CONSUMES') continue
+    if (!runningActivityIds.has(edge?.source)) continue
+
+    const resourceNode = ((graphData.value as any).resource_nodes || []).find((n: any) => n?.id === edge?.target)
+    const originalId = resourceNode?.original_id || edge?.target
+    const rate = Number(edge?.rate ?? edge?.quantity ?? edge?.value ?? edge?.weight)
+    if (!originalId || !Number.isFinite(rate) || rate <= 0) continue
+    consumedRateByOriginalResourceId.set(originalId, (consumedRateByOriginalResourceId.get(originalId) || 0) + rate)
+  }
+
+  const candidateDays: number[] = []
+  for (const [resourceId, rate] of consumedRateByOriginalResourceId) {
+    const resourceInfo = resources.value.find((r: any) => r?.id === resourceId || r?._id === resourceId)
+    const remainingDays = Number((resourceInfo as any)?.remaining_days)
+    if (Number.isFinite(remainingDays) && remainingDays >= 0) {
+      candidateDays.push(remainingDays)
+      continue
+    }
+    const quantity = Number((resourceInfo as any)?.quantity)
+    if (Number.isFinite(quantity) && quantity >= 0 && rate > 0) {
+      candidateDays.push(quantity / rate)
+    }
+  }
+
+  const minDays = candidateDays.length > 0 ? Math.min(...candidateDays) : null
+  const text = minDays === null || !Number.isFinite(minDays) || minDays < 0
+    ? '充足'
+    : (minDays > 999 ? '无限制' : `${minDays.toFixed(1)}天`)
+
+
+  return text
 })
 
 // 高亮状态：FlowHighlightSet（流程选择器）和 DashboardHighlightSet（仪表盘）
@@ -1078,8 +1116,9 @@ onMounted(async () => {
   
   if (currentDomain.value && currentProcessId.value) {
     await loadActivities()
-    await loadResources()
   }
+  // 全局首屏也需要加载资源，否则 mini 可运行时间会长期停留在“充足”
+  await loadResources()
   await loadPersonnel()
   await loadRiskList()
 })

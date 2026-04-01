@@ -37,7 +37,7 @@
       </el-card>
       
       <el-card class="kpi-card" shadow="hover" @click="handleKpiClick('resource')">
-        <div class="kpi-value">{{ runnableTimeText }}</div>
+        <div class="kpi-value">{{ minRunnableTimeText }}</div>
         <div class="kpi-label">可运行时间</div>
       </el-card>
       
@@ -268,6 +268,7 @@ import { analyzeGraph, type AnalysisScope, type HealthIssue, type ProcessMetrics
 import { calculateCPM, type CPMActivity } from '@/utils/cpmCalculator'
 import { checkResources, summarizeResourceRisksByProcess, type ResourceShortage, type ResourceRisk } from '@/utils/resourceChecker'
 import { getDynamicRisks, summarizeDynamicRisksByProcess, type DynamicRiskEvent } from '@/api/analytics'
+import { getAssets } from '@/api/asset'
 
 const props = withDefaults(defineProps<{
   graphData: GraphData
@@ -307,6 +308,7 @@ const analysisResult = ref<any>(null)
 const cpmResult = ref<any>(null)
 const resourceCheckResult = ref<any>(null)
 const dynamicRisksData = ref<DynamicRiskEvent[]>([])
+const materialAssets = ref<any[]>([])
 
 const hasSelectedProcess = computed(() => !!props.currentProcessId)
 
@@ -316,14 +318,95 @@ const dataLevelHint = computed(() => {
   return ''
 })
 
-const runnableTimeText = computed(() => {
-  const raw = props.minRunnableDays
-  if (raw === null || raw === undefined || raw === '') return '充足'
-  const num = Number(raw)
-  if (!Number.isFinite(num)) return String(raw)
-  if (num > 999) return '无限制'
-  if (num < 0) return '充足'
-  return `${num.toFixed(1)}天`
+const minRunnableTimeText = computed(() => {
+  const runningStatuses = new Set(['in_progress', '进行中'])
+  const allNodes = Array.isArray(props.graphData?.nodes) ? props.graphData.nodes : []
+  const runningActivities = allNodes.filter((node: any) => {
+    if (!isActivityNode(node)) return false
+    if (!runningStatuses.has(node?.status)) return false
+    if (props.currentProcessId && node?.process_id !== props.currentProcessId) return false
+    return true
+  })
+
+  if (runningActivities.length === 0) return '充足'
+
+  const runningActivityIds = new Set(runningActivities.map((item: any) => item.id))
+  const usageEdges = (props.graphData as any)?.resource_edges?.length
+    ? (props.graphData as any).resource_edges
+    : (props.graphData?.edges || [])
+
+  const consumedRateByMaterialId = new Map<string, number>()
+  let consumesEdgeCount = 0
+  let validConsumesEdgeCount = 0
+  for (const edge of usageEdges as any[]) {
+    const relation = String(edge?.relation || edge?.type || '').toUpperCase()
+    if (relation !== 'CONSUMES') continue
+    consumesEdgeCount += 1
+
+    let materialId = ''
+    if (runningActivityIds.has(edge?.source)) {
+      materialId = edge.target
+    } else if (runningActivityIds.has(edge?.target)) {
+      materialId = edge.source
+    }
+    if (!materialId) continue
+
+    const rate = Number(edge?.rate ?? edge?.quantity ?? edge?.value ?? edge?.weight)
+    if (!Number.isFinite(rate) || rate <= 0) continue
+
+    consumedRateByMaterialId.set(materialId, (consumedRateByMaterialId.get(materialId) || 0) + rate)
+    validConsumesEdgeCount += 1
+  }
+
+  if (consumedRateByMaterialId.size === 0) return '充足'
+
+  const resourceNodes = Array.isArray((props.graphData as any)?.resource_nodes)
+    ? (props.graphData as any).resource_nodes
+    : []
+  const materialNodes = [...resourceNodes, ...allNodes].filter((n: any) =>
+    ['material', 'consumable'].includes(String(n?.type || '').toLowerCase())
+  )
+
+  const depletionDaysList: number[] = []
+  const materialMatchDebug: Array<Record<string, any>> = []
+  for (const [materialId, rate] of consumedRateByMaterialId) {
+    const materialNode = materialNodes.find((node: any) => node?.id === materialId)
+    const matchedAsset = materialAssets.value.find((asset: any) =>
+      [asset?.id, asset?._id, asset?.model, asset?.name].includes(materialId) ||
+      (materialNode && [asset?.id, asset?._id, asset?.model, asset?.name].includes(materialNode?.name))
+    )
+
+    const remainingFromApi = Number(matchedAsset?.remaining_days)
+    const quantity = Number(matchedAsset?.quantity ?? materialNode?.quantity)
+    const daysByRate = Number.isFinite(quantity) && quantity >= 0 && rate > 0 ? quantity / rate : NaN
+    const hasApiDays = Number.isFinite(remainingFromApi) && remainingFromApi >= 0
+    const hasRateDays = Number.isFinite(daysByRate) && daysByRate >= 0
+    materialMatchDebug.push({
+      materialId,
+      materialNodeName: materialNode?.name || null,
+      matchedAssetKey: matchedAsset?.id || matchedAsset?._id || matchedAsset?.model || matchedAsset?.name || null,
+      rate,
+      quantity: Number.isFinite(quantity) ? quantity : null,
+      remainingFromApi: Number.isFinite(remainingFromApi) ? remainingFromApi : null,
+      hasApiDays,
+      hasRateDays
+    })
+
+    if (hasApiDays && hasRateDays) {
+      depletionDaysList.push(Math.min(remainingFromApi, daysByRate))
+    } else if (hasRateDays) {
+      depletionDaysList.push(daysByRate)
+    } else if (hasApiDays) {
+      depletionDaysList.push(remainingFromApi)
+    }
+  }
+
+  if (depletionDaysList.length === 0) return '充足'
+
+  const minDays = Math.min(...depletionDaysList)
+  if (!Number.isFinite(minDays) || minDays < 0) return '充足'
+  if (minDays > 999) return '无限制'
+  return `${minDays.toFixed(1)}天`
 })
 
 const metrics = computed(() => {
@@ -549,6 +632,14 @@ watch(() => props.graphData, () => {
   performAnalysis()
 }, { deep: true })
 
+watch(
+  () => props.graphData,
+  () => {
+    loadMaterialAssets()
+  },
+  { deep: true, immediate: true }
+)
+
 watch(activeTab, (newTab, oldTab) => {
   if (currentScope.value !== 'process' || !props.currentProcessId) return
   
@@ -625,6 +716,16 @@ async function loadDynamicRisks() {
   const processId = currentScope.value === 'process' && props.currentProcessId ? props.currentProcessId : undefined
   const result = await getDynamicRisks(processId)
   dynamicRisksData.value = [...result.equipmentShortages, ...result.personnelOverloads]
+}
+
+async function loadMaterialAssets() {
+  try {
+    const data = await getAssets({ asset_type: 'material' })
+    materialAssets.value = Array.isArray(data) ? data : []
+  } catch (error) {
+    console.error('加载原料资产失败:', error)
+    materialAssets.value = []
+  }
 }
 
 function handleKpiClick(type: string) {
