@@ -369,13 +369,17 @@ const saveResources = async () => {
   saving.value = true
   try {
     const payload = {
-      personnel_roles: draftReqs.value.personnel.map(p => p.role).filter(Boolean),
-      equipment_types: draftReqs.value.equipment.map(e => e.equipment_type).filter(Boolean),
+      personnel_roles: draftReqs.value.personnel
+        .map(p => (p.role || '').trim())
+        .filter(Boolean),
+      equipment_types: draftReqs.value.equipment
+        .map(e => (e.equipment_type || '').trim())
+        .filter(Boolean),
       assigned_personnel_ids: draftReqs.value.personnel
-        .map(p => p.personnel_id)
+        .map(p => (p.personnel_id || '').trim())
         .filter(Boolean),
       assigned_equipment_ids: draftReqs.value.equipment
-        .map(e => e.equipment_id)
+        .map(e => (e.equipment_id || '').trim())
         .filter(Boolean),
       consumed_resources: draftReqs.value.materials
         .filter(m => m.resource_id)
@@ -433,19 +437,53 @@ const loadData = async () => {
     occupiedIds.value = occupiedResult.status === 'fulfilled' ? occupiedResult.value : []
 
     const initial: DraftReqs = {
-      personnel: (currentResources.assigned_personnel || []).map(p => ({
-        role: p.role || '',
-        personnel_id: p.id || '',
-      })),
-      equipment: (currentResources.assigned_equipment || []).map(e => ({
-        equipment_type: e.specification || '',
-        equipment_id: e.id || '',
-      })),
+      personnel: [],
+      equipment: [],
       materials: (currentResources.consumed_resources || []).map(m => ({
         resource_id: m.resource_id || '',
         rate: m.rate || 0,
       })),
     }
+    const requiredRoles = ((currentResources as any).personnel_roles_required || []) as string[]
+    const requiredEquipmentTypes = ((currentResources as any).equipment_types_required || []) as string[]
+    const availableAssignedPersonnel = [...(currentResources.assigned_personnel || [])]
+    const availableAssignedEquipment = [...(currentResources.assigned_equipment || [])]
+
+    initial.personnel = requiredRoles.map(requiredRole => {
+      const matchIndex = availableAssignedPersonnel.findIndex(
+        p => (p.role || '') === requiredRole
+      )
+      if (matchIndex > -1) {
+        const matched = availableAssignedPersonnel.splice(matchIndex, 1)[0]
+        return {
+          role: requiredRole || '',
+          personnel_id: matched?.id || '',
+        }
+      }
+      return {
+        role: requiredRole || '',
+        personnel_id: '',
+      }
+    })
+
+    initial.equipment = requiredEquipmentTypes.map(requiredType => {
+      const matchIndex = availableAssignedEquipment.findIndex(e =>
+        (e as any).type === requiredType ||
+        e.specification === requiredType ||
+        (e as any).equipment_type === requiredType
+      )
+      if (matchIndex > -1) {
+        const matched = availableAssignedEquipment.splice(matchIndex, 1)[0]
+        return {
+          equipment_type: requiredType || '',
+          equipment_id: matched?.id || '',
+        }
+      }
+      return {
+        equipment_type: requiredType || '',
+        equipment_id: '',
+      }
+    })
 
     savedReqs.value = JSON.parse(JSON.stringify(initial))
     draftReqs.value = JSON.parse(JSON.stringify(initial))
