@@ -106,7 +106,8 @@ async def get_personnel():
                     MATCH (a:Activity)-[]-(p:Personnel)
                     WHERE p.name IN $names
                     RETURN p.name AS entity_name,
-                           a.name AS activity_name
+                           a.name AS activity_name,
+                           a.status AS activity_status_neo4j
                     """,
                     {"names": names},
                 )
@@ -119,6 +120,7 @@ async def get_personnel():
                     activities_mongo_map[act["name"]] = {
                         "process_id": act.get("process_id"),
                         "working_hours": act.get("working_hours") or [],
+                        "status": act.get("status", ""),
                     }
 
             for rec in neo4j_records:
@@ -127,6 +129,7 @@ async def get_personnel():
                 activity_info = activities_mongo_map.get(activity_name, {})
                 process_id = activity_info.get("process_id")
                 working_hours = activity_info.get("working_hours") or []
+                status = rec.get("activity_status_neo4j") or activity_info.get("status", "")
                 if not entity_name or not activity_name:
                     continue
 
@@ -134,6 +137,7 @@ async def get_personnel():
                     {
                         "activity_name": activity_name,
                         "process_id": process_id,
+                        "status": status,
                         "working_hours": working_hours,
                     }
                 )

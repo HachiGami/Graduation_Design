@@ -39,8 +39,9 @@
             :key="index"
             class="activity-detail-row"
           >
-            <el-tag size="small" type="success" class="activity-name-tag">
-              {{ act.activity_name }}
+            <span class="activity-name">{{ act.activity_name }}</span>
+            <el-tag size="small" :type="getActivityStatusType(act.status)">
+              {{ getActivityStatusLabel(act.status) }}
             </el-tag>
             <span class="activity-meta">
               归属: {{ formatProcessName(act.process_id) }}
@@ -207,6 +208,21 @@ const formatWorkingHours = (workingHours: Array<{ start_time?: string; end_time?
     .join(', ')
 }
 
+const getActivityStatusType = (status: string) => {
+  const normalized = (status || '').toLowerCase()
+  if (normalized === 'in_progress' || normalized === '进行中') return 'success'
+  if (normalized === 'stopped' || normalized === '已停机') return 'danger'
+  return 'info'
+}
+
+const getActivityStatusLabel = (status: string) => {
+  const normalized = (status || '').toLowerCase()
+  if (normalized === 'in_progress' || normalized === '进行中') return '进行中'
+  if (normalized === 'stopped' || normalized === '已停机') return '已停机'
+  if (normalized === 'pending' || normalized === '待机') return '待机中'
+  return status || '未知状态'
+}
+
 const handleEdit = () => {
   editForm.value = { ...props.personnel }
   editDialogVisible.value = true
@@ -336,8 +352,11 @@ const handleDeletePersonnel = async () => {
   gap: 8px;
   margin-top: 6px;
 }
-.activity-name-tag {
+.activity-name {
   flex-shrink: 0;
+  font-size: 13px;
+  color: #303133;
+  font-weight: 500;
 }
 .activity-meta {
   font-size: 12px;

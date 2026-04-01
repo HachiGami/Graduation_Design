@@ -87,7 +87,7 @@
       <el-form-item label="活动描述"><el-input v-model="editForm.description" type="textarea" /></el-form-item>
       <el-form-item label="状态">
         <el-select v-model="editForm.status">
-          <el-option label="待机" value="pending" />
+          <el-option label="待机中" value="pending" />
           <el-option label="进行中" value="in_progress" />
         </el-select>
       </el-form-item>
@@ -248,7 +248,7 @@ const workingHoursText = computed(() => {
 
 const statusText = (status: string) => {
   const map: Record<string, string> = {
-    pending: '待机',
+    pending: '待机中',
     in_progress: '进行中'
   }
   return map[status] || status

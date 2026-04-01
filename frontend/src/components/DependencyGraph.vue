@@ -331,6 +331,17 @@ const initCytoscape = async () => {
         }
       },
       {
+        selector: 'node.material-node',
+        style: {
+          'background-color': '#95D475',
+          'shape': 'round-rectangle',
+          'width': 90,
+          'height': 52,
+          'border-color': '#67C23A',
+          'border-width': 2
+        }
+      },
+      {
         selector: 'node.personnel-node',
         style: {
           'background-color': '#E6A23C',
@@ -483,14 +494,33 @@ const initCytoscape = async () => {
 const expandActivity = (activityId: string) => {
   if (!cy) return
 
-  const toExpand: Array<{id: string, name: string, category: string, rawData?: any}> = []
+  const toExpand: Array<{id: string, name: string, category: string, classes: string, rawData?: any}> = []
+  const visualResourceIdMap = new Map<string, string>()
 
   if (props.data.resource_nodes) {
     props.data.resource_nodes
       .filter((rn: any) => rn.parent_activity === activityId)
       .forEach((rn: any) => {
-        if (!cy.$id(rn.id).length) {
-          toExpand.push({ id: rn.id, name: rn.name, category: 'resource', rawData: rn })
+        const isMaterial = String(rn.type || '').toLowerCase() === 'material'
+          || String(rn.category || '').toLowerCase() === 'material'
+          || Array.isArray(rn.labels) && rn.labels.includes('Material')
+        const visualId = isMaterial ? `${rn.id}_clone_for_${activityId}` : rn.id
+
+        if (!cy.$id(visualId).length) {
+          if (isMaterial) {
+            visualResourceIdMap.set(rn.id, visualId)
+          }
+          toExpand.push({
+            id: visualId,
+            name: rn.name,
+            category: 'resource',
+            classes: `expanded-node resource-node ${isMaterial ? 'material-node' : ''}`.trim(),
+            rawData: {
+              ...rn,
+              original_id: rn.original_id || rn.id,
+              id: visualId
+            }
+          })
         }
       })
   }
@@ -500,7 +530,13 @@ const expandActivity = (activityId: string) => {
       .filter((pn: any) => pn.parent_activity === activityId)
       .forEach((pn: any) => {
         if (!cy.$id(pn.id).length) {
-          toExpand.push({ id: pn.id, name: pn.name, category: 'personnel', rawData: pn })
+          toExpand.push({
+            id: pn.id,
+            name: pn.name,
+            category: 'personnel',
+            classes: 'expanded-node personnel-node',
+            rawData: pn
+          })
         }
       })
   }
@@ -527,14 +563,58 @@ const expandActivity = (activityId: string) => {
         rawData: item.rawData
       },
       position: { x, y },
-      classes: `expanded-node ${item.category}-node`
+      classes: item.classes
     })
+  })
 
+  const edgeDefs: Array<{ source: string, target: string, relation?: string }> = []
+  const existingEdgeIds = new Set<string>()
+
+  if (props.data.resource_edges) {
+    props.data.resource_edges
+      .filter((edge: any) => edge.source === activityId)
+      .forEach((edge: any) => {
+        const relation = edge.relation || edge.type
+        const isConsumes = relation === 'CONSUMES'
+        const targetId = isConsumes && visualResourceIdMap.has(edge.target)
+          ? visualResourceIdMap.get(edge.target)!
+          : edge.target
+        const sourceId = isConsumes && visualResourceIdMap.has(edge.source)
+          ? visualResourceIdMap.get(edge.source)!
+          : edge.source
+
+        if (cy.$id(sourceId).length && cy.$id(targetId).length) {
+          edgeDefs.push({ source: sourceId, target: targetId, relation })
+        }
+      })
+  }
+
+  if (props.data.personnel_edges) {
+    props.data.personnel_edges
+      .filter((edge: any) => edge.source === activityId)
+      .forEach((edge: any) => {
+        if (cy.$id(edge.source).length && cy.$id(edge.target).length) {
+          edgeDefs.push({ source: edge.source, target: edge.target, relation: edge.relation || edge.type })
+        }
+      })
+  }
+
+  if (edgeDefs.length === 0) {
+    toExpand.forEach((item) => {
+      edgeDefs.push({ source: activityId, target: item.id })
+    })
+  }
+
+  edgeDefs.forEach((edge) => {
+    const edgeId = `${edge.source}-${edge.target}`
+    if (existingEdgeIds.has(edgeId) || cy.$id(edgeId).length) return
+    existingEdgeIds.add(edgeId)
     cy.add({
       data: {
-        id: `${activityId}-${item.id}`,
-        source: activityId,
-        target: item.id
+        id: edgeId,
+        source: edge.source,
+        target: edge.target,
+        relation: edge.relation
       }
     })
   })

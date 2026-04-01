@@ -58,6 +58,8 @@ def _normalize_resource_for_response(resource: dict) -> dict:
     resource.setdefault("manufacturer", None)
     resource.setdefault("production_date", None)
     resource.setdefault("upcoming_maintenance", [])
+    resource.setdefault("daily_consumption", 0.0)
+    resource.setdefault("remaining_days", -1.0)
     resource.setdefault("serving_activities_details", [])
     resource.setdefault("serving_processes", [])
     resource.setdefault("created_at", resource.get("updated_at") or now)
@@ -102,6 +104,11 @@ def _parse_working_hours(working_hours) -> float:
     return total_hours
 
 
+def _is_activity_running(status: str) -> bool:
+    normalized = (status or "").strip().lower()
+    return normalized in {"in_progress", "进行中"}
+
+
 async def _enrich_with_neo4j(resources: list, db, driver) -> None:
     """
     从 Neo4j 动态拉取每个实体关联的活动关系，并结合 MongoDB activities 获取工作时间和 process_id，
@@ -120,11 +127,15 @@ async def _enrich_with_neo4j(resources: list, db, driver) -> None:
         async with driver.session() as session:
             result = await session.run(
                 """
-                MATCH (a:Activity)-[r]-(e)
+                MATCH (a:Activity)-[r:CONSUMES]->(e)
                 WHERE e.name IN $names
                 RETURN e.name AS entity_name,
                        a.name AS activity_name,
-                       r.hourly_consumption AS hourly_consumption
+                       a.id AS activity_id,
+                       a.process_id AS process_id_neo4j,
+                       a.status AS activity_status_neo4j,
+                       a.working_hours AS working_hours_neo4j,
+                       r.rate AS rate
                 """,
                 {"names": names},
             )
@@ -138,6 +149,7 @@ async def _enrich_with_neo4j(resources: list, db, driver) -> None:
                 activities_mongo_map[act["name"]] = {
                     "process_id": act.get("process_id", ""),
                     "working_hours": act.get("working_hours", []),
+                    "status": act.get("status", ""),
                 }
 
         for rec in neo4j_records:
@@ -147,18 +159,22 @@ async def _enrich_with_neo4j(resources: list, db, driver) -> None:
                 continue
 
             act_info = activities_mongo_map.get(activity_name, {})
-            process_id = act_info.get("process_id", "")
-            working_hours = act_info.get("working_hours", [])
-            hourly_consumption = float(rec.get("hourly_consumption") or 0.0)
+            process_id = rec.get("process_id_neo4j") or act_info.get("process_id", "")
+            working_hours = rec.get("working_hours_neo4j") or act_info.get("working_hours", [])
+            status = rec.get("activity_status_neo4j") or act_info.get("status", "")
+            rate = float(rec.get("rate") or 0.0)
             total_hours = _parse_working_hours(working_hours)
-            daily_consumption = round(hourly_consumption * total_hours, 4)
+            daily_consumption = round(rate * total_hours, 4)
 
             entity_activities_map.setdefault(entity_name, []).append(
                 {
                     "activity_name": activity_name,
+                    "activity_id": rec.get("activity_id", ""),
                     "process_id": process_id,
+                    "status": status,
                     "working_hours": working_hours,
-                    "hourly_consumption": hourly_consumption,
+                    "rate": rate,
+                    "hourly_consumption": rate,
                     "daily_consumption": daily_consumption,
                 }
             )
@@ -170,6 +186,17 @@ async def _enrich_with_neo4j(resources: list, db, driver) -> None:
         details = entity_activities_map.get(name, [])
         r["serving_activities_details"] = details
         r["serving_processes"] = list({d["process_id"] for d in details if d["process_id"]})
+        total_daily_consumption = round(
+            sum(
+                float(d.get("daily_consumption", 0.0) or 0.0)
+                for d in details
+                if _is_activity_running(str(d.get("status", "")))
+            ),
+            4,
+        )
+        quantity = float(r.get("quantity", 0.0) or 0.0)
+        r["daily_consumption"] = total_daily_consumption
+        r["remaining_days"] = round(quantity / total_daily_consumption, 2) if total_daily_consumption > 0 else -1.0
 
 
 @router.post("", response_model=ResourceResponse)

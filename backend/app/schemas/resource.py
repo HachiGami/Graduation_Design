@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
 
 class ResourceBase(BaseModel):
@@ -35,6 +35,16 @@ class ResourceUpdate(BaseModel):
     production_date: Optional[str] = None
     upcoming_maintenance: Optional[list[str]] = None
 
+class ActivityConsumerResponse(BaseModel):
+    activity_id: str = Field(default="", description="活动ID")
+    activity_name: str = Field(..., description="活动名称")
+    process_id: str = Field(default="", description="流程ID")
+    status: str = Field(default="", description="活动状态")
+    working_hours: List[Any] = Field(default=[], description="活动工作时间配置")
+    rate: float = Field(0.0, description="原料消耗速率（单位/小时）")
+    daily_consumption: float = Field(0.0, description="按工作时长计算的每日消耗量")
+
+
 class ResourceResponse(BaseModel):
     id: str = Field(..., alias="_id")
     name: str
@@ -50,9 +60,11 @@ class ResourceResponse(BaseModel):
     manufacturer: Optional[str] = None
     production_date: Optional[str] = None
     upcoming_maintenance: Optional[List[str]] = Field(default=[])
+    daily_consumption: float = Field(0.0, description="每日总消耗量")
+    remaining_days: float = Field(-1.0, description="预计可用天数，-1 表示暂无消耗")
     created_at: datetime
     updated_at: datetime
-    serving_activities_details: Optional[List[dict]] = Field(
+    serving_activities_details: Optional[List[ActivityConsumerResponse]] = Field(
         default=[],
         description="动态从Neo4j计算出的服务活动详情(含工作时长与消耗率)"
     )

@@ -283,7 +283,7 @@ async def get_graph_data(
         
         # 获取活动-资源使用关系（每个活动的资源单独一个节点）
         usage_query = """
-        MATCH (a:Activity)-[u:ASSIGNED_TO|ASSIGNS|USES|DEPENDS_ON]->(r)
+        MATCH (a:Activity)-[u:ASSIGNED_TO|ASSIGNS|USES|CONSUMES]->(r)
         WHERE any(label IN labels(r) WHERE label IN ['Resource', 'Equipment', 'Material'])
         RETURN a.id as activity_id, r.id as resource_id, r.name as resource_name,
                coalesce(r.resource_type, head(labels(r))) as resource_type,

@@ -51,8 +51,9 @@
             :key="index"
             class="activity-detail-row"
           >
-            <el-tag size="small" type="success" class="activity-name-tag">
-              {{ detail.activity_name }}
+            <span class="activity-name">{{ detail.activity_name }}</span>
+            <el-tag size="small" :type="getActivityStatusType(detail.status)">
+              {{ getActivityStatusLabel(detail.status) }}
             </el-tag>
             <span class="activity-meta">
               归属: {{ formatProcessName(detail.process_id) }}
@@ -223,6 +224,21 @@ const formatProcessName = (processId: string) => {
   return `${processId} - ${typeMap[prefix] || '未知流程'}`
 }
 
+const getActivityStatusType = (status: string) => {
+  const normalized = (status || '').toLowerCase()
+  if (normalized === 'in_progress' || normalized === '进行中') return 'success'
+  if (normalized === 'stopped' || normalized === '已停机') return 'danger'
+  return 'info'
+}
+
+const getActivityStatusLabel = (status: string) => {
+  const normalized = (status || '').toLowerCase()
+  if (normalized === 'in_progress' || normalized === '进行中') return '进行中'
+  if (normalized === 'stopped' || normalized === '已停机') return '已停机'
+  if (normalized === 'pending' || normalized === '待机') return '待机中'
+  return status || '未知状态'
+}
+
 const openEditModal = () => {
   editForm.name = props.equipment.name || ''
   editForm.specification = props.equipment.specification || ''
@@ -371,8 +387,11 @@ const handleDeleteEquipment = async () => {
   margin-top: 6px;
 }
 
-.activity-name-tag {
+.activity-name {
   flex-shrink: 0;
+  font-size: 13px;
+  color: #303133;
+  font-weight: 500;
 }
 
 .activity-meta {

@@ -38,11 +38,18 @@
             <li v-for="(detail, index) in material.serving_activities_details" :key="index">
               <span class="act-name">
                 {{ detail.activity_name }}
+                <el-tag
+                  size="small"
+                  :type="getActivityStatusType(detail.status)"
+                  class="activity-status-tag"
+                >
+                  {{ getActivityStatusLabel(detail.status) }}
+                </el-tag>
                 <span class="act-process">(归属: {{ formatProcessName(detail.process_id) }})</span>
               </span>
               <span class="act-rate">
-                消耗速率: {{ detail.hourly_consumption != null ? Number(detail.hourly_consumption).toFixed(2) : '0.00' }} {{ material.unit }}/小时,
-                共 {{ detail.daily_consumption != null ? Number(detail.daily_consumption).toFixed(1) : '0.0' }} {{ material.unit }}/天
+                消耗速率: {{ detail.rate != null ? Number(detail.rate).toFixed(2) : (detail.hourly_consumption != null ? Number(detail.hourly_consumption).toFixed(2) : '0.00') }} {{ material.unit }}/小时,
+                共 {{ computeDailyConsumption(detail).toFixed(1) }} {{ material.unit }}/天
               </span>
             </li>
           </ul>
@@ -94,6 +101,49 @@ const formatProcessName = (processId: string) => {
   }
   return `${processId} - ${typeMap[prefix] || '未知流程'}`
 }
+
+const parseWorkingHours = (workingHours: any): number => {
+  if (!workingHours) return 0;
+  const calcPeriod = (start: string, end: string): number => {
+    if (!start || !end || !start.includes(':') || !end.includes(':')) return 0;
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    if ([sh, sm, eh, em].some(Number.isNaN)) return 0;
+    return ((eh * 60 + em) - (sh * 60 + sm)) / 60;
+  };
+  if (Array.isArray(workingHours)) {
+    return workingHours.reduce((sum: number, item: any) => sum + calcPeriod(item?.start_time, item?.end_time), 0);
+  }
+  if (typeof workingHours === 'string') {
+    return workingHours.split(',').reduce((sum: number, period: string) => {
+      const [start, end] = period.trim().split('-').map(s => s.trim());
+      return sum + calcPeriod(start, end);
+    }, 0);
+  }
+  return 0;
+};
+
+const computeDailyConsumption = (detail: any): number => {
+  if (detail?.daily_consumption != null) return Number(detail.daily_consumption) || 0;
+  const rate = detail?.rate ?? detail?.hourly_consumption ?? 0;
+  const totalHours = parseWorkingHours(detail?.working_hours);
+  return Number(rate || 0) * totalHours;
+};
+
+const getActivityStatusType = (status: string) => {
+  const normalized = (status || '').toLowerCase();
+  if (normalized === 'in_progress' || normalized === '进行中') return 'success';
+  if (normalized === 'stopped' || normalized === '已停机') return 'danger';
+  return 'info';
+};
+
+const getActivityStatusLabel = (status: string) => {
+  const normalized = (status || '').toLowerCase();
+  if (normalized === 'in_progress' || normalized === '进行中') return '进行中';
+  if (normalized === 'stopped' || normalized === '已停机') return '已停机';
+  if (normalized === 'pending' || normalized === '待机') return '待机中';
+  return status || '未知状态';
+};
 
 const emit = defineEmits(['replenish', 'edit']);
 
@@ -225,6 +275,10 @@ const handleEdit = () => {
   font-size: 12px;
   color: #909399;
   margin-left: 4px;
+}
+
+.activity-status-tag {
+  margin-left: 8px;
 }
 
 .act-rate {
