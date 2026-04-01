@@ -155,6 +155,17 @@
           />
         </el-select>
       </el-form-item>
+      <el-form-item label="前置活动">
+        <el-select v-model="editForm.predecessor_id" placeholder="请选择前置活动" clearable style="width: 100%">
+          <el-option label="无" :value="null" />
+          <el-option
+            v-for="item in predecessorOptions"
+            :key="item.id"
+            :label="item.name"
+            :value="item.id"
+          />
+        </el-select>
+      </el-form-item>
     </el-form>
     <template #footer>
       <div style="display: flex; justify-content: space-between; width: 100%;">
@@ -216,6 +227,7 @@ import type { Activity } from '@/types'
 import ActivityResourcesPanel from './ActivityResourcesPanel.vue'
 import {
   getActivity,
+  getActivities,
   updateActivity,
   deleteActivity
 } from '@/api/activity'
@@ -233,6 +245,7 @@ const sopDialogVisible = ref(false)
 const replenishDialogVisible = ref(false)
 
 const editForm = ref<Partial<Activity>>({})
+const sameProcessActivities = ref<Activity[]>([])
 const sopEditForm = ref({
   description: '',
   sop_steps: [] as { content: string, duration: number }[]
@@ -281,7 +294,37 @@ const handleProcessIdChange = (newProcessId: string) => {
     // 自动将隐藏的 domain 字段设置为对应的值，以便提交给后端
     editForm.value.domain = prefixToDomainMap[prefix];
   }
+  editForm.value.predecessor_id = null
+  void loadSameProcessActivities(newProcessId)
 };
+
+const predecessorOptions = computed(() => {
+  const selfId = activityId.value
+  return sameProcessActivities.value.filter((item) => item.id && item.id !== selfId)
+})
+
+const loadSameProcessActivities = async (processId?: string) => {
+  const targetProcessId = processId || editForm.value.process_id
+  if (!targetProcessId) {
+    sameProcessActivities.value = []
+    return
+  }
+  const prefix = targetProcessId.charAt(0).toUpperCase()
+  const domain = prefixToDomainMap[prefix]
+  if (!domain) {
+    sameProcessActivities.value = []
+    return
+  }
+  try {
+    const list = await getActivities({ domain, process_id: targetProcessId })
+    sameProcessActivities.value = list.map((item) => {
+      if ((item as any)._id && !item.id) item.id = (item as any)._id
+      return item
+    })
+  } catch {
+    sameProcessActivities.value = []
+  }
+}
 
 const activityId = computed(() => localActivity.value.id || '')
 const totalSopDuration = computed(() => {
@@ -375,8 +418,10 @@ const openEditDialog = () => {
     description: localActivity.value.description,
     status: localActivity.value.status,
     domain: localActivity.value.domain,
-    process_id: localActivity.value.process_id
+    process_id: localActivity.value.process_id,
+    predecessor_id: localActivity.value.predecessor_id ?? null
   }
+  void loadSameProcessActivities(localActivity.value.process_id)
   editDialogVisible.value = true
 }
 

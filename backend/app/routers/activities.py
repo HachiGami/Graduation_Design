@@ -73,6 +73,7 @@ def _normalize_activity_for_response(activity: dict) -> dict:
     activity.setdefault("status", "pending")
     activity.setdefault("domain", "production")
     activity.setdefault("process_id", "P001")
+    activity.setdefault("predecessor_id", None)
     activity.setdefault("version", 1)
     activity.setdefault("is_active", True)
     activity.setdefault(
@@ -93,6 +94,22 @@ def _normalize_activity_for_response(activity: dict) -> dict:
     return activity
 
 
+PROCESS_PREFIX_MAPPING = {
+    "P": ("production", "production"),
+    "Q": ("quality", "quality"),
+    "S": ("sales", "sales"),
+    "T": ("transport", "transport"),
+    "W": ("warehouse", "warehouse"),
+}
+
+
+def _derive_domain_and_type(process_id: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    if not process_id:
+        return None, None
+    prefix = process_id[:1].upper()
+    return PROCESS_PREFIX_MAPPING.get(prefix, (None, None))
+
+
 def _parse_activity_object_id(activity_id: str) -> ObjectId:
     if not ObjectId.is_valid(activity_id):
         raise HTTPException(status_code=400, detail="无效的活动ID")
@@ -104,6 +121,14 @@ async def create_activity(activity: ActivityCreate):
     driver = get_neo4j_driver()
     
     activity_dict = activity.model_dump()
+    derived_domain, derived_type = _derive_domain_and_type(activity.process_id)
+    if derived_domain:
+        activity_dict["domain"] = derived_domain
+    if derived_type:
+        activity_dict["activity_type"] = derived_type
+    predecessor_id = activity_dict.get("predecessor_id")
+    if predecessor_id == "":
+        activity_dict["predecessor_id"] = None
     activity_dict["created_at"] = datetime.utcnow()
     activity_dict["updated_at"] = datetime.utcnow()
     
@@ -111,7 +136,7 @@ async def create_activity(activity: ActivityCreate):
     activity_id = str(result.inserted_id)
     activity_dict["_id"] = activity_id
     
-    # 同步到Neo4j：只存activity_id和name
+    # 同步到Neo4j：创建/更新活动节点
     neo4j_query = """
     MERGE (a:Activity {id: $activity_id})
     SET a.name = $name, a.domain = $domain, a.process_id = $process_id
@@ -121,10 +146,21 @@ async def create_activity(activity: ActivityCreate):
         async with driver.session() as session:
             await session.run(neo4j_query, {
                 "activity_id": activity_id,
-                "name": activity.name,
-                "domain": activity.domain,
-                "process_id": activity.process_id
+                "name": activity_dict.get("name"),
+                "domain": activity_dict.get("domain"),
+                "process_id": activity_dict.get("process_id")
             })
+            if activity_dict.get("predecessor_id"):
+                await session.run(
+                    """
+                    MATCH (child:Activity {id: $new_id}), (parent:Activity {id: $pred_id})
+                    MERGE (child)-[:DEPENDS_ON]->(parent)
+                    """,
+                    {
+                        "new_id": activity_id,
+                        "pred_id": activity_dict["predecessor_id"],
+                    },
+                )
     except Exception as e:
         print(f"Neo4j同步失败: {e}")
     
@@ -464,7 +500,20 @@ async def update_activity(activity_id: str, activity: ActivityUpdate):
     db = get_database()
     driver = get_neo4j_driver()
     
+    existing_activity = await db.activities.find_one({"_id": ObjectId(activity_id)})
+    if not existing_activity:
+        raise HTTPException(status_code=404, detail="生产活动不存在")
+
+    old_predecessor_id = existing_activity.get("predecessor_id")
     update_data = {k: v for k, v in activity.model_dump().items() if v is not None}
+    if update_data.get("predecessor_id") == "":
+        update_data["predecessor_id"] = None
+    effective_process_id = update_data.get("process_id", existing_activity.get("process_id"))
+    derived_domain, derived_type = _derive_domain_and_type(effective_process_id)
+    if derived_domain:
+        update_data["domain"] = derived_domain
+    if derived_type:
+        update_data["activity_type"] = derived_type
     update_data["updated_at"] = datetime.utcnow()
     
     result = await db.activities.update_one(
@@ -472,14 +521,11 @@ async def update_activity(activity_id: str, activity: ActivityUpdate):
         {"$set": update_data}
     )
     
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="生产活动不存在")
-    
     updated_activity = await db.activities.find_one({"_id": ObjectId(activity_id)})
     updated_activity["_id"] = str(updated_activity["_id"])
     
     # 同步到Neo4j：如果name更新了，同步更新
-    if activity.name or activity.domain or activity.process_id:
+    if activity.name or activity.domain or activity.process_id or activity.predecessor_id is not None:
         neo4j_query = """
         MATCH (a:Activity {id: $activity_id})
         SET a.name = COALESCE($name, a.name),
@@ -491,10 +537,27 @@ async def update_activity(activity_id: str, activity: ActivityUpdate):
             async with driver.session() as session:
                 await session.run(neo4j_query, {
                     "activity_id": activity_id,
-                    "name": activity.name,
-                    "domain": activity.domain,
-                    "process_id": activity.process_id
+                    "name": update_data.get("name"),
+                    "domain": update_data.get("domain"),
+                    "process_id": update_data.get("process_id")
                 })
+                new_predecessor_id = updated_activity.get("predecessor_id")
+                if old_predecessor_id != new_predecessor_id:
+                    await session.run(
+                        """
+                        MATCH (child:Activity {id: $id})-[r:DEPENDS_ON]->(:Activity)
+                        DELETE r
+                        """,
+                        {"id": activity_id},
+                    )
+                    if new_predecessor_id:
+                        await session.run(
+                            """
+                            MATCH (child:Activity {id: $id}), (parent:Activity {id: $new_pred_id})
+                            MERGE (child)-[:DEPENDS_ON]->(parent)
+                            """,
+                            {"id": activity_id, "new_pred_id": new_predecessor_id},
+                        )
         except Exception as e:
             print(f"Neo4j同步失败: {e}")
     

@@ -41,15 +41,6 @@
         <el-form-item label="活动描述">
           <el-input v-model="addActivityForm.description" type="textarea" :rows="2" placeholder="请输入活动描述" />
         </el-form-item>
-        <el-form-item label="活动类型" required>
-          <el-select v-model="addActivityForm.activity_type" style="width: 100%">
-            <el-option label="生产 (production)" value="production" />
-            <el-option label="质检 (quality)" value="quality" />
-            <el-option label="仓储 (warehouse)" value="warehouse" />
-            <el-option label="运输 (transport)" value="transport" />
-            <el-option label="销售 (sales)" value="sales" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="流程ID" required>
           <el-select v-model="addActivityForm.process_id" style="width: 100%" @change="onAddProcessIdChange">
             <el-option v-for="item in processOptions.filter(o => o.value !== 'ALL')" :key="item.value" :label="item.label" :value="item.value" />
@@ -63,6 +54,17 @@
             <el-option label="Q002 - 专项质检" value="Q002" />
             <el-option label="W001 - 主仓库" value="W001" />
             <el-option label="W002 - 分仓库" value="W002" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="前置活动">
+          <el-select v-model="addActivityForm.predecessor_id" style="width: 100%" clearable>
+            <el-option label="无" :value="null" />
+            <el-option
+              v-for="item in addPredecessorOptions"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="预计时长(分)" required>
@@ -174,9 +176,8 @@ const prefixToDomainMap: Record<string, string> = {
 const defaultAddActivityForm = () => ({
   name: '',
   description: '',
-  activity_type: 'production',
   process_id: 'P001',
-  domain: 'production',
+  predecessor_id: null as string | null,
   estimated_duration: 60,
   status: 'pending' as 'pending' | 'in_progress',
   sop_steps: [],
@@ -188,6 +189,11 @@ const defaultAddActivityForm = () => ({
 
 const addActivityForm = ref(defaultAddActivityForm())
 
+const addPredecessorOptions = computed(() => {
+  if (!addActivityForm.value.process_id) return []
+  return activities.value.filter((item) => item.process_id === addActivityForm.value.process_id && item.id)
+})
+
 const openAddActivityDialog = () => {
   addActivityForm.value = defaultAddActivityForm()
   addActivityDialogVisible.value = true
@@ -196,10 +202,8 @@ const openAddActivityDialog = () => {
 const onAddProcessIdChange = (val: string) => {
   if (!val) return
   const prefix = val.charAt(0).toUpperCase()
-  if (prefixToDomainMap[prefix]) {
-    addActivityForm.value.domain = prefixToDomainMap[prefix]
-    addActivityForm.value.activity_type = prefixToDomainMap[prefix]
-  }
+  if (!prefixToDomainMap[prefix]) return
+  addActivityForm.value.predecessor_id = null
 }
 
 const submitAddActivity = async () => {

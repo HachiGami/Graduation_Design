@@ -106,7 +106,7 @@ export interface Activity {
   id?: string
   name: string
   description: string
-  activity_type: string
+  activity_type?: string
   sop_steps: SOPStep[]
   estimated_duration: number
   duration_minutes?: number
@@ -116,6 +116,7 @@ export interface Activity {
   status: string
   domain: string
   process_id: string
+  predecessor_id?: string | null
   version?: number
   is_active?: boolean
   working_hours?: TimeWindow[]
