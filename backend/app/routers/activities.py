@@ -144,6 +144,42 @@ async def get_activities(
         activities.append(_normalize_activity_for_response(activity))
     return activities
 
+
+@router.get("/occupied-resources", response_model=List[str])
+async def get_occupied_resources():
+    """获取所有已被活动占用的资源ID（MongoDB ObjectId字符串）"""
+    driver = get_neo4j_driver()
+
+    occupied_ids: List[str] = []
+    try:
+        async with driver.session() as session:
+            # 兼容历史关系方向：资源->活动 及 活动->资源
+            result = await session.run(
+                """
+                MATCH (n)-[:ASSIGNED_TO|ASSIGNS|USES]->(:Activity)
+                RETURN collect(distinct n.id) AS occupiedIds
+                """
+            )
+            record = await result.single()
+            if record and record.get("occupiedIds"):
+                occupied_ids.extend([rid for rid in record["occupiedIds"] if isinstance(rid, str) and rid])
+
+            result = await session.run(
+                """
+                MATCH (:Activity)-[:ASSIGNED_TO|ASSIGNS|USES]->(n)
+                RETURN collect(distinct n.id) AS occupiedIds
+                """
+            )
+            record = await result.single()
+            if record and record.get("occupiedIds"):
+                occupied_ids.extend([rid for rid in record["occupiedIds"] if isinstance(rid, str) and rid])
+    except Exception as e:
+        print(f"Neo4j查询失败: {e}")
+        raise HTTPException(status_code=500, detail="查询已占用资源失败")
+
+    return list(set(occupied_ids))
+
+
 @router.get("/{activity_id}", response_model=ActivityResponse)
 async def get_activity(activity_id: str):
     db = get_database()

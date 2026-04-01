@@ -70,6 +70,10 @@ export const getActivityResources = (activityId: string) => {
   return request.get<any, ActivityResourcesData>(`/activities/${activityId}/resources`)
 }
 
+export const getOccupiedResources = () => {
+  return request.get<any, string[]>('/activities/occupied-resources')
+}
+
 export const updateActivityResources = (activityId: string, data: UpdateActivityResourcesPayload) => {
   return request.put<any, { message: string; activity_id: string }>(
     `/activities/${activityId}/resources`,

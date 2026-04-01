@@ -48,13 +48,13 @@
                 :disabled="!entry.role"
               >
                 <el-option
-                  v-for="person in getFilteredPersonnel(entry.role)"
+                  v-for="person in getFilteredPersonnel(entry.role, entry.personnel_id)"
                   :key="person.id"
                   :label="person.name"
                   :value="person.id"
                 />
                 <template #empty>
-                  <div class="select-empty">{{ entry.role ? '该职位暂无可用人员' : '请先选择职位' }}</div>
+                  <div class="select-empty">{{ entry.role ? '该职位暂无空闲人员' : '请先选择职位' }}</div>
                 </template>
               </el-select>
               <el-button
@@ -119,7 +119,7 @@
                 :disabled="!entry.equipment_type"
               >
                 <el-option
-                  v-for="eq in getFilteredEquipment(entry.equipment_type)"
+                  v-for="eq in getFilteredEquipment(entry.equipment_type, entry.equipment_id)"
                   :key="eq.id"
                   :label="eq.name"
                   :value="eq.id"
@@ -238,7 +238,7 @@ import { Delete, Plus } from '@element-plus/icons-vue'
 import { TransitionGroup } from 'vue'
 import { getPersonnelList } from '@/api/personnel'
 import { getResources } from '@/api/resource'
-import { getActivityResources, updateActivityResources } from '@/api/activity'
+import { getActivityResources, getOccupiedResources, updateActivityResources } from '@/api/activity'
 import type { Personnel, Resource } from '@/types'
 
 // ── Props ─────────────────────────────────────────────────────────
@@ -253,6 +253,8 @@ const allResources = ref<ResourceWithId[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const activeTab = ref('personnel')
+const occupiedIds = ref<string[]>([])
+const occupiedIdSet = computed<Set<string>>(() => new Set(occupiedIds.value))
 
 // ── Computed dictionaries ─────────────────────────────────────────
 const availableRoles = computed<string[]>(() =>
@@ -298,16 +300,40 @@ const isDirty = computed(
 )
 
 // ── Cascade filter helpers ────────────────────────────────────────
-const getFilteredPersonnel = (role: string): PersonnelWithId[] => {
+const getFilteredPersonnel = (role: string, currentSelectedId = ''): PersonnelWithId[] => {
   if (!role) return []
   return allPersonnel.value.filter(
-    p => p.role === role && p.status !== 'resigned' && p.status !== 'inactive'
+    p =>
+      p.role === role &&
+      p.status !== 'resigned' &&
+      p.status !== 'inactive' &&
+      (
+        p.id === currentSelectedId ||
+        (
+          !occupiedIdSet.value.has(p.id) &&
+          !draftReqs.value.personnel.some(
+            entry => entry.personnel_id === p.id && p.id !== currentSelectedId
+          )
+        )
+      )
   )
 }
 
-const getFilteredEquipment = (type: string): ResourceWithId[] => {
+const getFilteredEquipment = (type: string, currentSelectedId = ''): ResourceWithId[] => {
   if (!type) return []
-  return allEquipments.value.filter(e => e.specification === type)
+  return allEquipments.value.filter(
+    e =>
+      e.specification === type &&
+      (
+        e.id === currentSelectedId ||
+        (
+          !occupiedIdSet.value.has(e.id) &&
+          !draftReqs.value.equipment.some(
+            entry => entry.equipment_id === e.id && e.id !== currentSelectedId
+          )
+        )
+      )
+  )
 }
 
 // ── Entry management ──────────────────────────────────────────────
@@ -356,6 +382,11 @@ const saveResources = async () => {
         .map(m => ({ resource_id: m.resource_id, rate: m.rate })),
     }
     await updateActivityResources(props.activityId, payload)
+    try {
+      occupiedIds.value = await getOccupiedResources()
+    } catch {
+      occupiedIds.value = []
+    }
     savedReqs.value = JSON.parse(JSON.stringify(draftReqs.value))
     ElMessage.success('资源配置已保存')
   } catch {
@@ -386,17 +417,20 @@ const loadData = async () => {
       id: r._id || r.id || '',
     })) as ResourceWithId[]
 
-    // 第二步：独立加载该活动当前已保存的资源分配（非致命，失败时以空状态启动）
+    // 第二步：独立加载该活动当前已保存的资源分配 + 全局占用资源ID（非致命）
     let currentResources: {
       assigned_personnel?: { id: string; role: string }[]
       assigned_equipment?: { id: string; specification: string }[]
       consumed_resources?: { resource_id: string; rate: number }[]
     } = {}
-    try {
-      currentResources = await getActivityResources(props.activityId)
-    } catch {
-      // 新活动或后端路由尚未就绪时正常静默，字典已加载，用户可正常操作
+    const [resourcesResult, occupiedResult] = await Promise.allSettled([
+      getActivityResources(props.activityId),
+      getOccupiedResources(),
+    ])
+    if (resourcesResult.status === 'fulfilled') {
+      currentResources = resourcesResult.value
     }
+    occupiedIds.value = occupiedResult.status === 'fulfilled' ? occupiedResult.value : []
 
     const initial: DraftReqs = {
       personnel: (currentResources.assigned_personnel || []).map(p => ({
