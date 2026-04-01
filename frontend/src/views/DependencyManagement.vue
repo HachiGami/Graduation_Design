@@ -20,17 +20,17 @@
             <div class="mini-value">{{ metrics.activityCount }}</div>
             <div class="mini-label">活动数</div>
           </div>
-          <div class="mini-kpi-item" @click="handleKpiClick('dependencies')">
+          <div class="mini-kpi-item" @click="handleKpiClick('internalDependencies')">
             <div class="mini-value">{{ metrics.internalDependencyCount }}</div>
             <div class="mini-label">内部依赖</div>
+          </div>
+          <div class="mini-kpi-item" @click="handleKpiClick('externalDependencies')">
+            <div class="mini-value">{{ metrics.externalDependencyCount }}</div>
+            <div class="mini-label">外部依赖</div>
           </div>
           <div class="mini-kpi-item" @click="handleKpiClick('health')">
             <div class="mini-value">{{ metrics.healthScore }}</div>
             <div class="mini-label">健康评分</div>
-          </div>
-          <div class="mini-kpi-item" @click="handleKpiClick('cpm')">
-            <div class="mini-value">{{ metrics.totalDuration }}</div>
-            <div class="mini-label">总工期</div>
           </div>
           <div class="mini-kpi-item" @click="handleKpiClick('resource')">
             <div class="mini-value">{{ miniRunnableTimeText }}</div>
@@ -384,7 +384,6 @@ import DependencyGraph from '@/components/DependencyGraph.vue'
 import ProcessSelector from '@/components/ProcessSelector.vue'
 import DashboardPanel from '@/components/DashboardPanel.vue'
 import { analyzeGraph, type AnalysisScope } from '@/utils/graphAnalyzer'
-import { calculateCPM } from '@/utils/cpmCalculator'
 import { checkResources } from '@/utils/resourceChecker'
 import { getDynamicRisks, getRisks, type RiskItem } from '@/api/analytics'
 
@@ -638,29 +637,33 @@ const metrics = computed(() => {
     : { type: 'global' }
   
   const analysis = analyzeGraph(graphData.value, scope)
-  
-  const activities = currentProcessId.value
-    ? graphData.value.nodes.filter((n: any) => (n.type === 'activity' || n.category === 'Activity') && n.process_id === currentProcessId.value)
-    : graphData.value.nodes.filter((n: any) => n.type === 'activity' || n.category === 'Activity')
-  
-  const dependencies = currentProcessId.value
-    ? graphData.value.edges.filter((e: any) => {
-        const source = graphData.value.nodes.find((n: any) => n.id === e.source)
-        const target = graphData.value.nodes.find((n: any) => n.id === e.target)
-        return source?.process_id === currentProcessId.value && target?.process_id === currentProcessId.value
-      })
-    : graphData.value.edges
-  
-  const cpm = calculateCPM(activities, dependencies)
+
+  const nodeMap = new Map<string, any>(
+    (graphData.value.nodes || []).map((node: any) => [node.id, node])
+  )
+  let internalDependencyCount = 0
+  let externalDependencyCount = 0
+
+  ;(graphData.value.edges || []).forEach((edge: any) => {
+    const sourceNode = nodeMap.get(edge.source)
+    const targetNode = nodeMap.get(edge.target)
+    if (!sourceNode || !targetNode) return
+
+    if (sourceNode.process_id === targetNode.process_id) {
+      internalDependencyCount += 1
+    } else {
+      externalDependencyCount += 1
+    }
+  })
+
   const resourceCheck = checkResources(graphData.value, currentProcessId.value)
   
   return {
     activityCount: analysis.scale.activityCount,
-    internalDependencyCount: analysis.scale.internalDependencyCount,
+    internalDependencyCount,
+    externalDependencyCount,
     healthScore: analysis.health.score,
     issueCount: analysis.health.issueCount,
-    totalDuration: cpm.totalDuration || 0,
-    criticalPathLength: cpm.criticalPath?.length || 0,
     resourceShortageCount: resourceCheck.dataLevel === 'level1' ? resourceCheck.shortageCount : resourceCheck.riskList?.length || 0,
     dynamicRiskCount: 0
   }
@@ -671,8 +674,19 @@ const handleKpiClick = (type: string) => {
   if (type === 'activities') {
     const activityIds = graphData.value.nodes.filter((n: any) => n.type === 'activity' || n.category === 'Activity').map((n: any) => n.id)
     handleDashboardHighlight({ nodeIds: activityIds, edgeIds: [] })
-  } else if (type === 'dependencies') {
-    const edgeIds = graphData.value.edges.map((e: any) => `${e.source}-${e.target}`)
+  } else if (type === 'internalDependencies' || type === 'externalDependencies') {
+    const nodeMap = new Map<string, any>(
+      (graphData.value.nodes || []).map((node: any) => [node.id, node])
+    )
+    const edgeIds = (graphData.value.edges || [])
+      .filter((edge: any) => {
+        const sourceNode = nodeMap.get(edge.source)
+        const targetNode = nodeMap.get(edge.target)
+        if (!sourceNode || !targetNode) return false
+        const isInternal = sourceNode.process_id === targetNode.process_id
+        return type === 'internalDependencies' ? isInternal : !isInternal
+      })
+      .map((e: any) => `${e.source}-${e.target}`)
     handleDashboardHighlight({ nodeIds: [], edgeIds })
   }
 }

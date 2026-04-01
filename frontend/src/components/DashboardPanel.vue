@@ -85,7 +85,11 @@
         <div v-if="currentScope === 'global' && processSummary.length > 0" class="process-ranking">
           <el-table :data="durationRanking" size="small" style="width: 100%" @row-click="handleProcessRankingClick" height="calc(100vh - 200px)">
             <el-table-column prop="processName" label="流程" min-width="140" show-overflow-tooltip />
-            <el-table-column prop="totalDuration" label="工期" width="80" />
+            <el-table-column label="工期" width="120">
+              <template #default="scope">
+                {{ formatDurationMinutes(scope.row.totalDuration) }}
+              </template>
+            </el-table-column>
             <el-table-column prop="criticalPathLength" label="路径长度" min-width="120" />
           </el-table>
         </div>
@@ -107,7 +111,7 @@
               <h4>瓶颈活动</h4>
               <div v-for="activity in topBottlenecks" :key="activity.id" class="bottleneck-item" @click="handleBottleneckClick(activity)">
                 <span class="bottleneck-name">{{ activity.name }}</span>
-                <el-tag size="small">{{ activity.duration }}分</el-tag>
+                <el-tag size="small">{{ formatDurationMinutes(activity.duration) }}</el-tag>
               </div>
               <el-empty v-if="topBottlenecks.length === 0" description="无瓶颈活动" :image-size="60" />
             </div>
@@ -184,7 +188,11 @@
           <h4>按流程工期排行</h4>
           <el-table :data="durationRanking" size="small" @row-click="handleProcessRankingClick">
             <el-table-column prop="processName" label="流程" width="180" />
-            <el-table-column prop="totalDuration" label="总工期(分钟)" width="120" />
+            <el-table-column label="总工期" width="140">
+              <template #default="scope">
+                {{ formatDurationMinutes(scope.row.totalDuration) }}
+              </template>
+            </el-table-column>
             <el-table-column prop="criticalPathLength" label="关键路径长度" width="120" />
           </el-table>
         </div>
@@ -207,7 +215,7 @@
               <h4>瓶颈活动 Top5</h4>
               <div v-for="activity in topBottlenecks" :key="activity.id" class="bottleneck-item" @click="handleBottleneckClick(activity)">
                 <span>{{ activity.name }}</span>
-                <el-tag size="small">{{ activity.duration }}分钟</el-tag>
+                <el-tag size="small">{{ formatDurationMinutes(activity.duration) }}</el-tag>
               </div>
               <el-empty v-if="topBottlenecks.length === 0" description="无瓶颈活动" :image-size="60" />
             </div>
@@ -732,6 +740,11 @@ function getIssueTypeName(type: string): string {
 function formatRunnableDays(value: number | null) {
   if (value === null || value === undefined) return '>7天'
   return `${value.toFixed(1)}天`
+}
+
+function formatDurationMinutes(value: number | null | undefined) {
+  if (value === null || value === undefined || value === 0) return '-'
+  return `${value} 分钟`
 }
 
 const processLabelMap: Record<string, string> = {
