@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Set
+from collections import Counter
 from bson import ObjectId
 import json
 from datetime import datetime
@@ -87,12 +88,12 @@ async def _load_assignments(
             """
             UNWIND $activity_ids AS aid
             MATCH (a:Activity {id: aid})-[:ASSIGNED_TO|ASSIGNS]->(p:Personnel)
-            RETURN aid AS activity_id, p.id AS id, p.name AS name, p.upcoming_leaves AS upcoming_leaves
+            RETURN aid AS activity_id, p.id AS id, p.name AS name, p.role AS role, p.upcoming_leaves AS upcoming_leaves
             """,
             """
             UNWIND $activity_ids AS aid
             MATCH (p:Personnel)-[:ASSIGNED_TO|ASSIGNS]->(a:Activity {id: aid})
-            RETURN aid AS activity_id, p.id AS id, p.name AS name, p.upcoming_leaves AS upcoming_leaves
+            RETURN aid AS activity_id, p.id AS id, p.name AS name, p.role AS role, p.upcoming_leaves AS upcoming_leaves
             """,
         ]
         seen_personnel: Set[str] = set()
@@ -111,6 +112,7 @@ async def _load_assignments(
                     {
                         "id": pid,
                         "name": row.get("name") or "未知人员",
+                        "role": row.get("role"),
                         "upcoming_leaves": _as_list(row.get("upcoming_leaves")),
                     }
                 )
@@ -120,12 +122,12 @@ async def _load_assignments(
             """
             UNWIND $activity_ids AS aid
             MATCH (a:Activity {id: aid})-[:USES|OCCUPIES]->(e:Equipment)
-            RETURN aid AS activity_id, e.id AS id, e.name AS name, e.upcoming_maintenance AS upcoming_maintenance
+            RETURN aid AS activity_id, e.id AS id, e.name AS name, e.type AS type, e.specification AS specification, e.upcoming_maintenance AS upcoming_maintenance
             """,
             """
             UNWIND $activity_ids AS aid
             MATCH (e:Equipment)-[:USES|OCCUPIES|USED_BY]->(a:Activity {id: aid})
-            RETURN aid AS activity_id, e.id AS id, e.name AS name, e.upcoming_maintenance AS upcoming_maintenance
+            RETURN aid AS activity_id, e.id AS id, e.name AS name, e.type AS type, e.specification AS specification, e.upcoming_maintenance AS upcoming_maintenance
             """,
         ]
         seen_equipment: Set[str] = set()
@@ -144,6 +146,8 @@ async def _load_assignments(
                     {
                         "id": eid,
                         "name": row.get("name") or "未知设备",
+                        "type": row.get("type"),
+                        "specification": row.get("specification"),
                         "upcoming_maintenance": _as_list(row.get("upcoming_maintenance")),
                     }
                 )
@@ -328,15 +332,29 @@ async def calculate_activity_risks(
         required_equipment = _as_list(activity.get("equipment_types_required"))
         required_personnel = _as_list(activity.get("personnel_roles_required"))
 
-        # 1) 供需不平衡风险
-        if len(required_equipment) > len(assigned_equipment):
-            risks_by_activity[aid].append(
-                f"设备供需不平衡：需 {len(required_equipment)} 台，已分配 {len(assigned_equipment)} 台"
-            )
-        if len(required_personnel) > len(assigned_personnel):
-            risks_by_activity[aid].append(
-                f"人员供需不平衡：需 {len(required_personnel)} 人，已分配 {len(assigned_personnel)} 人"
-            )
+        # 1) 分类短缺风险（按职业/设备类型统计）
+        req_roles = Counter(required_personnel)
+        assigned_roles = Counter(
+            person.get("role")
+            for person in assigned_personnel
+            if isinstance(person.get("role"), str) and person.get("role")
+        )
+        for role, count in req_roles.items():
+            shortage = count - assigned_roles.get(role, 0)
+            if shortage > 0:
+                risks_by_activity[aid].append(f"缺 {shortage} 名 {role}")
+
+        req_equips = Counter(required_equipment)
+        assigned_equips = Counter(
+            equipment_type
+            for equipment in assigned_equipment
+            for equipment_type in [equipment.get("type") or equipment.get("specification")]
+            if isinstance(equipment_type, str) and equipment_type
+        )
+        for equipment_type, count in req_equips.items():
+            shortage = count - assigned_equips.get(equipment_type, 0)
+            if shortage > 0:
+                risks_by_activity[aid].append(f"缺 {shortage} 台 {equipment_type}")
 
         # 2) 原料短缺风险（库存 / 所有运行中活动总消耗）
         for consumed in assigned["materials"]:
