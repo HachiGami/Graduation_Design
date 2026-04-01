@@ -16,29 +16,37 @@
         />
         
         <div class="mini-kpi-hud">
-          <div class="mini-kpi-item" @click="handleKpiClick('activities')">
-            <div class="mini-value">{{ metrics.activityCount }}</div>
-            <div class="mini-label">活动数</div>
-          </div>
-          <div class="mini-kpi-item" @click="handleKpiClick('internalDependencies')">
-            <div class="mini-value">{{ metrics.internalDependencyCount }}</div>
-            <div class="mini-label">内部依赖</div>
-          </div>
-          <div class="mini-kpi-item" @click="handleKpiClick('externalDependencies')">
-            <div class="mini-value">{{ metrics.externalDependencyCount }}</div>
-            <div class="mini-label">外部依赖</div>
-          </div>
-          <div class="mini-kpi-item" @click="handleKpiClick('health')">
-            <div class="mini-value">{{ metrics.healthScore }}</div>
-            <div class="mini-label">健康评分</div>
-          </div>
-          <div class="mini-kpi-item" @click="handleKpiClick('resource')">
-            <div class="mini-value">{{ miniRunnableTimeText }}</div>
-            <div class="mini-label">可运行时间</div>
-          </div>
-          <div class="mini-kpi-item" @click="handleKpiClick('dynamic')">
-            <div class="mini-value">{{ riskList.length }}</div>
-            <div class="mini-label">风险数</div>
+          <div class="mini-kpi-title">运行状态概览</div>
+          <div class="mini-kpi-content">
+            <div class="mini-kpi-group mini-kpi-group-fixed">
+              <div class="mini-kpi-item" @click="handleKpiClick('internalDependencies')">
+                <div class="mini-value">{{ metrics.internalDependencyCount }}</div>
+                <div class="mini-label">内部依赖</div>
+              </div>
+              <div class="mini-kpi-item" @click="handleKpiClick('externalDependencies')">
+                <div class="mini-value">{{ metrics.externalDependencyCount }}</div>
+                <div class="mini-label">外部依赖</div>
+              </div>
+            </div>
+            <div class="mini-kpi-divider"></div>
+            <div class="mini-kpi-group mini-kpi-group-dynamic">
+              <div class="mini-kpi-item" @click="handleKpiClick('activities')">
+                <div class="mini-value">{{ metrics.activityCount }}</div>
+                <div class="mini-label">活动数</div>
+              </div>
+              <div class="mini-kpi-item" @click="handleKpiClick('health')">
+                <div class="mini-value">{{ metrics.healthScore }}</div>
+                <div class="mini-label">健康评分</div>
+              </div>
+              <div class="mini-kpi-item" @click="handleKpiClick('resource')">
+                <div class="mini-value">{{ miniRunnableTimeText }}</div>
+                <div class="mini-label">可运行时间</div>
+              </div>
+              <div class="mini-kpi-item" @click="handleKpiClick('dynamic')">
+                <div class="mini-value">{{ riskList.length }}</div>
+                <div class="mini-label">风险数</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1181,19 +1189,50 @@ watch(
 
 .mini-kpi-hud {
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
   margin-left: auto;
   background: #fff;
-  padding: 6px 12px;
+  padding: 8px 12px;
   border-radius: 4px;
   border: 1px solid #dcdfe6;
+}
+
+.mini-kpi-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.mini-kpi-content {
+  display: flex;
+  align-items: stretch;
+}
+
+.mini-kpi-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mini-kpi-group-fixed {
+  background: #f8fafc;
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.mini-kpi-divider {
+  width: 1px;
+  background: #e5e7eb;
+  margin: 0 12px;
 }
 
 .mini-kpi-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 4px 12px;
+  justify-content: center;
+  padding: 4px 10px;
   cursor: pointer;
   transition: background 0.2s;
   border-radius: 4px;
