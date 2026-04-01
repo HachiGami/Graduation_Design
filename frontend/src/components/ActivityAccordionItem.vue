@@ -51,34 +51,76 @@
         </el-tab-pane>
 
         <el-tab-pane label="发生风险" name="risks">
-          <el-alert
-            v-if="activityRisks.length === 0"
-            title="暂无风险"
-            type="success"
-            show-icon
-            :closable="false"
-            class="risk-alert"
-          />
-          <el-alert
-            v-for="(risk, index) in activityRisks"
-            :key="`${risk}-${index}`"
-            :title="risk"
-            type="error"
-            show-icon
-            :closable="false"
-            class="risk-alert"
-          >
-            <template #default>
-              <el-button
-                v-if="inferMaterialModelFromRisk(risk)"
-                text
-                type="primary"
-                @click="openReplenishDialog(inferMaterialModelFromRisk(risk)!)"
+          <div class="risk-panel">
+            <div v-if="activityRisks.length === 0" class="risk-empty-state">
+              <el-empty description="当前环节运行健康" :image-size="72">
+                <template #description>
+                  <div class="risk-empty-title">当前环节运行健康</div>
+                  <div class="risk-empty-subtitle">资源供需平衡，未检测到近期异常</div>
+                </template>
+              </el-empty>
+            </div>
+
+            <section v-if="shortageRisks.length > 0" class="risk-section risk-section-shortage">
+              <div class="risk-section-header">
+                <el-icon class="risk-header-icon danger"><WarningFilled /></el-icon>
+                <span class="risk-section-title">当前短缺</span>
+              </div>
+              <el-card
+                v-for="(risk, index) in shortageRisks"
+                :key="`shortage-${risk}-${index}`"
+                shadow="never"
+                class="risk-card risk-card-shortage"
               >
-                一键补货
-              </el-button>
-            </template>
-          </el-alert>
+                <div class="risk-card-content">
+                  <div class="risk-main-line">
+                    <el-icon class="risk-item-icon"><component :is="getShortageRiskIcon(risk)" /></el-icon>
+                    <span class="risk-item-text">
+                      <template v-for="(segment, segIndex) in splitRiskSegments(risk)" :key="`${risk}-${index}-${segIndex}`">
+                        <span :class="{ 'risk-segment-highlight': segment.highlight }">{{ segment.text }}</span>
+                      </template>
+                    </span>
+                  </div>
+                  <button
+                    v-if="risk.includes('名') || risk.includes('台')"
+                    class="risk-action-btn risk-action-alloc"
+                    @click="switchToAllocationTab"
+                  >
+                    去分配
+                  </button>
+                  <button
+                    v-else-if="risk.includes('原料') || risk.includes('不足')"
+                    class="risk-action-btn risk-action-replenish"
+                    @click="goToMaterialPage"
+                  >
+                    去补货
+                  </button>
+                </div>
+              </el-card>
+            </section>
+
+            <section v-if="scheduleRisks.length > 0" class="risk-section risk-section-schedule">
+              <div class="risk-section-header">
+                <el-icon class="risk-header-icon warning"><Clock /></el-icon>
+                <span class="risk-section-title">排期预警</span>
+              </div>
+              <el-card
+                v-for="(risk, index) in scheduleRisks"
+                :key="`schedule-${risk}-${index}`"
+                shadow="never"
+                class="risk-card risk-card-schedule"
+              >
+                <div class="risk-main-line">
+                  <el-icon class="risk-item-icon"><component :is="getScheduleRiskIcon(risk)" /></el-icon>
+                  <span class="risk-item-text">
+                    <template v-for="(segment, segIndex) in splitRiskSegments(risk)" :key="`${risk}-${index}-${segIndex}`">
+                      <span :class="{ 'risk-segment-highlight': segment.highlight }">{{ segment.text }}</span>
+                    </template>
+                  </span>
+                </div>
+              </el-card>
+            </section>
+          </div>
         </el-tab-pane>
 
         <el-tab-pane label="资源分配" name="resources" lazy>
@@ -169,6 +211,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { WarningFilled, User, Setting, Box, Calendar, Tools, Clock } from '@element-plus/icons-vue'
 import type { Activity } from '@/types'
 import ActivityResourcesPanel from './ActivityResourcesPanel.vue'
 import {
@@ -250,6 +293,37 @@ const workingHoursText = computed(() => {
   if (windows.length === 0) return '未配置'
   return windows.map(w => `${w.start_time}-${w.end_time}`).join(' / ')
 })
+
+const shortageRisks = computed(() => activityRisks.value.filter(r => r.includes('缺') || r.includes('不足')))
+const scheduleRisks = computed(() => activityRisks.value.filter(r => r.includes('请假') || r.includes('检修')))
+
+function getShortageRiskIcon(message: string) {
+  if (message.includes('名')) return User
+  if (message.includes('台')) return Setting
+  if (message.includes('原料') || message.includes('库存')) return Box
+  return WarningFilled
+}
+
+function getScheduleRiskIcon(message: string) {
+  if (message.includes('请假')) return Calendar
+  if (message.includes('检修')) return Tools
+  return Clock
+}
+
+function splitRiskSegments(message: string) {
+  const regex = /((?:缺|不足)\s*\d+(?:\.\d+)?\s*(?:名|台|天|个|件)?)/g
+  const highlightRegex = /(?:缺|不足)\s*\d+(?:\.\d+)?\s*(?:名|台|天|个|件)?/
+  const parts = message.split(regex).filter(Boolean)
+  return parts.map(text => ({ text, highlight: highlightRegex.test(text) }))
+}
+
+function switchToAllocationTab() {
+  activeTab.value = 'resources'
+}
+
+function goToMaterialPage() {
+  router.push('/material')
+}
 
 const statusText = (status: string) => {
   const map: Record<string, string> = {
@@ -506,8 +580,134 @@ const handleDeleteActivity = async () => {
   flex: 1;
 }
 
-.risk-alert {
-  margin-bottom: 10px;
+.risk-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.risk-empty-state {
+  border: 1px solid #dcfce7;
+  background: #f0fdf4;
+  border-radius: 10px;
+}
+
+.risk-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #166534;
+}
+
+.risk-empty-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #15803d;
+}
+
+.risk-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.risk-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.risk-header-icon.danger {
+  color: #dc2626;
+}
+
+.risk-header-icon.warning {
+  color: #d97706;
+}
+
+.risk-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.risk-card {
+  border-radius: 8px;
+}
+
+.risk-card-shortage {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+}
+
+.risk-card-schedule {
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+}
+
+.risk-card-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.risk-main-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1;
+}
+
+.risk-item-icon {
+  margin-top: 2px;
+  color: #606266;
+}
+
+.risk-item-text {
+  color: #303133;
+  line-height: 1.55;
+  font-size: 13px;
+  flex: 1;
+}
+
+.risk-segment-highlight {
+  font-weight: 700;
+  color: #dc2626;
+}
+
+.risk-action-btn {
+  border: none;
+  outline: none;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+
+.risk-action-alloc {
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.risk-action-alloc:hover {
+  background: #eff6ff;
+}
+
+.risk-action-replenish {
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.risk-action-replenish:hover {
+  background: #fef2f2;
 }
 
 .form-row {
