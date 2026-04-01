@@ -594,7 +594,11 @@ async def get_activity_resources(activity_id: str):
 
             # 查询 USES 设备
             result = await session.run(
-                "MATCH (a:Activity {id: $aid})-[:USES]->(r:Resource) RETURN r.id AS id",
+                """
+                MATCH (a:Activity {id: $aid})-[:USES]->(r)
+                WHERE any(label IN labels(r) WHERE label IN ['Resource', 'Equipment'])
+                RETURN r.id AS id
+                """,
                 {"aid": activity_id},
             )
             async for record in result:
@@ -603,7 +607,11 @@ async def get_activity_resources(activity_id: str):
 
             # 查询 CONSUMES 原料及速率
             result = await session.run(
-                "MATCH (a:Activity {id: $aid})-[c:CONSUMES]->(r:Resource) RETURN r.id AS id, c.rate AS rate",
+                """
+                MATCH (a:Activity {id: $aid})-[c:CONSUMES]->(r)
+                WHERE any(label IN labels(r) WHERE label IN ['Material', 'Resource'])
+                RETURN r.id AS id, c.rate AS rate
+                """,
                 {"aid": activity_id},
             )
             async for record in result:
@@ -671,7 +679,6 @@ async def update_activity_resources(activity_id: str, payload: ActivityResources
     activity = await db.activities.find_one({"_id": obj_id})
     if not activity:
         raise HTTPException(status_code=404, detail="生产活动不存在")
-
     # ── 1. 更新 MongoDB 需求字段 ─────────────────────────────────────
     await db.activities.update_one(
         {"_id": obj_id},
@@ -687,10 +694,10 @@ async def update_activity_resources(activity_id: str, payload: ActivityResources
     # ── 2. 原子化同步 Neo4j ──────────────────────────────────────────
     try:
         async with driver.session() as session:
-            # 步骤 2a：删除该活动所有旧的资源关系（兼容新旧命名）
+            # 步骤 2a：删除该活动旧关系（按 ID 精确匹配）
             await session.run(
                 """
-                MATCH (a:Activity {id: $aid})-[r:ASSIGNED_TO|USES|CONSUMES|ASSIGNS|OCCUPIES]->()
+                MATCH (a:Activity {id: $aid})-[r:USES|CONSUMES|ASSIGNED_TO]->()
                 DELETE r
                 """,
                 {"aid": activity_id},
@@ -698,45 +705,110 @@ async def update_activity_resources(activity_id: str, payload: ActivityResources
 
             # 步骤 2b：批量创建 ASSIGNED_TO（人员）
             if payload.assigned_personnel_ids:
-                await session.run(
-                    """
-                    UNWIND $ids AS pid
-                    MATCH (a:Activity {id: $aid})
-                    MATCH (p:Personnel {id: pid})
-                    CREATE (a)-[:ASSIGNED_TO]->(p)
-                    """,
-                    {"aid": activity_id, "ids": payload.assigned_personnel_ids},
-                )
-
-            # 步骤 2c：批量创建 USES（设备，Resource 节点）
+                created_count = 0
+                for pid in payload.assigned_personnel_ids:
+                    person_doc = None
+                    if ObjectId.is_valid(pid):
+                        person_doc = await db.personnel.find_one({"_id": ObjectId(pid)})
+                    person_name = person_doc.get("name", "") if person_doc else ""
+                    person_role = person_doc.get("role", "") if person_doc else ""
+                    personnel_result = await session.run(
+                        """
+                        MATCH (a:Activity {id: $aid})
+                        MERGE (p:Personnel {id: $target_id})
+                        SET p.name = CASE WHEN $target_name = '' THEN p.name ELSE $target_name END,
+                            p.role = CASE WHEN $target_role = '' THEN p.role ELSE $target_role END
+                        MERGE (a)-[:ASSIGNED_TO]->(p)
+                        """,
+                        {
+                            "aid": activity_id,
+                            "target_id": pid,
+                            "target_name": person_name,
+                            "target_role": person_role,
+                        },
+                    )
+                    summary = await personnel_result.consume()
+                    created_count += int(summary.counters.relationships_created or 0)
+            # 步骤 2c：批量创建 USES（设备）
             if payload.assigned_equipment_ids:
-                await session.run(
-                    """
-                    UNWIND $ids AS eid
-                    MATCH (a:Activity {id: $aid})
-                    MATCH (r:Resource {id: eid})
-                    CREATE (a)-[:USES]->(r)
-                    """,
-                    {"aid": activity_id, "ids": payload.assigned_equipment_ids},
-                )
+                mongo_equipment_check = await db.resources.find(
+                    {"_id": {"$in": [ObjectId(eid) for eid in payload.assigned_equipment_ids if ObjectId.is_valid(eid)]}}
+                ).to_list(None)
+                # 先用 Mongo resources(type=设备) 回填/创建 Neo4j Equipment 节点，避免图数据缺失导致关系创建为 0
+                equipment_seed_docs = []
+                for item in mongo_equipment_check:
+                    if item.get("type") == "设备":
+                        equipment_seed_docs.append(
+                            {
+                                "id": str(item.get("_id")),
+                                "name": item.get("name", ""),
+                                "model": item.get("specification", "") or item.get("name", ""),
+                                "status": item.get("status", "available"),
+                            }
+                        )
+                if equipment_seed_docs:
+                    seed_result = await session.run(
+                        """
+                        UNWIND $items AS item
+                        MERGE (e:Equipment {id: item.id})
+                        SET e.name = item.name,
+                            e.model = item.model,
+                            e.status = item.status
+                        """,
+                        {"items": equipment_seed_docs},
+                    )
+                    seed_summary = await seed_result.consume()
+                equipment_created_count = 0
+                for eid in payload.assigned_equipment_ids:
+                    eq_doc = next((item for item in mongo_equipment_check if str(item.get("_id")) == eid), None)
+                    eq_name = eq_doc.get("name", "") if eq_doc else ""
+                    eq_model = (eq_doc.get("specification", "") or eq_name) if eq_doc else ""
+                    eq_status = eq_doc.get("status", "available") if eq_doc else "available"
+                    equipment_result = await session.run(
+                        """
+                        MATCH (a:Activity {id: $aid})
+                        MERGE (e:Equipment {id: $target_id})
+                        SET e.name = CASE WHEN $target_name = '' THEN e.name ELSE $target_name END,
+                            e.model = CASE WHEN $target_model = '' THEN e.model ELSE $target_model END,
+                            e.status = $target_status
+                        MERGE (a)-[:USES]->(e)
+                        """,
+                        {
+                            "aid": activity_id,
+                            "target_id": eid,
+                            "target_name": eq_name,
+                            "target_model": eq_model,
+                            "target_status": eq_status,
+                        },
+                    )
+                    summary = await equipment_result.consume()
+                    equipment_created_count += int(summary.counters.relationships_created or 0)
 
             # 步骤 2d：批量创建 CONSUMES（原料，携带 rate 属性）
             if payload.consumed_resources:
-                await session.run(
-                    """
-                    UNWIND $items AS item
-                    MATCH (a:Activity {id: $aid})
-                    MATCH (r:Resource {id: item.resource_id})
-                    CREATE (a)-[:CONSUMES {rate: item.rate}]->(r)
-                    """,
-                    {
-                        "aid": activity_id,
-                        "items": [
-                            {"resource_id": cr.resource_id, "rate": cr.rate}
-                            for cr in payload.consumed_resources
-                        ],
-                    },
-                )
+                for cr in payload.consumed_resources:
+                    material_doc = None
+                    if ObjectId.is_valid(cr.resource_id):
+                        material_doc = await db.resources.find_one({"_id": ObjectId(cr.resource_id)})
+                    material_name = material_doc.get("name", "") if material_doc else ""
+                    material_unit = material_doc.get("unit", "") if material_doc else ""
+                    await session.run(
+                        """
+                        MATCH (a:Activity {id: $aid})
+                        MERGE (m:Material {id: $target_id})
+                        SET m.name = CASE WHEN $target_name = '' THEN m.name ELSE $target_name END,
+                            m.unit = CASE WHEN $target_unit = '' THEN m.unit ELSE $target_unit END
+                        MERGE (a)-[c:CONSUMES]->(m)
+                        SET c.rate = $rate
+                        """,
+                        {
+                            "aid": activity_id,
+                            "target_id": cr.resource_id,
+                            "target_name": material_name,
+                            "target_unit": material_unit,
+                            "rate": cr.rate,
+                        },
+                    )
     except Exception as e:
         print(f"Neo4j同步失败: {e}")
         raise HTTPException(status_code=500, detail=f"资源关系同步失败: {str(e)}")

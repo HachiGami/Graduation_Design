@@ -65,6 +65,14 @@ def _normalize_resource_for_response(resource: dict) -> dict:
     return resource
 
 
+def _neo4j_label_for_resource(resource_type: str) -> str:
+    if resource_type == "设备":
+        return "Equipment"
+    if resource_type == "原料":
+        return "Material"
+    return "Resource"
+
+
 def _parse_working_hours(working_hours) -> float:
     total_hours = 0.0
     if not working_hours:
@@ -177,8 +185,9 @@ async def create_resource(resource: ResourceCreate):
     resource_id = str(result.inserted_id)
     resource_dict["_id"] = resource_id
 
-    neo4j_query = """
-    MERGE (r:Resource {id: $resource_id})
+    neo_label = _neo4j_label_for_resource(resource_dict.get("type", ""))
+    neo4j_query = f"""
+    MERGE (r:{neo_label} {{id: $resource_id}})
     SET r.name = $name
     RETURN r
     """
@@ -251,8 +260,10 @@ async def update_resource(resource_id: str, resource: ResourceUpdate):
     _normalize_resource_for_response(updated_resource)
 
     if resource.name:
-        neo4j_query = """
-        MATCH (r:Resource {id: $resource_id})
+        latest_type = updated_resource.get("type", "")
+        neo_label = _neo4j_label_for_resource(latest_type)
+        neo4j_query = f"""
+        MATCH (r:{neo_label} {{id: $resource_id}})
         SET r.name = COALESCE($name, r.name)
         RETURN r
         """
@@ -297,12 +308,17 @@ async def delete_resource(resource_id: str):
     db = get_database()
     driver = get_neo4j_driver()
 
+    existing = await db.resources.find_one({"_id": ObjectId(resource_id)})
+    if not existing:
+        raise HTTPException(status_code=404, detail="资源不存在")
+    neo_label = _neo4j_label_for_resource(existing.get("type", ""))
+
     result = await db.resources.delete_one({"_id": ObjectId(resource_id)})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="资源不存在")
 
-    neo4j_query = """
-    MATCH (r:Resource {id: $resource_id})
+    neo4j_query = f"""
+    MATCH (r:{neo_label} {{id: $resource_id}})
     DETACH DELETE r
     """
     try:

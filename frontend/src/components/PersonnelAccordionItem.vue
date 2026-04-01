@@ -33,10 +33,22 @@
       <div class="tasks-section mt-3">
         <h4>从事的工作 (参与的活动)</h4>
         <el-empty v-if="!personnel.serving_activities_details || personnel.serving_activities_details.length === 0" description="目前无分配任务，待命中" :image-size="60"></el-empty>
-        <div v-else class="flex flex-wrap gap-2 mt-2">
-          <el-tag v-for="(act, index) in personnel.serving_activities_details" :key="index" type="success" effect="light">
-            {{ act.activity_name }} (归属: {{ formatProcessName(act.process_id) }})
-          </el-tag>
+        <div v-else class="serving-activities-block">
+          <div
+            v-for="(act, index) in personnel.serving_activities_details"
+            :key="index"
+            class="activity-detail-row"
+          >
+            <el-tag size="small" type="success" class="activity-name-tag">
+              {{ act.activity_name }}
+            </el-tag>
+            <span class="activity-meta">
+              归属: {{ formatProcessName(act.process_id) }}
+            </span>
+            <span class="activity-hours" v-if="act.working_hours && act.working_hours.length > 0">
+              | 运行时间: {{ formatWorkingHours(act.working_hours) }}
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -187,6 +199,14 @@ const formatProcessName = (id: string) => {
   return processMap[id] ? `${id} - ${processMap[id]}` : id;
 };
 
+const formatWorkingHours = (workingHours: Array<{ start_time?: string; end_time?: string }>) => {
+  if (!Array.isArray(workingHours) || workingHours.length === 0) return ''
+  return workingHours
+    .filter(period => period?.start_time && period?.end_time)
+    .map(period => `${period.start_time}-${period.end_time}`)
+    .join(', ')
+}
+
 const handleEdit = () => {
   editForm.value = { ...props.personnel }
   editDialogVisible.value = true
@@ -305,6 +325,27 @@ const handleDeletePersonnel = async () => {
   margin: 0 0 8px 0;
   font-size: 14px;
   color: #606266;
+}
+.serving-activities-block {
+  margin-top: 8px;
+}
+.activity-detail-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.activity-name-tag {
+  flex-shrink: 0;
+}
+.activity-meta {
+  font-size: 12px;
+  color: #606266;
+}
+.activity-hours {
+  font-size: 12px;
+  color: #409eff;
 }
 .tasks-section ul {
   margin: 0;
