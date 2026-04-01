@@ -25,6 +25,19 @@ class MaterialRequirementPayload(BaseModel):
     unit: Optional[str] = Field(default="", description="单位")
 
 
+class ConsumedResourcePayload(BaseModel):
+    resource_id: str = Field(..., min_length=1, description="原料资源ID")
+    rate: float = Field(default=0.0, ge=0, description="消耗速率（单位/小时）")
+
+
+class ActivityResourcesPayload(BaseModel):
+    personnel_roles: List[str] = Field(default=[], description="职位需求列表（可重复）")
+    equipment_types: List[str] = Field(default=[], description="设备种类需求列表（可重复）")
+    assigned_personnel_ids: List[str] = Field(default=[], description="实际分配的人员ID列表")
+    assigned_equipment_ids: List[str] = Field(default=[], description="实际分配的设备ID列表")
+    consumed_resources: List[ConsumedResourcePayload] = Field(default=[], description="消耗原料及速率")
+
+
 def _normalize_sop_steps(raw_steps):
     if not raw_steps:
         return []
@@ -71,6 +84,8 @@ def _normalize_activity_for_response(activity: dict) -> dict:
     activity.setdefault("material_requirements", [])
     activity.setdefault("personnel_requirements", [])
     activity.setdefault("equipment_requirements", [])
+    activity.setdefault("personnel_roles_required", [])
+    activity.setdefault("equipment_types_required", [])
     activity.setdefault("created_at", activity.get("updated_at") or now)
     activity.setdefault("updated_at", activity.get("created_at") or now)
     return activity
@@ -510,3 +525,184 @@ async def batch_update_status(
         "message": "批量更新成功",
         "updated_count": result.modified_count
     }
+
+
+@router.get("/{activity_id}/resources")
+async def get_activity_resources(activity_id: str):
+    """获取活动的资源分配面板数据（含 MongoDB 需求定义 + Neo4j 实际分配）"""
+    db = get_database()
+    driver = get_neo4j_driver()
+
+    obj_id = _parse_activity_object_id(activity_id)
+    activity = await db.activities.find_one({"_id": obj_id})
+    if not activity:
+        raise HTTPException(status_code=404, detail="生产活动不存在")
+
+    personnel_roles_required: List[str] = activity.get("personnel_roles_required", [])
+    equipment_types_required: List[str] = activity.get("equipment_types_required", [])
+
+    personnel_ids: List[str] = []
+    equipment_ids: List[str] = []
+    consumed_raw: List[dict] = []
+
+    try:
+        async with driver.session() as session:
+            # 查询 ASSIGNED_TO 人员
+            result = await session.run(
+                "MATCH (a:Activity {id: $aid})-[:ASSIGNED_TO]->(p:Personnel) RETURN p.id AS id",
+                {"aid": activity_id},
+            )
+            async for record in result:
+                if record["id"]:
+                    personnel_ids.append(record["id"])
+
+            # 查询 USES 设备
+            result = await session.run(
+                "MATCH (a:Activity {id: $aid})-[:USES]->(r:Resource) RETURN r.id AS id",
+                {"aid": activity_id},
+            )
+            async for record in result:
+                if record["id"]:
+                    equipment_ids.append(record["id"])
+
+            # 查询 CONSUMES 原料及速率
+            result = await session.run(
+                "MATCH (a:Activity {id: $aid})-[c:CONSUMES]->(r:Resource) RETURN r.id AS id, c.rate AS rate",
+                {"aid": activity_id},
+            )
+            async for record in result:
+                if record["id"]:
+                    consumed_raw.append({"id": record["id"], "rate": record["rate"] or 0.0})
+    except Exception as e:
+        print(f"Neo4j查询失败: {e}")
+
+    # 从 MongoDB 丰富人员信息
+    assigned_personnel = []
+    for p_id in personnel_ids:
+        if not ObjectId.is_valid(p_id):
+            continue
+        person = await db.personnel.find_one({"_id": ObjectId(p_id)})
+        if person:
+            assigned_personnel.append({
+                "id": p_id,
+                "name": person.get("name", ""),
+                "role": person.get("role", ""),
+            })
+
+    # 从 MongoDB 丰富设备信息
+    assigned_equipment = []
+    for e_id in equipment_ids:
+        if not ObjectId.is_valid(e_id):
+            continue
+        resource = await db.resources.find_one({"_id": ObjectId(e_id)})
+        if resource:
+            assigned_equipment.append({
+                "id": e_id,
+                "name": resource.get("name", ""),
+                "specification": resource.get("specification", ""),
+            })
+
+    # 从 MongoDB 丰富原料信息
+    consumed_resources = []
+    for item in consumed_raw:
+        r_id = item["id"]
+        if not ObjectId.is_valid(r_id):
+            continue
+        resource = await db.resources.find_one({"_id": ObjectId(r_id)})
+        if resource:
+            consumed_resources.append({
+                "resource_id": r_id,
+                "name": resource.get("name", ""),
+                "rate": item["rate"],
+            })
+
+    return {
+        "personnel_roles_required": personnel_roles_required,
+        "equipment_types_required": equipment_types_required,
+        "assigned_personnel": assigned_personnel,
+        "assigned_equipment": assigned_equipment,
+        "consumed_resources": consumed_resources,
+    }
+
+
+@router.put("/{activity_id}/resources")
+async def update_activity_resources(activity_id: str, payload: ActivityResourcesPayload):
+    """综合更新活动资源分配（同时写 MongoDB 需求定义 + 原子化同步 Neo4j 关系）"""
+    db = get_database()
+    driver = get_neo4j_driver()
+
+    obj_id = _parse_activity_object_id(activity_id)
+    activity = await db.activities.find_one({"_id": obj_id})
+    if not activity:
+        raise HTTPException(status_code=404, detail="生产活动不存在")
+
+    # ── 1. 更新 MongoDB 需求字段 ─────────────────────────────────────
+    await db.activities.update_one(
+        {"_id": obj_id},
+        {
+            "$set": {
+                "personnel_roles_required": payload.personnel_roles,
+                "equipment_types_required": payload.equipment_types,
+                "updated_at": datetime.utcnow(),
+            }
+        },
+    )
+
+    # ── 2. 原子化同步 Neo4j ──────────────────────────────────────────
+    try:
+        async with driver.session() as session:
+            # 步骤 2a：删除该活动所有旧的资源关系（兼容新旧命名）
+            await session.run(
+                """
+                MATCH (a:Activity {id: $aid})-[r:ASSIGNED_TO|USES|CONSUMES|ASSIGNS|OCCUPIES]->()
+                DELETE r
+                """,
+                {"aid": activity_id},
+            )
+
+            # 步骤 2b：批量创建 ASSIGNED_TO（人员）
+            if payload.assigned_personnel_ids:
+                await session.run(
+                    """
+                    UNWIND $ids AS pid
+                    MATCH (a:Activity {id: $aid})
+                    MATCH (p:Personnel {id: pid})
+                    CREATE (a)-[:ASSIGNED_TO]->(p)
+                    """,
+                    {"aid": activity_id, "ids": payload.assigned_personnel_ids},
+                )
+
+            # 步骤 2c：批量创建 USES（设备，Resource 节点）
+            if payload.assigned_equipment_ids:
+                await session.run(
+                    """
+                    UNWIND $ids AS eid
+                    MATCH (a:Activity {id: $aid})
+                    MATCH (r:Resource {id: eid})
+                    CREATE (a)-[:USES]->(r)
+                    """,
+                    {"aid": activity_id, "ids": payload.assigned_equipment_ids},
+                )
+
+            # 步骤 2d：批量创建 CONSUMES（原料，携带 rate 属性）
+            if payload.consumed_resources:
+                await session.run(
+                    """
+                    UNWIND $items AS item
+                    MATCH (a:Activity {id: $aid})
+                    MATCH (r:Resource {id: item.resource_id})
+                    CREATE (a)-[:CONSUMES {rate: item.rate}]->(r)
+                    """,
+                    {
+                        "aid": activity_id,
+                        "items": [
+                            {"resource_id": cr.resource_id, "rate": cr.rate}
+                            for cr in payload.consumed_resources
+                        ],
+                    },
+                )
+    except Exception as e:
+        print(f"Neo4j同步失败: {e}")
+        raise HTTPException(status_code=500, detail=f"资源关系同步失败: {str(e)}")
+
+    return {"message": "资源配置已更新", "activity_id": activity_id}

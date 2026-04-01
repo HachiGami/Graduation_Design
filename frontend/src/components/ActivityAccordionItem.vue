@@ -132,6 +132,10 @@
             <el-button type="primary" @click="addMaterial">添加原料</el-button>
           </div>
         </el-tab-pane>
+
+        <el-tab-pane label="🔧 资源分配" name="resources" lazy>
+          <ActivityResourcesPanel :activity-id="activityId" />
+        </el-tab-pane>
       </el-tabs>
     </el-collapse-item>
   </el-collapse>
@@ -219,6 +223,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { Activity } from '@/types'
 import type { RiskItem } from '@/api/analytics'
+import ActivityResourcesPanel from './ActivityResourcesPanel.vue'
 import { getRisks } from '@/api/analytics'
 import { replenishMaterialStock, getAssets } from '@/api/asset'
 import {

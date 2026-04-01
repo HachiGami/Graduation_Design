@@ -7,6 +7,63 @@ from bson import ObjectId
 
 router = APIRouter(prefix="/api/resources", tags=["资源管理"])
 
+# 旧种子数据的 resource_type 值 → 新 type 字段映射
+_LEGACY_TYPE_MAP = {
+    "Equipment": "设备",
+    "RawMaterial": "原料",
+    "Material": "原料",
+    "equipment": "设备",
+    "raw_material": "原料",
+    "material": "原料",
+}
+
+
+def _normalize_resource_for_response(resource: dict) -> dict:
+    """将旧格式文档归一化为 ResourceResponse 所需字段（向后兼容）。"""
+    now = datetime.utcnow()
+
+    # type 字段：兼容旧 resource_type 字段
+    if not resource.get("type"):
+        old_type = resource.get("resource_type", "")
+        resource["type"] = _LEGACY_TYPE_MAP.get(old_type, old_type or "未知")
+
+    # quantity：兼容旧 inventory_level 字段
+    if resource.get("quantity") is None:
+        resource["quantity"] = float(resource.get("inventory_level", 0) or 0)
+
+    # unit：设备类型旧数据可能缺失
+    resource.setdefault("unit", "")
+
+    # supplier：旧数据可能是 {name, contact} 嵌套对象
+    supplier = resource.get("supplier")
+    if isinstance(supplier, dict):
+        resource["supplier"] = supplier.get("name", "")
+    elif not isinstance(supplier, str):
+        resource["supplier"] = ""
+
+    # specification：旧数据可能是 specifications: {capacity, power, brand} 嵌套对象
+    if not resource.get("specification"):
+        specs = resource.get("specifications", {})
+        if isinstance(specs, dict):
+            parts = [str(v) for k, v in specs.items() if v and k in ("brand", "capacity")]
+            resource["specification"] = " / ".join(parts) if parts else ""
+        elif isinstance(specs, str):
+            resource["specification"] = specs
+        else:
+            resource["specification"] = ""
+
+    resource.setdefault("status", "available")
+    resource.setdefault("version", 1)
+    resource.setdefault("is_active", True)
+    resource.setdefault("manufacturer", None)
+    resource.setdefault("production_date", None)
+    resource.setdefault("upcoming_maintenance", [])
+    resource.setdefault("serving_activities_details", [])
+    resource.setdefault("serving_processes", [])
+    resource.setdefault("created_at", resource.get("updated_at") or now)
+    resource.setdefault("updated_at", resource.get("created_at") or now)
+    return resource
+
 
 def _parse_working_hours(working_hours) -> float:
     total_hours = 0.0
@@ -150,6 +207,7 @@ async def get_resources(
     resources = []
     async for resource in db.resources.find(query_filter):
         resource["_id"] = str(resource["_id"])
+        _normalize_resource_for_response(resource)
         resources.append(resource)
 
     await _enrich_with_neo4j(resources, db, driver)
@@ -164,6 +222,7 @@ async def get_resource(resource_id: str):
     if not resource:
         raise HTTPException(status_code=404, detail="资源不存在")
     resource["_id"] = str(resource["_id"])
+    _normalize_resource_for_response(resource)
     await _enrich_with_neo4j([resource], db, driver)
     return resource
 
@@ -186,6 +245,7 @@ async def update_resource(resource_id: str, resource: ResourceUpdate):
 
     updated_resource = await db.resources.find_one({"_id": ObjectId(resource_id)})
     updated_resource["_id"] = str(updated_resource["_id"])
+    _normalize_resource_for_response(updated_resource)
 
     if resource.name:
         neo4j_query = """

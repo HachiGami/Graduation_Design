@@ -1,5 +1,13 @@
 import request from './request'
-import type { Activity, ActivityDetails, EquipmentRequirement, MaterialRequirement, PersonnelRequirement } from '@/types'
+import type {
+  Activity,
+  ActivityDetails,
+  EquipmentRequirement,
+  MaterialRequirement,
+  PersonnelRequirement,
+  ActivityResourcesData,
+  UpdateActivityResourcesPayload,
+} from '@/types'
 
 export const getActivities = (params: { domain: string, process_id?: string }) => {
   return request.get<any, Activity[]>('/activities', { params })
@@ -56,6 +64,17 @@ export const addActivityMaterialRequirement = (
 
 export const removeActivityMaterialRequirement = (activityId: string, materialModel: string) => {
   return request.delete<any, Activity>(`/activities/${activityId}/materials/${encodeURIComponent(materialModel)}`)
+}
+
+export const getActivityResources = (activityId: string) => {
+  return request.get<any, ActivityResourcesData>(`/activities/${activityId}/resources`)
+}
+
+export const updateActivityResources = (activityId: string, data: UpdateActivityResourcesPayload) => {
+  return request.put<any, { message: string; activity_id: string }>(
+    `/activities/${activityId}/resources`,
+    data,
+  )
 }
 
 

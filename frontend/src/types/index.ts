@@ -123,6 +123,44 @@ export interface Activity {
   material_requirements?: MaterialRequirement[]
   personnel_requirements?: PersonnelRequirement[]
   equipment_requirements?: EquipmentRequirement[]
+  personnel_roles_required?: string[]
+  equipment_types_required?: string[]
+}
+
+// ── 活动资源分配面板专用类型 ───────────────────────────────────────
+
+export interface ActivityResourcesPersonnel {
+  id: string
+  name: string
+  role: string
+}
+
+export interface ActivityResourcesEquipment {
+  id: string
+  name: string
+  specification: string
+}
+
+export interface ActivityResourcesConsumed {
+  resource_id: string
+  name: string
+  rate: number
+}
+
+export interface ActivityResourcesData {
+  personnel_roles_required: string[]
+  equipment_types_required: string[]
+  assigned_personnel: ActivityResourcesPersonnel[]
+  assigned_equipment: ActivityResourcesEquipment[]
+  consumed_resources: ActivityResourcesConsumed[]
+}
+
+export interface UpdateActivityResourcesPayload {
+  personnel_roles: string[]
+  equipment_types: string[]
+  assigned_personnel_ids: string[]
+  assigned_equipment_ids: string[]
+  consumed_resources: { resource_id: string; rate: number }[]
 }
 
 // Asset (资产) 相关类型
