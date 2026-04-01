@@ -4,13 +4,6 @@
       <template #header>
         <div class="card-header">
           <span>节点关联视图</span>
-          <div class="header-actions">
-            <el-button @click="loadGraphData" :icon="'Refresh'">刷新</el-button>
-            <el-button type="primary" @click="handleAddDependency" :icon="'Plus'">添加依赖</el-button>
-            <el-button type="success" @click="handleAddActivity" :icon="'Plus'">添加活动</el-button>
-            <el-button type="warning" @click="handleAddResource" :icon="'Plus'">添加资源</el-button>
-            <el-button type="info" @click="handleAddPersonnel" :icon="'Plus'">添加人员</el-button>
-          </div>
         </div>
       </template>
       
@@ -74,7 +67,6 @@
             :risk-list="riskList"
             @highlight-request="handleDashboardHighlight"
             @process-select="handleProcessSelect"
-            @clear-highlight="clearDashboardHighlight"
           />
         </aside>
       </div>
@@ -616,12 +608,6 @@ const clearFlowHighlight = () => {
   ElMessage.success('已恢复全局视图')
 }
 
-// 清除仪表盘高亮
-const clearDashboardHighlight = () => {
-  dashboardHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
-  updateHighlightUnion()
-}
-
 const applyRouteFocusHighlight = () => {
   const focusId = focusActivityFromQuery.value
   const domain = highlightDomainFromQuery.value
@@ -689,13 +675,6 @@ const handleKpiClick = (type: string) => {
     const edgeIds = graphData.value.edges.map((e: any) => `${e.source}-${e.target}`)
     handleDashboardHighlight({ nodeIds: [], edgeIds })
   }
-}
-
-// 全清空
-const clearAllHighlights = () => {
-  flowHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
-  dashboardHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
-  updateHighlightUnion()
 }
 
 // 处理仪表盘高亮请求
@@ -912,20 +891,6 @@ const handleEditResourceFromGraph = async (resource: any) => {
   }
 }
 
-// 依赖关系操作
-const handleAddDependency = () => {
-  isEditDependency.value = false
-  dependencyForm.value = {
-    source_activity_id: '',
-    target_activity_id: '',
-    dependency_type: 'sequential',
-    status: 'active',
-    domain: currentDomain.value || 'production',
-    process_id: currentProcessId.value || 'P001'
-  }
-  dependencyDialogVisible.value = true
-}
-
 const handleDependencySubmit = async () => {
   try {
     if (isEditDependency.value && dependencyForm.value.id) {
@@ -943,24 +908,6 @@ const handleDependencySubmit = async () => {
 }
 
 // 活动操作
-const handleAddActivity = () => {
-  currentActivity.value = null
-  isEditActivity.value = true
-  activityForm.value = {
-    name: '',
-    description: '',
-    activity_type: '',
-    sop_steps: [],
-    estimated_duration: 0,
-    required_resources: [],
-    required_personnel: [],
-    status: 'pending',
-    domain: currentDomain.value || 'production',
-    process_id: currentProcessId.value || 'P001'
-  }
-  activityDialogVisible.value = true
-}
-
 const handleActivitySubmit = async () => {
   try {
     if (currentActivity.value?.id) {
@@ -1004,21 +951,6 @@ const handleDeleteActivity = async () => {
 }
 
 // 资源操作
-const handleAddResource = () => {
-  currentResource.value = null
-  isEditResource.value = true
-  resourceForm.value = {
-    name: '',
-    type: '',
-    specification: '',
-    supplier: '',
-    quantity: 0,
-    unit: '',
-    status: 'available'
-  }
-  resourceDialogVisible.value = true
-}
-
 const handleResourceSubmit = async () => {
   try {
     if (currentResource.value?.id) {
@@ -1062,21 +994,6 @@ const handleDeleteResource = async () => {
 }
 
 // 人员操作
-const handleAddPersonnel = () => {
-  currentPersonnel.value = null
-  isEditPersonnel.value = true
-  personnelForm.value = {
-    name: '',
-    role: '',
-    responsibility: '',
-    skills: [],
-    work_hours: '',
-    assigned_tasks: [],
-    status: 'available'
-  }
-  personnelDialogVisible.value = true
-}
-
 const handlePersonnelSubmit = async () => {
   if (!personnelForm.value.name?.trim() || !personnelForm.value.role?.trim() || !personnelForm.value.responsibility?.trim()) {
     console.error('表单校验失败')
@@ -1197,13 +1114,7 @@ watch(
 
 .card-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-}
-
-.header-actions {
-  display: flex;
-  gap: 8px;
 }
 
 .toolbar {

@@ -11,9 +11,6 @@
       <el-text v-if="dataLevel !== 'level2'" type="warning" size="small" style="margin-left: 10px;">
         {{ dataLevelHint }}
       </el-text>
-      <el-button size="small" @click="handleClearHighlight" style="margin-left: auto;">
-        清空仪表盘高亮
-      </el-button>
     </div>
 
     <div v-if="props.mode === 'full'" class="kpi-cards">
@@ -61,9 +58,6 @@
         <el-radio-button label="global">全局</el-radio-button>
         <el-radio-button label="process" :disabled="!hasSelectedProcess">流程</el-radio-button>
       </el-radio-group>
-      <el-button size="small" @click="handleClearHighlight" text>
-        清空
-      </el-button>
     </div>
 
     <el-tabs v-if="props.mode === 'sidebar'" v-model="activeTab" class="sidebar-tabs">
@@ -293,7 +287,6 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   highlightRequest: [{ nodeIds: string[], edgeIds: string[] }]
   processSelect: [{ processId: string }]
-  clearHighlight: []
 }>()
 
 const currentScope = ref<'global' | 'process'>('global')
@@ -704,11 +697,6 @@ function handleDynamicRiskClick(event: DynamicRiskEvent) {
 
 function handleProcessRankingClick(row: any) {
   emit('processSelect', { processId: row.processId })
-}
-
-function handleClearHighlight() {
-  emit('clearHighlight')
-  ElMessage.success('已清空仪表盘高亮')
 }
 
 function getProcessName(processId: string): string {
