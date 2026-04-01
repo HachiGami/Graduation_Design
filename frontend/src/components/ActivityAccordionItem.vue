@@ -156,8 +156,14 @@
         </el-select>
       </el-form-item>
       <el-form-item label="前置活动">
-        <el-select v-model="editForm.predecessor_id" placeholder="请选择前置活动" clearable style="width: 100%">
-          <el-option label="无" :value="null" />
+        <el-select
+          v-model="editForm.predecessor_ids"
+          placeholder="输入活动名称进行搜索"
+          clearable
+          multiple
+          filterable
+          style="width: 100%"
+        >
           <el-option
             v-for="item in predecessorOptions"
             :key="item.id"
@@ -231,6 +237,7 @@ import {
   updateActivity,
   deleteActivity
 } from '@/api/activity'
+import { getDependencies } from '@/api/dependency'
 import { ElMessageBox } from 'element-plus'
 
 const props = defineProps<{ activity: Activity }>()
@@ -245,7 +252,7 @@ const sopDialogVisible = ref(false)
 const replenishDialogVisible = ref(false)
 
 const editForm = ref<Partial<Activity>>({})
-const sameProcessActivities = ref<Activity[]>([])
+const allActivities = ref<Activity[]>([])
 const sopEditForm = ref({
   description: '',
   sop_steps: [] as { content: string, duration: number }[]
@@ -294,35 +301,30 @@ const handleProcessIdChange = (newProcessId: string) => {
     // 自动将隐藏的 domain 字段设置为对应的值，以便提交给后端
     editForm.value.domain = prefixToDomainMap[prefix];
   }
-  editForm.value.predecessor_id = null
-  void loadSameProcessActivities(newProcessId)
+  editForm.value.predecessor_ids = []
+  void loadAllActivitiesForPredecessor()
 };
 
 const predecessorOptions = computed(() => {
   const selfId = activityId.value
-  return sameProcessActivities.value.filter((item) => item.id && item.id !== selfId)
+  return allActivities.value.filter((item) => item.id && item.id !== selfId)
 })
 
-const loadSameProcessActivities = async (processId?: string) => {
-  const targetProcessId = processId || editForm.value.process_id
-  if (!targetProcessId) {
-    sameProcessActivities.value = []
-    return
-  }
-  const prefix = targetProcessId.charAt(0).toUpperCase()
-  const domain = prefixToDomainMap[prefix]
-  if (!domain) {
-    sameProcessActivities.value = []
-    return
-  }
+const loadAllActivitiesForPredecessor = async () => {
   try {
-    const list = await getActivities({ domain, process_id: targetProcessId })
-    sameProcessActivities.value = list.map((item) => {
+    const domains = ['production', 'transport', 'sales', 'quality', 'warehouse']
+    const result = await Promise.all(domains.map((domain) => getActivities({ domain })))
+    const merged = result.flat().map((item) => {
       if ((item as any)._id && !item.id) item.id = (item as any)._id
       return item
     })
+    const dedupMap = new Map<string, Activity>()
+    merged.forEach((item) => {
+      if (item.id) dedupMap.set(item.id, item)
+    })
+    allActivities.value = Array.from(dedupMap.values())
   } catch {
-    sameProcessActivities.value = []
+    allActivities.value = []
   }
 }
 
@@ -412,16 +414,40 @@ const locateInDependencyView = () => {
   })
 }
 
-const openEditDialog = () => {
+const resolvePredecessorIds = async () => {
+  const predecessorIdsFromActivity = Array.isArray(localActivity.value.predecessor_ids)
+    ? localActivity.value.predecessor_ids.filter((id): id is string => typeof id === 'string' && id.length > 0)
+    : (localActivity.value.predecessor_id ? [localActivity.value.predecessor_id] : [])
+
+  if (predecessorIdsFromActivity.length > 0) return predecessorIdsFromActivity
+  if (!activityId.value || !localActivity.value.domain) return []
+
+  try {
+    const dependencies = await getDependencies({
+      domain: localActivity.value.domain,
+      process_id: localActivity.value.process_id,
+      activity_id: activityId.value
+    })
+    return dependencies
+      .filter((dep) => dep.target_activity_id === activityId.value)
+      .map((dep) => dep.source_activity_id)
+      .filter((id, index, arr) => typeof id === 'string' && id.length > 0 && arr.indexOf(id) === index)
+  } catch {
+    return []
+  }
+}
+
+const openEditDialog = async () => {
+  await loadAllActivitiesForPredecessor()
+  const predecessorIds = await resolvePredecessorIds()
   editForm.value = {
     name: localActivity.value.name,
     description: localActivity.value.description,
     status: localActivity.value.status,
     domain: localActivity.value.domain,
     process_id: localActivity.value.process_id,
-    predecessor_id: localActivity.value.predecessor_id ?? null
+    predecessor_ids: predecessorIds
   }
-  void loadSameProcessActivities(localActivity.value.process_id)
   editDialogVisible.value = true
 }
 

@@ -116,6 +116,7 @@ export interface Activity {
   status: string
   domain: string
   process_id: string
+  predecessor_ids?: string[]
   predecessor_id?: string | null
   version?: number
   is_active?: boolean

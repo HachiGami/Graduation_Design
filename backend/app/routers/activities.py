@@ -73,6 +73,13 @@ def _normalize_activity_for_response(activity: dict) -> dict:
     activity.setdefault("status", "pending")
     activity.setdefault("domain", "production")
     activity.setdefault("process_id", "P001")
+    predecessor_ids = activity.get("predecessor_ids")
+    if isinstance(predecessor_ids, list):
+        activity["predecessor_ids"] = [pid for pid in predecessor_ids if isinstance(pid, str) and pid]
+    elif activity.get("predecessor_id"):
+        activity["predecessor_ids"] = [activity["predecessor_id"]]
+    else:
+        activity["predecessor_ids"] = []
     activity.setdefault("predecessor_id", None)
     activity.setdefault("version", 1)
     activity.setdefault("is_active", True)
@@ -126,9 +133,12 @@ async def create_activity(activity: ActivityCreate):
         activity_dict["domain"] = derived_domain
     if derived_type:
         activity_dict["activity_type"] = derived_type
-    predecessor_id = activity_dict.get("predecessor_id")
-    if predecessor_id == "":
-        activity_dict["predecessor_id"] = None
+    predecessor_ids = activity_dict.get("predecessor_ids") or []
+    if not isinstance(predecessor_ids, list):
+        predecessor_ids = []
+    predecessor_ids = [pid for pid in predecessor_ids if isinstance(pid, str) and pid]
+    activity_dict["predecessor_ids"] = predecessor_ids
+    activity_dict["predecessor_id"] = predecessor_ids[0] if predecessor_ids else None
     activity_dict["created_at"] = datetime.utcnow()
     activity_dict["updated_at"] = datetime.utcnow()
     
@@ -150,15 +160,16 @@ async def create_activity(activity: ActivityCreate):
                 "domain": activity_dict.get("domain"),
                 "process_id": activity_dict.get("process_id")
             })
-            if activity_dict.get("predecessor_id"):
+            if predecessor_ids:
                 await session.run(
                     """
-                    MATCH (child:Activity {id: $new_id}), (parent:Activity {id: $pred_id})
-                    MERGE (child)-[:DEPENDS_ON]->(parent)
+                    UNWIND $pred_ids AS pred_id
+                    MATCH (parent:Activity {id: pred_id}), (child:Activity {id: $new_id})
+                    MERGE (parent)-[:DEPENDS_ON]->(child)
                     """,
                     {
                         "new_id": activity_id,
-                        "pred_id": activity_dict["predecessor_id"],
+                        "pred_ids": predecessor_ids,
                     },
                 )
     except Exception as e:
@@ -504,10 +515,15 @@ async def update_activity(activity_id: str, activity: ActivityUpdate):
     if not existing_activity:
         raise HTTPException(status_code=404, detail="生产活动不存在")
 
-    old_predecessor_id = existing_activity.get("predecessor_id")
     update_data = {k: v for k, v in activity.model_dump().items() if v is not None}
-    if update_data.get("predecessor_id") == "":
-        update_data["predecessor_id"] = None
+    predecessor_ids_in_payload = "predecessor_ids" in update_data
+    if predecessor_ids_in_payload:
+        predecessor_ids = update_data.get("predecessor_ids") or []
+        if not isinstance(predecessor_ids, list):
+            predecessor_ids = []
+        predecessor_ids = [pid for pid in predecessor_ids if isinstance(pid, str) and pid]
+        update_data["predecessor_ids"] = predecessor_ids
+        update_data["predecessor_id"] = predecessor_ids[0] if predecessor_ids else None
     effective_process_id = update_data.get("process_id", existing_activity.get("process_id"))
     derived_domain, derived_type = _derive_domain_and_type(effective_process_id)
     if derived_domain:
@@ -525,7 +541,7 @@ async def update_activity(activity_id: str, activity: ActivityUpdate):
     updated_activity["_id"] = str(updated_activity["_id"])
     
     # 同步到Neo4j：如果name更新了，同步更新
-    if activity.name or activity.domain or activity.process_id or activity.predecessor_id is not None:
+    if activity.name or activity.domain or activity.process_id or predecessor_ids_in_payload:
         neo4j_query = """
         MATCH (a:Activity {id: $activity_id})
         SET a.name = COALESCE($name, a.name),
@@ -541,22 +557,23 @@ async def update_activity(activity_id: str, activity: ActivityUpdate):
                     "domain": update_data.get("domain"),
                     "process_id": update_data.get("process_id")
                 })
-                new_predecessor_id = updated_activity.get("predecessor_id")
-                if old_predecessor_id != new_predecessor_id:
+                if predecessor_ids_in_payload:
                     await session.run(
                         """
-                        MATCH (child:Activity {id: $id})-[r:DEPENDS_ON]->(:Activity)
+                        MATCH (:Activity)-[r:DEPENDS_ON]->(child:Activity {id: $id})
                         DELETE r
                         """,
                         {"id": activity_id},
                     )
-                    if new_predecessor_id:
+                    new_predecessor_ids = updated_activity.get("predecessor_ids") or []
+                    if new_predecessor_ids:
                         await session.run(
                             """
-                            MATCH (child:Activity {id: $id}), (parent:Activity {id: $new_pred_id})
-                            MERGE (child)-[:DEPENDS_ON]->(parent)
+                            UNWIND $pred_ids AS pred_id
+                            MATCH (parent:Activity {id: pred_id}), (child:Activity {id: $id})
+                            MERGE (parent)-[:DEPENDS_ON]->(child)
                             """,
-                            {"id": activity_id, "new_pred_id": new_predecessor_id},
+                            {"id": activity_id, "pred_ids": new_predecessor_ids},
                         )
         except Exception as e:
             print(f"Neo4j同步失败: {e}")

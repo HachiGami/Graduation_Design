@@ -35,7 +35,7 @@ class ActivityBase(BaseModel):
     status: Literal["pending", "in_progress"] = Field(default="pending", description="活动状态：pending(待机) 或 in_progress(进行中)")
     domain: Optional[str] = Field(default=None, description="流程域")
     process_id: str = Field(..., description="流程实例ID")
-    predecessor_id: Optional[str] = Field(default=None, description="前置活动ID")
+    predecessor_ids: Optional[List[str]] = Field(default=[], description="前置活动ID列表")
     version: Optional[int] = Field(1, description="流程版本号")
     is_active: Optional[bool] = Field(True, description="是否启用")
     working_hours: List[TimeWindow] = Field(
@@ -70,7 +70,7 @@ class ActivityUpdate(BaseModel):
     status: Optional[Literal["pending", "in_progress"]] = None
     domain: Optional[str] = None
     process_id: Optional[str] = None
-    predecessor_id: Optional[str] = None
+    predecessor_ids: Optional[List[str]] = []
     version: Optional[int] = None
     is_active: Optional[bool] = None
     working_hours: Optional[List[TimeWindow]] = None

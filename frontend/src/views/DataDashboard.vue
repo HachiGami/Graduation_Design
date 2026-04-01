@@ -57,8 +57,14 @@
           </el-select>
         </el-form-item>
         <el-form-item label="前置活动">
-          <el-select v-model="addActivityForm.predecessor_id" style="width: 100%" clearable>
-            <el-option label="无" :value="null" />
+          <el-select
+            v-model="addActivityForm.predecessor_ids"
+            style="width: 100%"
+            multiple
+            clearable
+            filterable
+            placeholder="输入活动名称进行搜索"
+          >
             <el-option
               v-for="item in addPredecessorOptions"
               :key="item.id"
@@ -177,7 +183,7 @@ const defaultAddActivityForm = () => ({
   name: '',
   description: '',
   process_id: 'P001',
-  predecessor_id: null as string | null,
+  predecessor_ids: [] as string[],
   estimated_duration: 60,
   status: 'pending' as 'pending' | 'in_progress',
   sop_steps: [],
@@ -190,8 +196,7 @@ const defaultAddActivityForm = () => ({
 const addActivityForm = ref(defaultAddActivityForm())
 
 const addPredecessorOptions = computed(() => {
-  if (!addActivityForm.value.process_id) return []
-  return activities.value.filter((item) => item.process_id === addActivityForm.value.process_id && item.id)
+  return activities.value.filter((item) => item.id)
 })
 
 const openAddActivityDialog = () => {
@@ -203,7 +208,7 @@ const onAddProcessIdChange = (val: string) => {
   if (!val) return
   const prefix = val.charAt(0).toUpperCase()
   if (!prefixToDomainMap[prefix]) return
-  addActivityForm.value.predecessor_id = null
+  addActivityForm.value.predecessor_ids = []
 }
 
 const submitAddActivity = async () => {
