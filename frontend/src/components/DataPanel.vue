@@ -99,8 +99,6 @@
           highlight-current-row
         >
           <el-table-column prop="name" label="名称" width="180" />
-          <el-table-column prop="specification" label="规格" width="150" />
-          <el-table-column prop="quantity" label="总量" width="100" />
           <el-table-column label="状态" width="120">
             <template #default="scope">
               <el-tag :type="getStatusTagType(scope.row.status)">
@@ -403,8 +401,6 @@
           
           <el-descriptions v-if="!isEditing" :column="2" border>
             <el-descriptions-item label="名称">{{ currentItem.name }}</el-descriptions-item>
-            <el-descriptions-item label="规格">{{ currentItem.specification }}</el-descriptions-item>
-            <el-descriptions-item label="总量">{{ currentItem.quantity }}</el-descriptions-item>
             <el-descriptions-item label="状态">
               <el-tag :type="getStatusTagType(currentItem.status)">
                 {{ getStatusText(currentItem.status) }}
@@ -415,12 +411,6 @@
           <el-form v-else :model="editForm" label-width="120px">
             <el-form-item label="名称">
               <el-input v-model="editForm.name" />
-            </el-form-item>
-            <el-form-item label="规格">
-              <el-input v-model="editForm.specification" />
-            </el-form-item>
-            <el-form-item label="总量">
-              <el-input-number v-model="editForm.quantity" :min="0" />
             </el-form-item>
             <el-form-item label="状态">
               <el-select v-model="editForm.status">
@@ -436,11 +426,11 @@
           <div class="resource-utilization">
             <div class="utilization-progress">
               <span class="utilization-label">
-                当前占用: {{ calculateUsedAmount(currentItem.allocations) }} / 总量: {{ currentItem.quantity }}
+                当前状态: {{ currentItem.status === 'in_use' ? '被占用' : '空闲' }}
               </span>
               <el-progress
-                :percentage="calculateUsagePercentage(currentItem.allocations, currentItem.quantity)"
-                :status="calculateUsagePercentage(currentItem.allocations, currentItem.quantity) > 100 ? 'exception' : 'success'"
+                :percentage="currentItem.status === 'in_use' ? 100 : 0"
+                :status="currentItem.status === 'in_use' ? 'exception' : 'success'"
               />
             </div>
             
@@ -448,7 +438,6 @@
               <h4>占用明细</h4>
               <el-table :data="currentItem.allocations || []" size="small" border>
                 <el-table-column prop="activity_name" label="占用活动" />
-                <el-table-column prop="amount" label="占用数量" width="100" />
                 <el-table-column prop="duration" label="占用时长(分钟)" width="150" />
               </el-table>
               <el-empty v-if="!currentItem.allocations || currentItem.allocations.length === 0" description="暂无占用记录" />
@@ -693,23 +682,13 @@ async function loadPersonnel() {
 async function loadEquipment() {
   try {
     const data = await getAssets({ asset_type: 'equipment' })
-    // 按型号分组统计数量
-    const grouped: Record<string, any> = {}
-    data.forEach((asset: any) => {
-      const model = asset.model
-      if (!grouped[model]) {
-        grouped[model] = {
-          id: asset.id || asset._id,
-          name: model,
-          specification: asset.specification || '',
-          quantity: 0,
-          status: 'available',
-          allocations: []
-        }
-      }
-      grouped[model].quantity += 1
-    })
-    equipment.value = Object.values(grouped)
+    equipment.value = data.map((asset: any) => ({
+      id: asset.id || asset._id,
+      name: asset.name,
+      model: asset.model,
+      status: asset.status || 'available',
+      allocations: []
+    }))
   } catch (error) {
     console.error('加载设备数据失败:', error)
   }

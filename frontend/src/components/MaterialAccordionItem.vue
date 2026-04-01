@@ -24,11 +24,11 @@
         <div class="info-section">
           <div class="info-item">
             <span class="label">总消耗速度:</span>
-            <span class="value">{{ material.daily_consumption.toFixed(2) }} {{ material.unit }}/天</span>
+            <span class="value">{{ material.daily_consumption != null ? Number(material.daily_consumption).toFixed(2) : '暂无' }} {{ material.unit }}/天</span>
           </div>
           <div class="info-item">
             <span class="label">预估可运行时间:</span>
-            <span class="value">{{ material.remaining_days === -1 ? '充足' : material.remaining_days.toFixed(1) + ' 天' }}</span>
+            <span class="value">{{ material.remaining_days == null ? '暂无' : (material.remaining_days === -1 ? '充足' : Number(material.remaining_days).toFixed(1) + ' 天') }}</span>
           </div>
         </div>
         
@@ -41,8 +41,8 @@
                 <span class="act-process">(归属: {{ formatProcessName(detail.process_id) }})</span>
               </span>
               <span class="act-rate">
-                消耗速率: {{ detail.hourly_consumption.toFixed(2) }} {{ material.unit }}/小时,
-                共 {{ detail.daily_consumption.toFixed(1) }} {{ material.unit }}/天
+                消耗速率: {{ detail.hourly_consumption != null ? Number(detail.hourly_consumption).toFixed(2) : '0.00' }} {{ material.unit }}/小时,
+                共 {{ detail.daily_consumption != null ? Number(detail.daily_consumption).toFixed(1) : '0.0' }} {{ material.unit }}/天
               </span>
             </li>
           </ul>

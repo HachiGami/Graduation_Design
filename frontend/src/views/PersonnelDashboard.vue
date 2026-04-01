@@ -119,9 +119,6 @@
         <el-form-item label="职责/部门" required>
           <el-input v-model="addPersonnelForm.responsibility" placeholder="如：生产部" />
         </el-form-item>
-        <el-form-item label="工作时间" required>
-          <el-input v-model="addPersonnelForm.work_hours" placeholder="如：08:00-18:00" />
-        </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="addPersonnelForm.status" style="width: 100%">
             <el-option label="在职" value="active" />
@@ -391,7 +388,6 @@ const defaultAddPersonnelForm = () => ({
   name: '',
   role: '',
   responsibility: '',
-  work_hours: '08:00-18:00',
   status: 'active',
   skills: [] as string[],
   upcoming_leaves: [] as string[],

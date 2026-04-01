@@ -5,9 +5,6 @@
         <div class="header-content">
           <div class="left-info">
             <span class="equipment-name">{{ equipment.name }}</span>
-            <el-tag size="small" type="info" class="spec-tag" v-if="equipment.specification">
-              {{ equipment.specification }}
-            </el-tag>
             <el-tag 
               v-if="equipment.upcoming_maintenance && equipment.upcoming_maintenance.length > 0" 
               size="small" 
@@ -83,9 +80,6 @@
       <el-form :model="editForm" label-width="100px" size="default">
         <el-form-item label="设备名称">
           <el-input v-model="editForm.name" />
-        </el-form-item>
-        <el-form-item label="设备种类">
-          <el-input v-model="editForm.specification" />
         </el-form-item>
         <el-form-item label="生产厂家">
           <el-input v-model="editForm.manufacturer" />
@@ -163,7 +157,6 @@ const isEditModalVisible = ref(false)
 const isSubmitting = ref(false)
 const editForm = reactive({
   name: '',
-  specification: '',
   manufacturer: '',
   production_date: ''
 })
@@ -228,7 +221,6 @@ const formatProcessName = (processId: string) => {
 
 const openEditModal = () => {
   editForm.name = props.equipment.name || ''
-  editForm.specification = props.equipment.specification || ''
   editForm.manufacturer = props.equipment.manufacturer || ''
   editForm.production_date = props.equipment.production_date || ''
   isEditModalVisible.value = true
@@ -277,7 +269,6 @@ const submitEdit = async () => {
       },
       body: JSON.stringify({
         name: editForm.name,
-        specification: editForm.specification,
         manufacturer: editForm.manufacturer,
         production_date: editForm.production_date
       })

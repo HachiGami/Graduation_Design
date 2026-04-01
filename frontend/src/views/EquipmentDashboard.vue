@@ -16,15 +16,6 @@
           <el-option label="生产日期(倒序)" value="date_desc" />
         </el-select>
 
-        <el-select v-model="specFilter" placeholder="设备种类" clearable class="filter-select">
-          <el-option label="全部" value="" />
-          <el-option
-            v-for="spec in uniqueSpecs"
-            :key="spec"
-            :label="spec"
-            :value="spec"
-          />
-        </el-select>
 
         <el-select v-model="processFilter" placeholder="流程" clearable class="filter-select">
           <el-option label="全部" value="" />
@@ -65,14 +56,8 @@
         <el-form-item label="设备名称" required>
           <el-input v-model="addEquipmentForm.name" placeholder="如：灌装机-03" />
         </el-form-item>
-        <el-form-item label="设备种类" required>
-          <el-input v-model="addEquipmentForm.specification" placeholder="如：灌装设备" />
-        </el-form-item>
         <el-form-item label="型号规格" required>
           <el-input v-model="addEquipmentForm.model" placeholder="如：GZ-2000" />
-        </el-form-item>
-        <el-form-item label="供应商" required>
-          <el-input v-model="addEquipmentForm.supplier" placeholder="供应商名称" />
         </el-form-item>
         <el-form-item label="生产厂家">
           <el-input v-model="addEquipmentForm.manufacturer" placeholder="生产厂家" />
@@ -82,9 +67,6 @@
         </el-form-item>
         <el-form-item label="单位" required>
           <el-input v-model="addEquipmentForm.unit" placeholder="如：台" />
-        </el-form-item>
-        <el-form-item label="数量" required>
-          <el-input-number v-model="addEquipmentForm.quantity" :min="1" style="width: 100%" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -125,7 +107,6 @@
                 <strong>{{ scope.row.name }}</strong>
               </template>
             </el-table-column>
-            <el-table-column prop="specification" label="设备种类" width="150" />
             <el-table-column label="受影响的占用活动">
               <template #default="scope">
                 <template v-if="scope.row.serving_activities_details && scope.row.serving_activities_details.length > 0">
@@ -162,7 +143,6 @@ const loading = ref(false)
 
 const searchQuery = ref('')
 const sortOption = ref('default')
-const specFilter = ref('')
 const processFilter = ref('')
 
 const isMaintenanceModalVisible = ref(false)
@@ -219,13 +199,10 @@ const addEquipmentSubmitting = ref(false)
 const defaultAddEquipmentForm = () => ({
   name: '',
   type: '设备',
-  specification: '',
   model: '',
-  supplier: '',
   manufacturer: '',
   production_date: '',
   unit: '台',
-  quantity: 1,
   status: 'available'
 })
 
@@ -239,10 +216,6 @@ const openAddEquipmentDialog = () => {
 const submitAddEquipment = async () => {
   if (!addEquipmentForm.value.name.trim()) {
     ElMessage.warning('设备名称不能为空')
-    return
-  }
-  if (!addEquipmentForm.value.specification.trim()) {
-    ElMessage.warning('设备种类不能为空')
     return
   }
   addEquipmentSubmitting.value = true
@@ -276,13 +249,6 @@ onMounted(() => {
   fetchEquipments()
 })
 
-const uniqueSpecs = computed(() => {
-  const specs = new Set<string>()
-  equipments.value.forEach(eq => {
-    if (eq.specification) specs.add(eq.specification)
-  })
-  return Array.from(specs)
-})
 
 const uniqueProcesses = computed(() => Object.keys(processMap))
 
@@ -299,9 +265,6 @@ const processedEquipments = computed(() => {
   }
 
   // 2. 过滤
-  if (specFilter.value) {
-    result = result.filter(eq => eq.specification === specFilter.value)
-  }
   if (processFilter.value) {
     result = result.filter(eq => eq.serving_processes && eq.serving_processes.includes(processFilter.value))
   }
