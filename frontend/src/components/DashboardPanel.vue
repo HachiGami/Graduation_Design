@@ -275,7 +275,7 @@ const props = withDefaults(defineProps<{
   minRunnableDays?: number | string
   riskCount?: number
   riskList?: Array<{
-    risk_type: 'material_shortage' | 'allocation_shortage' | 'upcoming_absence'
+    risk_type: 'material_shortage' | 'allocation_shortage' | 'upcoming_absence' | 'personnel_shortage' | 'equipment_shortage' | 'leave' | 'maintenance'
     level: 'high' | 'medium' | 'low'
     activity_name: string
     message: string
@@ -465,7 +465,7 @@ const graphRiskItems = computed(() => {
       : runningActivities
 
   const items: Array<{
-    risk_type: 'material_shortage' | 'allocation_shortage' | 'upcoming_absence'
+    risk_type: 'material_shortage' | 'allocation_shortage' | 'upcoming_absence' | 'personnel_shortage' | 'equipment_shortage' | 'leave' | 'maintenance'
     level: 'high' | 'medium' | 'low'
     activity_name: string
     message: string
@@ -477,14 +477,25 @@ const graphRiskItems = computed(() => {
   for (const activity of selectedActivities) {
     const risks = Array.isArray(activity.risks) ? activity.risks : []
     for (const message of risks) {
+      const hasPersonChar = message.includes('人')
+      const hasPersonnelWord = message.includes('人员') || message.includes('人力')
+      const hasUnitMing = message.includes('名')
       const riskType = message.includes('库存不足7天')
         ? 'material_shortage'
-        : message.includes('请假') || message.includes('检修')
-          ? 'upcoming_absence'
-          : 'allocation_shortage'
+        : message.includes('请假')
+          ? 'leave'
+          : message.includes('检修')
+            ? 'maintenance'
+            : message.includes('缺') && (hasPersonChar || hasPersonnelWord || hasUnitMing)
+              ? 'personnel_shortage'
+              : message.includes('缺') && (message.includes('设备') || message.includes('台'))
+                ? 'equipment_shortage'
+                : message.includes('请假') || message.includes('检修')
+                  ? 'upcoming_absence'
+                  : 'allocation_shortage'
       items.push({
         risk_type: riskType,
-        level: riskType === 'upcoming_absence' ? 'medium' : 'high',
+        level: ['upcoming_absence', 'leave', 'maintenance'].includes(riskType) ? 'medium' : 'high',
         activity_name: activity.name || '未知活动',
         message,
         domain: activity.domain || null,
@@ -763,12 +774,20 @@ function formatProcessDisplay(processId: string, domain?: string) {
 
 function riskTypeLabel(type: string) {
   if (type === 'material_shortage') return '缺料'
+  if (type === 'personnel_shortage') return '缺人'
+  if (type === 'equipment_shortage') return '缺设备'
+  if (type === 'leave') return '请假'
+  if (type === 'maintenance') return '检修'
   if (type === 'allocation_shortage') return '缺人/缺设备'
   return '请假/检修'
 }
 
 function riskTagType(type: string) {
   if (type === 'material_shortage') return 'danger'
+  if (type === 'personnel_shortage') return 'warning'
+  if (type === 'equipment_shortage') return 'warning'
+  if (type === 'leave') return 'info'
+  if (type === 'maintenance') return 'info'
   if (type === 'allocation_shortage') return 'warning'
   return 'info'
 }
