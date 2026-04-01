@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Body
 from typing import List, Optional
 from datetime import datetime
 from ..database import get_database, get_neo4j_driver
@@ -235,6 +235,9 @@ async def update_resource(resource_id: str, resource: ResourceUpdate):
     update_data = {k: v for k, v in resource.model_dump().items() if v is not None}
     update_data["updated_at"] = datetime.utcnow()
 
+    if "quantity" in update_data and float(update_data["quantity"]) < 0:
+        raise HTTPException(status_code=400, detail="库存余额不足")
+
     result = await db.resources.update_one(
         {"_id": ObjectId(resource_id)},
         {"$set": update_data},
@@ -259,6 +262,32 @@ async def update_resource(resource_id: str, resource: ResourceUpdate):
         except Exception as e:
             print(f"Neo4j同步失败: {e}")
 
+    await _enrich_with_neo4j([updated_resource], db, driver)
+    return updated_resource
+
+
+@router.patch("/{resource_id}/stock", response_model=ResourceResponse)
+async def update_resource_stock(resource_id: str, change_amount: float = Body(..., embed=True)):
+    db = get_database()
+    driver = get_neo4j_driver()
+
+    resource = await db.resources.find_one({"_id": ObjectId(resource_id)})
+    if not resource:
+        raise HTTPException(status_code=404, detail="资源不存在")
+
+    current_quantity = float(resource.get("quantity", 0) or 0)
+    new_quantity = current_quantity + float(change_amount)
+    if new_quantity < 0:
+        raise HTTPException(status_code=400, detail="库存余额不足")
+
+    await db.resources.update_one(
+        {"_id": ObjectId(resource_id)},
+        {"$set": {"quantity": new_quantity, "updated_at": datetime.utcnow()}},
+    )
+
+    updated_resource = await db.resources.find_one({"_id": ObjectId(resource_id)})
+    updated_resource["_id"] = str(updated_resource["_id"])
+    _normalize_resource_for_response(updated_resource)
     await _enrich_with_neo4j([updated_resource], db, driver)
     return updated_resource
 

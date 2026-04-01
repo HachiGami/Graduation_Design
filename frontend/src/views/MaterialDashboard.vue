@@ -54,8 +54,8 @@
       </div>
     </div>
 
-    <!-- 补货弹窗 -->
-    <el-dialog v-model="replenishDialogVisible" title="原料补货" width="400px">
+    <!-- 库存调整弹窗 -->
+    <el-dialog v-model="replenishDialogVisible" title="库存调整" width="400px">
       <el-form :model="replenishForm" label-width="100px">
         <el-form-item label="原料名称">
           <span>{{ currentMaterial?.name }}</span>
@@ -63,14 +63,15 @@
         <el-form-item label="当前库存">
           <span>{{ currentMaterial?.quantity }} {{ currentMaterial?.unit }}</span>
         </el-form-item>
-        <el-form-item label="补货数量" required>
-          <el-input-number v-model="replenishForm.add_amount" :min="0.1" :step="10" />
+        <el-form-item label="变动数量" required>
+          <el-input-number v-model="replenishForm.change_amount" :step="1" />
+          <div class="stock-change-tip">输入正数增加库存，输入负数减少库存</div>
         </el-form-item>
       </el-form>
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="replenishDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitReplenish" :loading="submitting">确认补货</el-button>
+          <el-button type="primary" @click="submitReplenish" :loading="submitting">确认修改</el-button>
         </span>
       </template>
     </el-dialog>
@@ -152,7 +153,7 @@ const submitting = ref(false);
 const currentMaterial = ref<any>(null);
 
 const replenishForm = ref({
-  add_amount: 0
+  change_amount: 0
 });
 
 const editForm = ref({
@@ -217,7 +218,7 @@ const processedMaterials = computed(() => {
 
 const openReplenishDialog = (material: any) => {
   currentMaterial.value = material;
-  replenishForm.value.add_amount = 10;
+  replenishForm.value.change_amount = 0;
   replenishDialogVisible.value = true;
 };
 
@@ -226,16 +227,15 @@ const submitReplenish = async () => {
   
   submitting.value = true;
   try {
-    const currentQty = Number(currentMaterial.value.quantity) || 0;
-    await axios.put(`http://localhost:8000/api/resources/${currentMaterial.value._id}`, {
-      quantity: currentQty + Number(replenishForm.value.add_amount)
+    await axios.patch(`http://localhost:8000/api/resources/${currentMaterial.value._id}/stock`, {
+      change_amount: Number(replenishForm.value.change_amount)
     });
-    ElMessage.success('补货成功');
+    ElMessage.success('库存修改成功');
     replenishDialogVisible.value = false;
-    fetchMaterials();
-  } catch (error) {
+    await fetchMaterials();
+  } catch (error: any) {
     console.error('Failed to replenish:', error);
-    ElMessage.error('补货失败');
+    ElMessage.error(error?.response?.data?.detail || '库存修改失败');
   } finally {
     submitting.value = false;
   }
@@ -390,5 +390,11 @@ const submitAddMaterial = async () => {
 .material-list {
   display: flex;
   flex-direction: column;
+}
+
+.stock-change-tip {
+  margin-top: 6px;
+  color: #909399;
+  font-size: 12px;
 }
 </style>

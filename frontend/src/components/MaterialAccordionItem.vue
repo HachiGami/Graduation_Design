@@ -52,7 +52,7 @@
         </div>
         
         <div class="actions-section">
-          <el-button type="primary" size="small" @click.stop="handleReplenish">📦 补货</el-button>
+          <el-button type="primary" size="small" :icon="Operation" @click.stop="handleReplenish">修改库存</el-button>
           <el-button type="default" size="small" @click.stop="handleEdit">✏️ 编辑</el-button>
         </div>
       </div>
@@ -62,7 +62,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { ArrowRight } from '@element-plus/icons-vue';
+import { ArrowRight, Operation } from '@element-plus/icons-vue';
 
 const props = defineProps({
   material: {
