@@ -74,66 +74,7 @@
           </el-alert>
         </el-tab-pane>
 
-        <el-tab-pane label="占用员工" name="personnel">
-          <el-table :data="localActivity.personnel_requirements || []" size="small" border>
-            <el-table-column prop="role" label="角色" />
-            <el-table-column prop="count" label="人数" width="120" />
-            <el-table-column label="操作" width="120">
-              <template #default="{ row }">
-                <el-button type="danger" text @click="removePersonnel(row.role)">移除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <div class="form-row">
-            <el-input v-model="personnelForm.role" placeholder="角色" />
-            <el-input-number v-model="personnelForm.count" :min="1" />
-            <el-button type="primary" @click="addPersonnel">添加员工</el-button>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="使用设备" name="equipment">
-          <el-table :data="localActivity.equipment_requirements || []" size="small" border>
-            <el-table-column prop="equipment_model" label="设备型号" />
-            <el-table-column prop="count" label="数量" width="120" />
-            <el-table-column label="操作" width="120">
-              <template #default="{ row }">
-                <el-button type="danger" text @click="removeEquipment(row.equipment_model)">移除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <div class="form-row">
-            <el-input v-model="equipmentForm.equipment_model" placeholder="设备型号" />
-            <el-input-number v-model="equipmentForm.count" :min="1" />
-            <el-button type="primary" @click="addEquipment">添加设备</el-button>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="消耗原料" name="materials">
-          <el-table :data="localActivity.material_requirements || []" size="small" border>
-            <el-table-column prop="material_model" label="原料型号" />
-            <el-table-column label="每小时消耗量" width="160">
-              <template #default="{ row }">
-                {{ row.hourly_consumption_rate ?? perDayToHourly(row.consumption_rate_per_day) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="220">
-              <template #default="{ row }">
-                <el-button text type="danger" @click="removeMaterial(row.material_model)">移除</el-button>
-                <el-button text type="primary" @click="openReplenishDialog(row.material_model)">补充库存</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <div class="form-row">
-            <el-select v-model="materialForm.material_model" filterable allow-create placeholder="原料型号">
-              <el-option v-for="model in materialModelOptions" :key="model" :label="model" :value="model" />
-            </el-select>
-            <el-input-number v-model="materialForm.hourly_consumption_rate" :min="0" :step="0.1" />
-            <el-input v-model="materialForm.unit" placeholder="单位(可选)" />
-            <el-button type="primary" @click="addMaterial">添加原料</el-button>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="🔧 资源分配" name="resources" lazy>
+        <el-tab-pane label="资源分配" name="resources" lazy>
           <ActivityResourcesPanel :activity-id="activityId" />
         </el-tab-pane>
       </el-tabs>
@@ -225,15 +166,8 @@ import type { Activity } from '@/types'
 import type { RiskItem } from '@/api/analytics'
 import ActivityResourcesPanel from './ActivityResourcesPanel.vue'
 import { getRisks } from '@/api/analytics'
-import { replenishMaterialStock, getAssets } from '@/api/asset'
 import {
-  addActivityEquipmentRequirement,
-  addActivityMaterialRequirement,
-  addActivityPersonnelRequirement,
   getActivity,
-  removeActivityEquipmentRequirement,
-  removeActivityMaterialRequirement,
-  removeActivityPersonnelRequirement,
   updateActivity,
   deleteActivity
 } from '@/api/activity'
@@ -249,12 +183,7 @@ const activityRisks = ref<RiskItem[]>([])
 const editDialogVisible = ref(false)
 const sopDialogVisible = ref(false)
 const replenishDialogVisible = ref(false)
-const materialModelOptions = ref<string[]>([])
 
-const personnelForm = ref({ role: '', count: 1 })
-const equipmentForm = ref({ equipment_model: '', count: 1 })
-const materialForm = ref({ material_model: '', hourly_consumption_rate: 1, unit: '' })
-const replenishForm = ref({ material_model: '', added_quantity: 1 })
 const editForm = ref<Partial<Activity>>({})
 const sopEditForm = ref({
   description: '',
@@ -345,11 +274,6 @@ const toggleActivityStatus = async () => {
   }
 }
 
-const perDayToHourly = (perDay?: number) => {
-  if (!perDay || !Number.isFinite(perDay)) return 0
-  return Number((perDay / 8).toFixed(2))
-}
-
 const inferMaterialModelFromRisk = (message: string) => {
   const match = message.match(/原料\[(.*?)\]/)
   return match?.[1] || ''
@@ -431,15 +355,6 @@ const loadActivityRisks = async () => {
   }
 }
 
-const loadMaterialOptions = async () => {
-  try {
-    const assets = await getAssets({ asset_type: 'material' })
-    materialModelOptions.value = [...new Set(assets.map(item => item.model).filter(Boolean))]
-  } catch (error) {
-    materialModelOptions.value = []
-  }
-}
-
 watch(
   () => props.activity,
   (next) => {
@@ -451,7 +366,6 @@ watch(
 
 watch(activeTab, async (tab) => {
   if (tab === 'risks') await loadActivityRisks()
-  if (tab === 'materials') await loadMaterialOptions()
 })
 
 const saveActivityEdit = async () => {
@@ -480,92 +394,6 @@ const handleDeleteActivity = async () => {
     emit('refreshed')
   } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('删除失败')
-  }
-}
-
-const addPersonnel = async () => {
-  if (!activityId.value || !personnelForm.value.role.trim()) return
-  try {
-    await addActivityPersonnelRequirement(activityId.value, { ...personnelForm.value })
-    personnelForm.value = { role: '', count: 1 }
-    await refreshActivityAndRisk()
-  } catch (error) {
-    ElMessage.error('添加员工需求失败')
-  }
-}
-
-const removePersonnel = async (role: string) => {
-  if (!activityId.value) return
-  try {
-    await removeActivityPersonnelRequirement(activityId.value, role)
-    await refreshActivityAndRisk()
-  } catch (error) {
-    ElMessage.error('移除员工需求失败')
-  }
-}
-
-const addEquipment = async () => {
-  if (!activityId.value || !equipmentForm.value.equipment_model.trim()) return
-  try {
-    await addActivityEquipmentRequirement(activityId.value, { ...equipmentForm.value })
-    equipmentForm.value = { equipment_model: '', count: 1 }
-    await refreshActivityAndRisk()
-  } catch (error) {
-    ElMessage.error('添加设备需求失败')
-  }
-}
-
-const removeEquipment = async (model: string) => {
-  if (!activityId.value) return
-  try {
-    await removeActivityEquipmentRequirement(activityId.value, model)
-    await refreshActivityAndRisk()
-  } catch (error) {
-    ElMessage.error('移除设备需求失败')
-  }
-}
-
-const addMaterial = async () => {
-  if (!activityId.value || !materialForm.value.material_model.trim()) return
-  try {
-    await addActivityMaterialRequirement(activityId.value, {
-      material_model: materialForm.value.material_model,
-      hourly_consumption_rate: materialForm.value.hourly_consumption_rate,
-      unit: materialForm.value.unit
-    })
-    materialForm.value = { material_model: '', hourly_consumption_rate: 1, unit: '' }
-    await refreshActivityAndRisk()
-  } catch (error) {
-    ElMessage.error('添加原料需求失败')
-  }
-}
-
-const removeMaterial = async (materialModel: string) => {
-  if (!activityId.value) return
-  try {
-    await removeActivityMaterialRequirement(activityId.value, materialModel)
-    await refreshActivityAndRisk()
-  } catch (error) {
-    ElMessage.error('移除原料需求失败')
-  }
-}
-
-const openReplenishDialog = (materialModel: string) => {
-  replenishForm.value = { material_model: materialModel, added_quantity: 1 }
-  activeTab.value = 'materials'
-  replenishDialogVisible.value = true
-}
-
-const submitReplenish = async () => {
-  const { material_model, added_quantity } = replenishForm.value
-  if (!material_model || added_quantity <= 0) return
-  try {
-    await replenishMaterialStock(material_model, added_quantity)
-    ElMessage.success('库存补充成功，正在重新计算风险')
-    replenishDialogVisible.value = false
-    await refreshActivityAndRisk()
-  } catch (error) {
-    ElMessage.error('补充库存失败')
   }
 }
 </script>
@@ -684,8 +512,7 @@ const submitReplenish = async () => {
 
 .form-row {
   margin-top: 12px;
-  display: grid;
-  grid-template-columns: 1fr 140px 160px 120px;
+  display: flex;
   gap: 8px;
   align-items: center;
 }

@@ -217,14 +217,12 @@
         <span class="status-text">{{ isDirty ? '有未保存的修改' : '配置已保存' }}</span>
       </div>
       <div class="save-actions">
-        <el-button size="small" @click="cancelDraft" :disabled="!isDirty || saving">
-          取消还原
-        </el-button>
         <el-button
           type="primary"
           size="small"
           @click="saveResources"
           :loading="saving"
+          :disabled="!isDirty"
         >
           保存资源配置
         </el-button>
@@ -234,7 +232,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import { TransitionGroup } from 'vue'
@@ -339,12 +337,7 @@ const addMaterialEntry = () =>
 const removeMaterialEntry = (i: number) =>
   draftReqs.value.materials.splice(i, 1)
 
-// ── Cancel / Restore ──────────────────────────────────────────────
-const cancelDraft = () => {
-  draftReqs.value = JSON.parse(JSON.stringify(savedReqs.value))
-}
-
-// ── Save ──────────────────────────────────────────────────────────
+// ── Entry management ──────────────────────────────────────────────
 const saveResources = async () => {
   if (!props.activityId) return
   saving.value = true
@@ -430,6 +423,11 @@ const loadData = async () => {
 }
 
 onMounted(loadData)
+
+// 监听 activityId 变化，自动重新加载数据（实现“离开即自动复原”的效果）
+watch(() => props.activityId, () => {
+  loadData()
+}, { immediate: true })
 </script>
 
 <style scoped>
