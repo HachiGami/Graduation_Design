@@ -1078,12 +1078,33 @@ const handleAddPersonnel = () => {
 }
 
 const handlePersonnelSubmit = async () => {
+  if (!personnelForm.value.name?.trim() || !personnelForm.value.role?.trim() || !personnelForm.value.responsibility?.trim()) {
+    console.error('表单校验失败')
+    ElMessage.warning('请检查表单填写是否有误')
+    return
+  }
+  const { id, work_hours, assigned_tasks, created_at, updated_at, department, ...restPersonnel } = personnelForm.value as Personnel
+  const payload = {
+    ...restPersonnel,
+    name: restPersonnel.name,
+    role: restPersonnel.role,
+    responsibility: restPersonnel.responsibility,
+    skills: restPersonnel.skills,
+    status: restPersonnel.status,
+    upcoming_leaves: restPersonnel.upcoming_leaves,
+    age: restPersonnel.age,
+    gender: restPersonnel.gender,
+    native_place: restPersonnel.native_place,
+    hire_date: restPersonnel.hire_date,
+    education: restPersonnel.education,
+    salary: restPersonnel.salary
+  }
   try {
     if (currentPersonnel.value?.id) {
-      await updatePersonnel(currentPersonnel.value.id, personnelForm.value)
+      await updatePersonnel(currentPersonnel.value.id, payload)
       ElMessage.success('更新成功')
     } else {
-      await createPersonnel(personnelForm.value)
+      await createPersonnel(payload as Personnel)
       ElMessage.success('创建成功')
     }
     personnelDialogVisible.value = false
@@ -1091,7 +1112,7 @@ const handlePersonnelSubmit = async () => {
     await loadPersonnel()
     await loadGraphData()
   } catch (error) {
-    ElMessage.error('操作失败')
+    ElMessage.error(`保存失败: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 

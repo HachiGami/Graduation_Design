@@ -98,20 +98,11 @@
 
     <!-- 添加原料弹窗 -->
     <el-dialog v-model="addMaterialDialogVisible" title="添加原料" width="520px">
-      <el-form :model="addMaterialForm" label-width="100px" size="default">
-        <el-form-item label="原料名称" required>
+      <el-form ref="addMaterialFormRef" :model="addMaterialForm" :rules="addMaterialRules" label-width="100px" size="default">
+        <el-form-item label="原料名称" prop="name" required>
           <el-input v-model="addMaterialForm.name" placeholder="如：全脂生牛乳" />
         </el-form-item>
-        <el-form-item label="型号/规格" required>
-          <el-input v-model="addMaterialForm.specification" placeholder="如：生乳-A级" />
-        </el-form-item>
-        <el-form-item label="供应商" required>
-          <el-input v-model="addMaterialForm.supplier" placeholder="供应商名称" />
-        </el-form-item>
-        <el-form-item label="初始库存" required>
-          <el-input-number v-model="addMaterialForm.quantity" :min="0" style="width: 100%" />
-        </el-form-item>
-        <el-form-item label="单位" required>
+        <el-form-item label="单位" prop="unit" required>
           <el-input v-model="addMaterialForm.unit" placeholder="如：吨、升、kg" />
         </el-form-item>
       </el-form>
@@ -127,6 +118,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { Search, Plus } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import type { FormInstance, FormRules } from 'element-plus';
 import MaterialAccordionItem from '../components/MaterialAccordionItem.vue';
 import axios from 'axios';
 import { createResource, deleteResource } from '@/api/resource';
@@ -294,13 +286,14 @@ const handleDeleteMaterial = async () => {
 
 const addMaterialDialogVisible = ref(false);
 const addMaterialSubmitting = ref(false);
+const addMaterialFormRef = ref<FormInstance>();
+const addMaterialRules: FormRules = {
+  name: [{ required: true, message: '原料名称不能为空', trigger: 'blur' }],
+  unit: [{ required: true, message: '单位不能为空', trigger: 'blur' }]
+};
 
 const defaultAddMaterialForm = () => ({
   name: '',
-  type: '原料',
-  specification: '',
-  supplier: '',
-  quantity: 0,
   unit: '',
   status: 'available'
 });
@@ -313,22 +306,34 @@ const openAddMaterialDialog = () => {
 };
 
 const submitAddMaterial = async () => {
-  if (!addMaterialForm.value.name.trim()) {
-    ElMessage.warning('原料名称不能为空');
+  const valid = await addMaterialFormRef.value?.validate().catch((validationError) => {
+    console.warn('原料表单校验失败:', validationError);
+    return false;
+  });
+  if (!valid) {
+    ElMessage.warning('请检查表单填写是否有误');
     return;
   }
-  if (!addMaterialForm.value.unit.trim()) {
-    ElMessage.warning('单位不能为空');
-    return;
-  }
+
+  const payload = {
+    name: addMaterialForm.value.name.trim(),
+    unit: addMaterialForm.value.unit.trim(),
+    type: '原料',
+    status: addMaterialForm.value.status || 'available'
+  };
+
   addMaterialSubmitting.value = true;
   try {
-    await createResource(addMaterialForm.value as any);
+    await createResource(payload as any);
     ElMessage.success('原料添加成功');
     addMaterialDialogVisible.value = false;
     fetchMaterials();
-  } catch (error) {
-    ElMessage.error('添加失败，请检查表单数据');
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail;
+    const detailText = Array.isArray(detail)
+      ? detail.map((item: any) => `${item?.loc?.join?.('.') || ''}: ${item?.msg || ''}`).join('; ')
+      : (typeof detail === 'string' ? detail : (error?.message || '未知错误'));
+    ElMessage.error(`添加失败: ${detailText}`);
   } finally {
     addMaterialSubmitting.value = false;
   }

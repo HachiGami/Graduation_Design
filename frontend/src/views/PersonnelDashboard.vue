@@ -436,7 +436,11 @@ const fetchData = async () => {
   try {
     const res = await getPersonnelList()
     // Axios 返回通常在 data 字段，根据项目封装可能直接返回数据
-    rawPersonnelList.value = Array.isArray(res) ? res : (res.data || [])
+    const list = Array.isArray(res) ? res : (res.data || [])
+    rawPersonnelList.value = list.map((item: any) => ({
+      ...item,
+      id: item.id || item._id
+    }))
   } catch (error) {
     console.error('Failed to fetch personnel:', error)
     ElMessage.error('获取员工数据失败')

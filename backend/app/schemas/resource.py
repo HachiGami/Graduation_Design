@@ -5,9 +5,9 @@ from datetime import datetime
 class ResourceBase(BaseModel):
     name: str = Field(..., description="资源名称")
     type: str = Field(..., description="资源类型")
-    specification: str = Field(..., description="规格")
-    supplier: str = Field(..., description="供应商")
-    quantity: float = Field(..., description="数量")
+    specification: Optional[str] = Field(None, description="规格")
+    supplier: Optional[str] = Field(None, description="供应商")
+    quantity: Optional[float] = Field(0, description="数量")
     unit: str = Field(..., description="单位")
     expiry_date: Optional[datetime] = Field(None, description="使用期限")
     status: str = Field(default="available", description="状态")

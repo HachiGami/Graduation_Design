@@ -66,11 +66,11 @@
 
     <!-- 添加设备弹窗 -->
     <el-dialog v-model="addEquipmentDialogVisible" title="添加设备" width="520px">
-      <el-form :model="addEquipmentForm" label-width="100px" size="default">
-        <el-form-item label="设备名称" required>
+      <el-form ref="addEquipmentFormRef" :model="addEquipmentForm" :rules="addEquipmentRules" label-width="100px" size="default">
+        <el-form-item label="设备名称" prop="name" required>
           <el-input v-model="addEquipmentForm.name" placeholder="如：灌装机-03" />
         </el-form-item>
-        <el-form-item label="设备种类" required>
+        <el-form-item label="设备种类" prop="specification" required>
           <el-input v-model="addEquipmentForm.specification" placeholder="如：灌装设备" />
         </el-form-item>
         <el-form-item label="生产厂家">
@@ -149,6 +149,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { Search, Tools, Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 import EquipmentAccordionItem from '../components/EquipmentAccordionItem.vue'
 import { createResource } from '@/api/resource'
 
@@ -210,11 +211,18 @@ const formatDateLabel = (dateStr: string) => {
 
 const addEquipmentDialogVisible = ref(false)
 const addEquipmentSubmitting = ref(false)
+const addEquipmentFormRef = ref<FormInstance>()
+const addEquipmentRules: FormRules = {
+  name: [{ required: true, message: '设备名称不能为空', trigger: 'blur' }],
+  specification: [{ required: true, message: '请输入或选择设备种类', trigger: 'blur' }]
+}
 
 const defaultAddEquipmentForm = () => ({
   name: '',
   type: '设备',
   specification: '',
+  supplier: '',
+  quantity: 1,
   manufacturer: '',
   production_date: '',
   unit: '台',
@@ -229,22 +237,38 @@ const openAddEquipmentDialog = () => {
 }
 
 const submitAddEquipment = async () => {
-  if (!addEquipmentForm.value.name.trim()) {
-    ElMessage.warning('设备名称不能为空')
+  const valid = await addEquipmentFormRef.value?.validate().catch((validationError) => {
+    console.warn('设备表单校验失败:', validationError)
+    return false
+  })
+  if (!valid) {
+    ElMessage.warning('请检查表单填写是否有误')
     return
   }
-  if (!addEquipmentForm.value.specification.trim()) {
-    ElMessage.warning('请输入或选择设备种类')
-    return
+
+  const payload = {
+    ...addEquipmentForm.value,
+    // 强制注入并归一化，避免资源类型和设备种类丢失
+    type: '设备',
+    specification: (addEquipmentForm.value.specification || '').trim(),
+    // 后端 ResourceCreate 必填字段，表单未展示时给默认值
+    supplier: addEquipmentForm.value.supplier || '未填写',
+    quantity: typeof addEquipmentForm.value.quantity === 'number' ? addEquipmentForm.value.quantity : 1
   }
+
   addEquipmentSubmitting.value = true
   try {
-    await createResource(addEquipmentForm.value as any)
+    await createResource(payload as any)
     ElMessage.success('设备添加成功')
     addEquipmentDialogVisible.value = false
     await fetchEquipments()
   } catch (error) {
-    ElMessage.error('添加失败，请检查表单数据')
+    const err = error as any
+    const detail = err?.response?.data?.detail
+    const detailText = Array.isArray(detail)
+      ? detail.map((item: any) => `${item?.loc?.join?.('.') || ''}: ${item?.msg || ''}`).join('; ')
+      : (typeof detail === 'string' ? detail : (err?.message || '未知错误'))
+    ElMessage.error(`添加失败: ${detailText}`)
   } finally {
     addEquipmentSubmitting.value = false
   }

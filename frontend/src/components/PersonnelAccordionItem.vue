@@ -43,17 +43,17 @@
 
     <!-- 编辑弹窗 -->
     <el-dialog v-model="editDialogVisible" title="编辑员工信息" width="500px" append-to-body>
-      <el-form :model="editForm" label-width="100px" size="default">
-        <el-form-item label="姓名">
+      <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="100px" size="default">
+        <el-form-item label="姓名" prop="name">
           <el-input v-model="editForm.name" />
         </el-form-item>
-        <el-form-item label="角色">
+        <el-form-item label="角色" prop="role">
           <el-input v-model="editForm.role" />
         </el-form-item>
-        <el-form-item label="职责(部门)">
+        <el-form-item label="职责(部门)" prop="responsibility">
           <el-input v-model="editForm.responsibility" />
         </el-form-item>
-        <el-form-item label="状态">
+        <el-form-item label="状态" prop="status">
           <el-select v-model="editForm.status" placeholder="请选择状态">
             <el-option label="在职" value="active" />
             <el-option label="离职" value="resigned" />
@@ -133,6 +133,7 @@ import { Calendar, Edit } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { updatePersonnel, deletePersonnel } from '@/api/personnel'
 import type { Personnel } from '@/types'
+import type { FormInstance, FormRules } from 'element-plus'
 
 const props = defineProps({
   personnel: {
@@ -146,6 +147,13 @@ const emit = defineEmits(['updated'])
 const editDialogVisible = ref(false)
 const submitting = ref(false)
 const editForm = ref<Partial<Personnel>>({})
+const editFormRef = ref<FormInstance>()
+const editRules: FormRules = {
+  name: [{ required: true, message: '姓名不能为空', trigger: 'blur' }],
+  role: [{ required: true, message: '角色不能为空', trigger: 'blur' }],
+  responsibility: [{ required: true, message: '职责不能为空', trigger: 'blur' }],
+  status: [{ required: true, message: '请选择状态', trigger: 'change' }]
+}
 
 const leaveDialogVisible = ref(false)
 const submittingLeave = ref(false)
@@ -208,16 +216,46 @@ const submitLeave = async () => {
 }
 
 const submitEdit = async () => {
-  if (!props.personnel.id) return
+  const personnelId = props.personnel.id || (props.personnel as any)._id
+  if (!personnelId) {
+    console.error('表单校验失败: 缺少员工ID')
+    ElMessage.warning('员工ID缺失，无法保存')
+    return
+  }
+  const valid = await editFormRef.value?.validate().catch(() => false)
+  if (!valid) {
+    console.error('表单校验失败')
+    ElMessage.warning('请检查表单填写是否有误')
+    return
+  }
+
+  const { id, work_hours, assigned_tasks, created_at, updated_at, ...rest } = editForm.value as Personnel
+  const payload = {
+    ...rest,
+    // 后端 PersonnelUpdate 接受的字段，不发送废弃字段
+    name: rest.name,
+    role: rest.role,
+    responsibility: rest.responsibility,
+    skills: rest.skills,
+    status: rest.status,
+    upcoming_leaves: rest.upcoming_leaves,
+    age: rest.age,
+    gender: rest.gender,
+    native_place: rest.native_place,
+    hire_date: rest.hire_date,
+    education: rest.education,
+    salary: rest.salary
+  }
+
   submitting.value = true
   try {
-    await updatePersonnel(props.personnel.id, editForm.value)
+    await updatePersonnel(personnelId, payload)
     ElMessage.success('更新成功')
     editDialogVisible.value = false
     emit('updated')
   } catch (error) {
     console.error('Update failed:', error)
-    ElMessage.error('更新失败')
+    ElMessage.error(`保存失败: ${error instanceof Error ? error.message : String(error)}`)
   } finally {
     submitting.value = false
   }
