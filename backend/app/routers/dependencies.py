@@ -283,10 +283,11 @@ async def get_graph_data(
         
         # 获取活动-资源使用关系（每个活动的资源单独一个节点）
         usage_query = """
-        MATCH (a:Activity)-[u]->(r:Resource)
-        WHERE type(u) IN ['USES', 'CONSUMES']
+        MATCH (a:Activity)-[u:ASSIGNED_TO|ASSIGNS|USES|DEPENDS_ON]->(r)
+        WHERE any(label IN labels(r) WHERE label IN ['Resource', 'Equipment', 'Material'])
         RETURN a.id as activity_id, r.id as resource_id, r.name as resource_name,
-               r.resource_type as resource_type, type(u) as relation_type, u
+               coalesce(r.resource_type, head(labels(r))) as resource_type,
+               type(u) as relation_type, labels(r) as node_labels, u
         ORDER BY a.id, r.id
         """
         
@@ -359,7 +360,7 @@ async def get_graph_data(
         
         # 获取活动-人员分配关系（每个活动的人员单独一个节点）
         personnel_query = """
-        MATCH (a:Activity)-[as:ASSIGNS]->(p:Personnel)
+        MATCH (a:Activity)-[as:ASSIGNED_TO|ASSIGNS]->(p:Personnel)
         RETURN a.id as activity_id, p.id as personnel_id, as
         ORDER BY a.id, p.id
         """
