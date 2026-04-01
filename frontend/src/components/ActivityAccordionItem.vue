@@ -51,11 +51,18 @@
         </el-tab-pane>
 
         <el-tab-pane label="发生风险" name="risks">
-          <el-empty v-if="activityRisks.length === 0" description="当前活动暂无风险" />
+          <el-alert
+            v-if="activityRisks.length === 0"
+            title="暂无风险"
+            type="success"
+            show-icon
+            :closable="false"
+            class="risk-alert"
+          />
           <el-alert
             v-for="(risk, index) in activityRisks"
-            :key="`${risk.message}-${index}`"
-            :title="risk.message"
+            :key="`${risk}-${index}`"
+            :title="risk"
             type="error"
             show-icon
             :closable="false"
@@ -63,10 +70,10 @@
           >
             <template #default>
               <el-button
-                v-if="risk.risk_type === 'material_shortage' && inferMaterialModelFromRisk(risk.message)"
+                v-if="inferMaterialModelFromRisk(risk)"
                 text
                 type="primary"
-                @click="openReplenishDialog(inferMaterialModelFromRisk(risk.message)!)"
+                @click="openReplenishDialog(inferMaterialModelFromRisk(risk)!)"
               >
                 一键补货
               </el-button>
@@ -163,9 +170,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { Activity } from '@/types'
-import type { RiskItem } from '@/api/analytics'
 import ActivityResourcesPanel from './ActivityResourcesPanel.vue'
-import { getRisks } from '@/api/analytics'
 import {
   getActivity,
   updateActivity,
@@ -179,7 +184,7 @@ const router = useRouter()
 
 const localActivity = ref<Activity>({ ...props.activity })
 const activeTab = ref('basic')
-const activityRisks = ref<RiskItem[]>([])
+const activityRisks = ref<string[]>([])
 const editDialogVisible = ref(false)
 const sopDialogVisible = ref(false)
 const replenishDialogVisible = ref(false)
@@ -347,12 +352,7 @@ const loadLatestActivity = async () => {
 }
 
 const loadActivityRisks = async () => {
-  try {
-    const list = await getRisks(localActivity.value.domain)
-    activityRisks.value = list.filter((item: RiskItem) => item.activity_name === localActivity.value.name)
-  } catch (error) {
-    activityRisks.value = []
-  }
+  activityRisks.value = Array.isArray(localActivity.value.risks) ? localActivity.value.risks : []
 }
 
 watch(

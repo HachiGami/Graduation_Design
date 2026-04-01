@@ -3,6 +3,7 @@ from typing import List, Optional
 from datetime import datetime
 from ..database import get_database, get_neo4j_driver
 from ..schemas.activity import ActivityCreate, ActivityUpdate, ActivityResponse
+from ..services.risk_service import calculate_activity_risks
 from bson import ObjectId
 from pydantic import BaseModel, Field
 
@@ -86,6 +87,7 @@ def _normalize_activity_for_response(activity: dict) -> dict:
     activity.setdefault("equipment_requirements", [])
     activity.setdefault("personnel_roles_required", [])
     activity.setdefault("equipment_types_required", [])
+    activity.setdefault("risks", [])
     activity.setdefault("created_at", activity.get("updated_at") or now)
     activity.setdefault("updated_at", activity.get("created_at") or now)
     return activity
@@ -142,6 +144,12 @@ async def get_activities(
     async for activity in db.activities.find(query_filter):
         activity["_id"] = str(activity["_id"])
         activities.append(_normalize_activity_for_response(activity))
+    try:
+        risks_by_activity = await calculate_activity_risks(db, get_neo4j_driver(), activities)
+        for activity in activities:
+            activity["risks"] = risks_by_activity.get(str(activity["_id"]), [])
+    except Exception as e:
+        print(f"风险计算失败: {e}")
     return activities
 
 
@@ -187,7 +195,13 @@ async def get_activity(activity_id: str):
     if not activity:
         raise HTTPException(status_code=404, detail="生产活动不存在")
     activity["_id"] = str(activity["_id"])
-    return _normalize_activity_for_response(activity)
+    activity = _normalize_activity_for_response(activity)
+    try:
+        risks_by_activity = await calculate_activity_risks(db, get_neo4j_driver(), [activity])
+        activity["risks"] = risks_by_activity.get(str(activity["_id"]), [])
+    except Exception as e:
+        print(f"风险计算失败: {e}")
+    return activity
 
 @router.get("/{activity_id}/details")
 async def get_activity_details(activity_id: str):
@@ -256,6 +270,14 @@ async def get_activity_details(activity_id: str):
         equipment = []
     
     # 构建返回结果
+    normalized_activity = _normalize_activity_for_response(activity)
+    try:
+        risks_by_activity = await calculate_activity_risks(db, driver, [normalized_activity])
+        activity_risks = risks_by_activity.get(str(normalized_activity["_id"]), [])
+    except Exception as e:
+        print(f"风险计算失败: {e}")
+        activity_risks = []
+
     result = {
         # MongoDB 静态数据（需求定义）
         "id": activity["_id"],
@@ -268,6 +290,9 @@ async def get_activity_details(activity_id: str):
         "material_requirements": activity.get("material_requirements", []),
         "personnel_requirements": activity.get("personnel_requirements", []),
         "equipment_requirements": activity.get("equipment_requirements", []),
+        "personnel_roles_required": activity.get("personnel_roles_required", []),
+        "equipment_types_required": activity.get("equipment_types_required", []),
+        "risks": activity_risks,
         
         # Neo4j 实况数据（实际分配）
         "actual_allocations": {

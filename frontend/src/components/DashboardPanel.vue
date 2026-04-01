@@ -425,7 +425,7 @@ const riskRanking = computed(() => {
 
 const domainRiskSummary = computed(() => {
   const grouped = new Map<string, { processId: string; domain: string; riskCount: number; minRunnableDays: number | null }>()
-  const list = props.riskList || []
+  const list = graphRiskItems.value
 
   for (const risk of list) {
     const domain = risk.domain || '-'
@@ -451,14 +451,50 @@ const domainRiskSummary = computed(() => {
 })
 
 const currentDomainRisks = computed(() => {
-  const list = props.riskList || []
-  if (props.currentProcessId) {
-    return list.filter((risk) => risk.process_id === props.currentProcessId)
+  return graphRiskItems.value
+})
+
+const graphRiskItems = computed(() => {
+  const runningStatuses = new Set(['in_progress', '进行中'])
+  const nodes = (props.graphData?.nodes || []).filter((node: any) => isActivityNode(node))
+  const runningActivities = nodes.filter((node: any) => runningStatuses.has(node.status))
+
+  const selectedActivities =
+    currentScope.value === 'process' && props.currentProcessId
+      ? runningActivities.filter((node: any) => node.process_id === props.currentProcessId)
+      : runningActivities
+
+  const items: Array<{
+    risk_type: 'material_shortage' | 'allocation_shortage' | 'upcoming_absence'
+    level: 'high' | 'medium' | 'low'
+    activity_name: string
+    message: string
+    domain?: string | null
+    process_id?: string | null
+    runnable_days?: number | null
+  }> = []
+
+  for (const activity of selectedActivities) {
+    const risks = Array.isArray(activity.risks) ? activity.risks : []
+    for (const message of risks) {
+      const riskType = message.includes('库存不足7天')
+        ? 'material_shortage'
+        : message.includes('请假') || message.includes('检修')
+          ? 'upcoming_absence'
+          : 'allocation_shortage'
+      items.push({
+        risk_type: riskType,
+        level: riskType === 'upcoming_absence' ? 'medium' : 'high',
+        activity_name: activity.name || '未知活动',
+        message,
+        domain: activity.domain || null,
+        process_id: activity.process_id || null,
+        runnable_days: null
+      })
+    }
   }
-  if (props.currentDomain) {
-    return list.filter((risk) => risk.domain === props.currentDomain)
-  }
-  return list
+
+  return items
 })
 
 const healthIssues = computed(() => analysisResult.value?.health.issues || [])

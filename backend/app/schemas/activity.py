@@ -53,6 +53,7 @@ class ActivityBase(BaseModel):
     # 新增：扁平化职位/种类需求列表（支持重复，表示需要多个）
     personnel_roles_required: Optional[List[str]] = Field(default_factory=list, description="需要的职位列表（可重复）")
     equipment_types_required: Optional[List[str]] = Field(default_factory=list, description="需要的设备种类列表（可重复）")
+    risks: Optional[List[str]] = Field(default_factory=list, description="风险提示列表")
 
 class ActivityCreate(ActivityBase):
     pass
@@ -76,6 +77,7 @@ class ActivityUpdate(BaseModel):
     equipment_requirements: Optional[List[EquipmentRequirement]] = None
     personnel_roles_required: Optional[List[str]] = None
     equipment_types_required: Optional[List[str]] = None
+    risks: Optional[List[str]] = None
 
 class ActivityResponse(ActivityBase):
     id: str = Field(..., alias="_id")

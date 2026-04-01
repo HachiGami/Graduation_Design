@@ -4,6 +4,7 @@ from bson import ObjectId
 
 from ..database import get_database, get_neo4j_driver
 from ..schemas.dependency import DependencyCreate, DependencyUpdate, DependencyResponse
+from ..services.risk_service import calculate_activity_risks
 
 router = APIRouter(prefix="/api/dependencies", tags=["依赖关系"])
 
@@ -409,6 +410,7 @@ async def get_graph_data(
         
         # 构建活动节点列表
         nodes = []
+        activity_docs = []
         seen_activity_ids = set()
         
         for node_id in activity_ids:
@@ -416,6 +418,8 @@ async def get_graph_data(
                 activity = await db.activities.find_one({"_id": ObjectId(node_id)})
                 
                 if activity:
+                    activity["_id"] = str(activity["_id"])
+                    activity_docs.append(activity)
                     nodes.append({
                         "id": node_id,
                         "name": activity.get("name", "未知活动"),
@@ -425,9 +429,17 @@ async def get_graph_data(
                         "description": activity.get("description", ""),
                         "estimated_duration": activity.get("estimated_duration", 0),
                         "domain": activity.get("domain", "unknown"),
-                        "process_id": activity.get("process_id", "unknown")
+                        "process_id": activity.get("process_id", "unknown"),
+                        "risks": [],
                     })
                     seen_activity_ids.add(node_id)
+
+        try:
+            risks_by_activity = await calculate_activity_risks(db, driver, activity_docs)
+            for node in nodes:
+                node["risks"] = risks_by_activity.get(node["id"], [])
+        except Exception as e:
+            print(f"图谱节点风险计算失败: {e}")
         
         return {
             "nodes": nodes,

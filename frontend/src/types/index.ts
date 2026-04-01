@@ -67,6 +67,7 @@ export interface GraphNode {
   name: string
   type: string
   status: string
+  risks?: string[]
   domain?: string
   process_id?: string
   parent_activity?: string
@@ -125,6 +126,7 @@ export interface Activity {
   equipment_requirements?: EquipmentRequirement[]
   personnel_roles_required?: string[]
   equipment_types_required?: string[]
+  risks?: string[]
 }
 
 // ── 活动资源分配面板专用类型 ───────────────────────────────────────
@@ -234,6 +236,9 @@ export interface ActivityDetails {
   material_requirements: MaterialRequirement[]
   personnel_requirements: PersonnelRequirement[]
   equipment_requirements: EquipmentRequirement[]
+  personnel_roles_required?: string[]
+  equipment_types_required?: string[]
+  risks?: string[]
   actual_allocations: ActualAllocations
 }
 
