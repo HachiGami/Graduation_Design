@@ -1,84 +1,75 @@
 <template>
-  <div class="flex flex-col h-screen bg-slate-50 overflow-hidden p-4 gap-4 max-w-[1800px] mx-auto" ref="dashboardRef">
+  <div class="flex flex-col h-screen bg-slate-50 overflow-hidden p-4 gap-4 max-w-[1800px] mx-auto">
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex justify-between items-center shrink-0">
-        <div class="flex items-center space-x-4">
-        <ProcessSelector
-          :domain="currentDomain"
-          :process-id="currentProcessId"
-          @change="handleProcessChange"
-          @clear="clearFlowHighlight"
-        />
+        <div class="flex items-center space-x-3">
+          <el-select
+            v-model="currentProcessId"
+            placeholder="选择流程ID"
+            class="!w-[260px]"
+            clearable
+          >
+            <el-option
+              v-for="process in processOptions"
+              :key="process.id"
+              :label="formatProcessLabel(process.id, process.name)"
+              :value="process.id"
+            />
+          </el-select>
+          <el-button
+            type="primary"
+            class="!bg-blue-600 !border-blue-600 !text-white hover:!bg-blue-700 hover:!border-blue-700"
+            @click="applySelectedProcessHighlight"
+          >
+            定位并高亮
+          </el-button>
+          <el-button class="!bg-white !text-slate-600 !border-slate-300 hover:!text-slate-800 hover:!border-slate-400" @click="clearFlowHighlight">
+            清除高亮
+          </el-button>
         </div>
 
-        <div class="flex items-center">
-          <div class="flex items-center bg-indigo-50 border border-indigo-100 rounded-lg p-1 mr-4 shadow-sm">
-            <div class="px-3 py-1 text-indigo-700 flex items-center cursor-pointer hover:bg-indigo-100 rounded-md transition-colors" @click="handleKpiClick('internalDependencies')" title="内部依赖">
-              <span class="text-[11px] font-bold mr-2">内依赖</span>
-              <span class="text-lg font-black">{{ metrics.internalDependencyCount }}</span>
+        <div class="flex items-center space-x-3">
+          <div class="flex items-center bg-slate-100 rounded-lg p-1 border border-slate-200">
+            <div class="flex items-center px-3 py-1 bg-white rounded shadow-sm text-indigo-700 cursor-pointer" @click="handleKpiClick('internalDependencies')">
+              <span class="text-xs font-bold mr-1.5">内依赖</span><span class="text-sm font-black">{{ metrics.internalDependencyCount }}</span>
             </div>
-            <div class="w-px h-6 bg-indigo-200 mx-1"></div>
-            <div class="px-3 py-1 text-indigo-700 flex items-center cursor-pointer hover:bg-indigo-100 rounded-md transition-colors" @click="handleKpiClick('externalDependencies')" title="外部依赖">
-              <span class="text-[11px] font-bold mr-2">外依赖</span>
-              <span class="text-lg font-black">{{ metrics.externalDependencyCount }}</span>
+            <div class="flex items-center px-3 py-1 text-indigo-700 hover:bg-white hover:shadow-sm rounded transition-all cursor-pointer" @click="handleKpiClick('externalDependencies')">
+              <span class="text-xs font-bold mr-1.5">外依赖</span><span class="text-sm font-black">{{ metrics.externalDependencyCount }}</span>
             </div>
           </div>
 
-          <div class="flex items-center px-3 py-1.5 rounded-xl border cursor-pointer transition-colors shadow-sm bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100 mr-2" @click="handleKpiClick('activities')">
-            <div class="mr-2 flex items-center justify-center bg-white p-1 rounded-lg shadow-sm">
-              <el-icon :size="14" class="text-blue-500"><DataLine /></el-icon>
-            </div>
-            <div class="flex flex-col">
-              <span class="text-[10px] font-bold uppercase opacity-70 leading-none mb-0.5">活动数</span>
-              <div class="flex items-baseline leading-none"><span class="text-base font-black">{{ metrics.activityCount }}</span></div>
-            </div>
+          <div class="flex items-center px-3 py-1.5 rounded-lg border bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100 cursor-pointer transition-colors" @click="handleKpiClick('activities')">
+            <el-icon class="mr-2 opacity-80"><DataLine /></el-icon>
+            <span class="text-xs font-bold mr-2 opacity-80">活动数</span>
+            <span class="text-sm font-black">{{ metrics.activityCount }}</span>
           </div>
-
-          <div class="flex items-center px-3 py-1.5 rounded-xl border cursor-pointer transition-colors shadow-sm bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100 mr-2" @click="handleKpiClick('health')">
-            <div class="mr-2 flex items-center justify-center bg-white p-1 rounded-lg shadow-sm">
-              <el-icon :size="14" class="text-emerald-500"><Odometer /></el-icon>
-            </div>
-            <div class="flex flex-col">
-              <span class="text-[10px] font-bold uppercase opacity-70 leading-none mb-0.5">健康评分</span>
-              <div class="flex items-baseline leading-none"><span class="text-base font-black">{{ metrics.healthScore }}</span><span class="text-[10px] ml-0.5 font-bold">分</span></div>
-            </div>
+          <div class="flex items-center px-3 py-1.5 rounded-lg border bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100 cursor-pointer transition-colors" @click="handleKpiClick('health')">
+            <el-icon class="mr-2 opacity-80"><Odometer /></el-icon>
+            <span class="text-xs font-bold mr-2 opacity-80">健康评分</span>
+            <span class="text-sm font-black">{{ metrics.healthScore }}</span>
           </div>
-
-          <div class="flex items-center px-3 py-1.5 rounded-xl border cursor-pointer transition-colors shadow-sm bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100 mr-2" @click="handleKpiClick('resource')">
-            <div class="mr-2 flex items-center justify-center bg-white p-1 rounded-lg shadow-sm">
-              <el-icon :size="14" class="text-amber-500"><Clock /></el-icon>
-            </div>
-            <div class="flex flex-col">
-              <span class="text-[10px] font-bold uppercase opacity-70 leading-none mb-0.5">可运行</span>
-              <div class="flex items-baseline leading-none"><span class="text-base font-black">{{ miniRunnableTimeText }}</span></div>
-            </div>
+          <div class="flex items-center px-3 py-1.5 rounded-lg border bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100 cursor-pointer transition-colors" @click="handleKpiClick('resource')">
+            <el-icon class="mr-2 opacity-80"><Clock /></el-icon>
+            <span class="text-xs font-bold mr-2 opacity-80">可运行时间</span>
+            <span class="text-sm font-black">{{ miniRunnableTimeText }}</span>
           </div>
-
-          <div class="flex items-center px-3 py-1.5 rounded-xl border cursor-pointer transition-colors shadow-sm bg-red-50 text-red-700 border-red-100 hover:bg-red-100" @click="handleKpiClick('dynamic')">
-            <div class="mr-2 flex items-center justify-center bg-white p-1 rounded-lg shadow-sm">
-              <el-icon :size="14" class="text-red-500"><Warning /></el-icon>
-            </div>
-            <div class="flex flex-col">
-              <span class="text-[10px] font-bold uppercase opacity-70 leading-none mb-0.5">异常风险</span>
-              <div class="flex items-baseline leading-none"><span class="text-base font-black">{{ riskList.length }}</span></div>
-            </div>
+          <div class="flex items-center px-3 py-1.5 rounded-lg border bg-red-50 text-red-700 border-red-100 hover:bg-red-100 cursor-pointer transition-colors" @click="handleKpiClick('dynamic')">
+            <el-icon class="mr-2 opacity-80"><Warning /></el-icon>
+            <span class="text-xs font-bold mr-2 opacity-80">异常风险</span>
+            <span class="text-sm font-black">{{ riskList.length }}</span>
           </div>
         </div>
       </div>
 
       <div class="flex flex-1 gap-4 overflow-hidden">
-        <div class="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col">
-          <div class="absolute top-4 left-4 z-10 flex space-x-2">
-            <button @click="loadGraphData" class="p-2 bg-white/90 backdrop-blur border border-slate-200 rounded-lg text-slate-600 hover:text-blue-600 hover:bg-white shadow-sm tooltip" title="刷新图数据">
-              <el-icon :size="18"><RefreshRight /></el-icon>
+        <div class="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col" ref="graphContainerRef">
+          <div class="absolute top-4 left-4 z-10 flex bg-white/80 backdrop-blur-md border border-slate-200 rounded-lg shadow-sm overflow-hidden p-1">
+            <button class="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors" title="重置视图" @click="clearFlowHighlight">
+              <el-icon><RefreshLeft /></el-icon>
             </button>
-            <button @click="toggleFullscreen" class="p-2 bg-white/90 backdrop-blur border border-slate-200 rounded-lg text-slate-600 hover:text-blue-600 hover:bg-white shadow-sm tooltip" title="全屏显示">
-              <el-icon :size="18"><FullScreen /></el-icon>
+            <div class="w-px h-4 bg-slate-200 self-center mx-1"></div>
+            <button class="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors" title="全屏显示图谱 (按 ESC 退出)" @click="toggleGraphFullscreen">
+              <el-icon><FullScreen /></el-icon>
             </button>
-          </div>
-
-          <div class="absolute bottom-4 left-4 z-10 bg-white/90 backdrop-blur border border-slate-200 rounded-lg p-2.5 shadow-sm flex items-center space-x-4 text-xs font-bold text-slate-600">
-            <div class="flex items-center"><div class="w-2.5 h-2.5 rounded-full bg-slate-300 mr-1.5"></div>待机 (Pending)</div>
-            <div class="flex items-center"><div class="w-2.5 h-2.5 rounded-full bg-blue-500 mr-1.5"></div>运行中 (In Progress)</div>
           </div>
 
           <div class="flex-1 overflow-hidden">
@@ -407,7 +398,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { DataLine, Odometer, Clock, Warning, RefreshRight, FullScreen } from '@element-plus/icons-vue'
+import { DataLine, Odometer, Clock, Warning, RefreshLeft, FullScreen } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createDependency, updateDependency, getGraphData } from '@/api/dependency'
 import { getActivities, getActivity, createActivity, updateActivity, deleteActivity } from '@/api/activity'
@@ -415,7 +406,6 @@ import { getResources, getResource, createResource, updateResource, deleteResour
 import { getPersonnelList as getPersonnel, getPersonnelById, createPersonnel, updatePersonnel, deletePersonnel } from '@/api/personnel'
 import type { Dependency, GraphData, Activity, Resource, Personnel } from '@/types'
 import DependencyGraph from '@/components/DependencyGraph.vue'
-import ProcessSelector from '@/components/ProcessSelector.vue'
 import DashboardPanel from '@/components/DashboardPanel.vue'
 import { analyzeGraph, type AnalysisScope } from '@/utils/graphAnalyzer'
 import { checkResources } from '@/utils/resourceChecker'
@@ -424,15 +414,61 @@ import { sumSopStepDurations } from '@/utils/sopDuration'
 
 const route = useRoute()
 const router = useRouter()
-const dashboardRef = ref<HTMLElement | null>(null)
+const graphContainerRef = ref<HTMLElement | null>(null)
 
-const toggleFullscreen = async () => {
-  if (!dashboardRef.value) return
-  if (document.fullscreenElement) {
-    await document.exitFullscreen()
+const processOptions = computed(() => {
+  const seen = new Set<string>()
+  const list: Array<{ id: string; name: string }> = []
+  ;(graphData.value.nodes || []).forEach((node: any) => {
+    const pid = node?.process_id
+    if (!pid || seen.has(pid)) return
+    seen.add(pid)
+    list.push({ id: pid, name: getProcessName(pid) })
+  })
+  return list.sort((a, b) => a.id.localeCompare(b.id))
+})
+
+const processNameMap: Record<string, string> = {
+  P001: '主生产线',
+  P002: '副生产线',
+  T001: '冷链运输',
+  T002: '常温运输',
+  S001: '线上销售',
+  S002: '线下销售',
+  Q001: '常规质检',
+  Q002: '专项质检',
+  W001: '主仓库',
+  W002: '分仓库'
+}
+
+const getProcessName = (processId: string) => processNameMap[processId] || '未知流程'
+
+const formatProcessLabel = (processId: string, processName: string) => `${processId} - ${processName}`
+
+const inferDomainFromProcessId = (processId: string) => {
+  if (processId.startsWith('P')) return 'production'
+  if (processId.startsWith('T')) return 'transport'
+  if (processId.startsWith('S')) return 'sales'
+  if (processId.startsWith('Q')) return 'quality'
+  if (processId.startsWith('W')) return 'warehouse'
+  return ''
+}
+
+const applySelectedProcessHighlight = () => {
+  if (!currentProcessId.value) {
+    ElMessage.warning('请先选择流程ID')
     return
   }
-  await dashboardRef.value.requestFullscreen()
+  const domain = inferDomainFromProcessId(currentProcessId.value)
+  handleProcessChange(domain, currentProcessId.value)
+}
+
+const toggleGraphFullscreen = () => {
+  if (!document.fullscreenElement) {
+    graphContainerRef.value?.requestFullscreen().catch(err => console.error(err))
+  } else {
+    document.exitFullscreen()
+  }
 }
 
 // 当前选择的流程

@@ -53,15 +53,47 @@
       </el-tag>
     </div>
 
-    <div v-if="props.mode === 'sidebar'" class="sidebar-header">
-      <el-radio-group v-model="currentScope" size="small" @change="handleScopeChange">
-        <el-radio-button label="global">全局</el-radio-button>
-        <el-radio-button label="process" :disabled="!hasSelectedProcess">流程</el-radio-button>
-      </el-radio-group>
+    <div v-if="props.mode === 'sidebar'" class="p-4 border-b border-slate-100 flex items-center justify-center bg-white">
+      <div class="bg-slate-100 p-1 rounded-xl flex space-x-1 w-full max-w-[280px] shadow-inner">
+        <button
+          @click="currentScope = 'global'; handleScopeChange()"
+          :class="['flex-1 py-2 text-[13px] font-black rounded-lg transition-all duration-200', currentScope === 'global' ? 'bg-white text-slate-800 shadow-[0_2px_8px_rgba(0,0,0,0.08)]' : 'text-slate-500 hover:text-slate-700']"
+        >
+          全局信息
+        </button>
+        <button
+          @click="hasSelectedProcess && (currentScope = 'process', handleScopeChange())"
+          :disabled="!hasSelectedProcess"
+          :class="['flex-1 py-2 text-[13px] font-black rounded-lg transition-all duration-200', currentScope === 'process' ? 'bg-white text-slate-800 shadow-[0_2px_8px_rgba(0,0,0,0.08)]' : 'text-slate-500 hover:text-slate-700', !hasSelectedProcess ? 'opacity-50 cursor-not-allowed' : '']"
+        >
+          流程信息
+        </button>
+      </div>
     </div>
 
-    <el-tabs v-if="props.mode === 'sidebar'" v-model="activeTab" class="sidebar-tabs">
-      <el-tab-pane label="健康度" name="health">
+    <div v-if="props.mode === 'sidebar'" class="sidebar-tabs">
+      <div class="flex w-full border-b border-slate-200">
+        <button
+          @click="activeTab = 'health'"
+          :class="['flex-1 text-center py-3 text-[13px] font-bold transition-colors', activeTab === 'health' ? 'text-blue-600 border-b-2 border-blue-500 bg-blue-50/40' : 'text-slate-500 hover:text-slate-700']"
+        >
+          健康度
+        </button>
+        <button
+          @click="activeTab = 'cpm'"
+          :class="['flex-1 text-center py-3 text-[13px] font-bold transition-colors', activeTab === 'cpm' ? 'text-blue-600 border-b-2 border-blue-500 bg-blue-50/40' : 'text-slate-500 hover:text-slate-700']"
+        >
+          关键路径
+        </button>
+        <button
+          @click="activeTab = 'risk'"
+          :class="['flex-1 text-center py-3 text-[13px] font-bold transition-colors', activeTab === 'risk' ? 'text-blue-600 border-b-2 border-blue-500 bg-blue-50/40' : 'text-slate-500 hover:text-slate-700']"
+        >
+          风险
+        </button>
+      </div>
+
+      <div v-if="activeTab === 'health'" class="flex-1 overflow-y-auto p-3">
         <div v-if="currentScope === 'global' && processSummary.length > 0" class="process-ranking">
           <el-table :data="healthRanking" size="small" style="width: 100%" @row-click="handleProcessRankingClick" height="calc(100vh - 200px)">
             <el-table-column prop="processName" label="流程" min-width="140" show-overflow-tooltip />
@@ -79,9 +111,9 @@
             </div>
           </div>
         </div>
-      </el-tab-pane>
+      </div>
 
-      <el-tab-pane label="关键路径" name="cpm">
+      <div v-if="activeTab === 'cpm'" class="flex-1 overflow-y-auto p-3">
         <div v-if="currentScope === 'global' && processSummary.length > 0" class="process-ranking">
           <el-table :data="durationRanking" size="small" style="width: 100%" @row-click="handleProcessRankingClick" height="calc(100vh - 200px)">
             <el-table-column prop="processName" label="流程" min-width="140" show-overflow-tooltip />
@@ -117,9 +149,9 @@
             </div>
           </div>
         </div>
-      </el-tab-pane>
+      </div>
 
-      <el-tab-pane label="风险" name="risk">
+      <div v-if="activeTab === 'risk'" class="flex-1 overflow-y-auto p-3">
         <div v-if="currentScope === 'global'" class="process-ranking">
           <el-table :data="domainRiskSummary" size="small" style="width: 100%" @row-click="handleProcessRankingClick" height="calc(100vh - 200px)">
             <el-table-column label="流程" min-width="140" show-overflow-tooltip>
@@ -158,8 +190,8 @@
             <el-empty v-if="currentDomainRisks.length === 0" description="暂无风险" :image-size="60" />
           </div>
         </div>
-      </el-tab-pane>
-    </el-tabs>
+      </div>
+    </div>
 
     <el-collapse v-if="props.mode === 'full'" v-model="activePanels" class="panels">
       <el-collapse-item title="模型健康度" name="health">
