@@ -208,7 +208,7 @@
                           :disabled="!selectedPersonnelRole"
                           @click="addPersonnelRequirement"
                         >
-                          + 增加名额
+                          + 增加需求
                         </button>
                       </div>
                     </div>
@@ -304,7 +304,7 @@
                           :disabled="!selectedEquipmentSpec"
                           @click="addEquipmentRequirement"
                         >
-                          + 增加名额
+                          + 增加需求
                         </button>
                       </div>
                     </div>
