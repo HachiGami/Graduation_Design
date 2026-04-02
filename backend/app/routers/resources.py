@@ -17,7 +17,6 @@ _LEGACY_TYPE_MAP = {
     "material": "原料",
 }
 
-
 def _normalize_resource_for_response(resource: dict) -> dict:
     """将旧格式文档归一化为 ResourceResponse 所需字段（向后兼容）。"""
     now = datetime.utcnow()
@@ -115,6 +114,7 @@ async def _enrich_with_neo4j(resources: list, db, driver) -> None:
     将 serving_activities_details 和 serving_processes 注入到每个 resource dict 中（原地修改）。
     """
     names = [r.get("name") for r in resources if r.get("name")]
+    ids = [r.get("_id") for r in resources if r.get("_id")]
     if not names or not driver:
         for r in resources:
             r.setdefault("serving_activities_details", [])
@@ -123,13 +123,15 @@ async def _enrich_with_neo4j(resources: list, db, driver) -> None:
 
     entity_activities_map: dict = {}
 
+    neo4j_records = []
     try:
         async with driver.session() as session:
             result = await session.run(
                 """
-                MATCH (a:Activity)-[r:CONSUMES]->(e)
-                WHERE e.name IN $names
-                RETURN e.name AS entity_name,
+                MATCH (a:Activity)-[r:USES|CONSUMES]->(e:Equipment)
+                WHERE e.id IN $ids OR e.name IN $names
+                RETURN e.id AS entity_id,
+                       e.name AS entity_name,
                        a.name AS activity_name,
                        a.id AS activity_id,
                        a.process_id AS process_id_neo4j,
@@ -137,7 +139,7 @@ async def _enrich_with_neo4j(resources: list, db, driver) -> None:
                        a.working_hours AS working_hours_neo4j,
                        r.rate AS rate
                 """,
-                {"names": names},
+                {"names": names, "ids": ids},
             )
             neo4j_records = await result.data()
 
@@ -153,9 +155,10 @@ async def _enrich_with_neo4j(resources: list, db, driver) -> None:
                 }
 
         for rec in neo4j_records:
+            entity_id = rec.get("entity_id")
             entity_name = rec.get("entity_name")
             activity_name = rec.get("activity_name")
-            if not entity_name or not activity_name:
+            if not activity_name:
                 continue
 
             act_info = activities_mongo_map.get(activity_name, {})
@@ -166,7 +169,11 @@ async def _enrich_with_neo4j(resources: list, db, driver) -> None:
             total_hours = _parse_working_hours(working_hours)
             daily_consumption = round(rate * total_hours, 4)
 
-            entity_activities_map.setdefault(entity_name, []).append(
+            entity_key = entity_id or entity_name
+            if not entity_key:
+                continue
+
+            entity_activities_map.setdefault(entity_key, []).append(
                 {
                     "activity_name": activity_name,
                     "activity_id": rec.get("activity_id", ""),
@@ -182,8 +189,11 @@ async def _enrich_with_neo4j(resources: list, db, driver) -> None:
         print(f"Neo4j查询失败: {e}")
 
     for r in resources:
+        rid = r.get("_id", "")
         name = r.get("name", "")
-        details = entity_activities_map.get(name, [])
+        details = entity_activities_map.get(rid, [])
+        if not details and name:
+            details = entity_activities_map.get(name, [])
         r["serving_activities_details"] = details
         r["serving_processes"] = list({d["process_id"] for d in details if d["process_id"]})
         total_daily_consumption = round(
