@@ -378,37 +378,142 @@
                     </div>
                   </el-tab-pane>
                   <el-tab-pane label="原料配置" name="material">
-                    <div class="mb-4 flex justify-end gap-2">
-                      <el-select v-model="selectedMaterialId" placeholder="选择原料" style="width: 220px">
-                        <el-option
-                          v-for="mat in availableMaterials"
-                          :key="mat.id"
-                          :label="mat.name"
-                          :value="mat.id"
-                        />
-                      </el-select>
-                      <el-input-number v-model="selectedMaterialRate" :min="0" :step="0.1" :precision="2" placeholder="消耗速率" />
-                      <el-button type="primary" plain class="rounded-md" :disabled="!selectedMaterialId" @click="assignMaterial">
-                        <el-icon><Plus /></el-icon> 分配原料
-                      </el-button>
+                    <div class="flex justify-between items-center mb-6">
+                      <div class="text-sm font-bold text-slate-700 flex items-center">
+                        <Package size="16" class="mr-2 text-emerald-500" />
+                        原料配置
+                      </div>
+                      <button
+                        class="flex items-center px-4 py-2 bg-emerald-50 text-emerald-600 text-sm font-bold border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors shadow-sm disabled:opacity-50"
+                        :disabled="isMaterialAssigning"
+                        @click="openMaterialAssignForm"
+                      >
+                        + 分配原料
+                      </button>
                     </div>
-                    <el-table :data="activityResourceState.consumed_resources" class="material-table">
-                      <el-table-column prop="resource_id" label="原料编号" />
-                      <el-table-column prop="name" label="原料名称" />
-                      <el-table-column label="消耗量" align="right">
-                        <template #default="scope">
-                          <span class="consume-amount">{{ scope.row.rate }}</span>
-                        </template>
-                      </el-table-column>
-                      <el-table-column label="操作" width="100" align="center">
-                        <template #default="scope">
-                          <el-button type="danger" link @click="removeMaterial(scope.row.resource_id)">移除</el-button>
-                        </template>
-                      </el-table-column>
-                      <template #empty>
-                        <el-empty description="暂无原料配置" :image-size="60" />
-                      </template>
-                    </el-table>
+
+                    <div
+                      v-if="isMaterialAssigning"
+                      class="p-4 bg-emerald-50/50 border border-dashed border-emerald-300 rounded-xl flex items-center space-x-4 mb-3"
+                    >
+                      <div class="flex-1">
+                        <div class="text-[10px] font-bold text-emerald-600 uppercase mb-1">选择原料</div>
+                        <select
+                          v-model="selectedMaterialId"
+                          class="w-full bg-white border border-emerald-200 rounded-lg p-2 text-sm font-medium outline-none"
+                        >
+                          <option value="" disabled>请选择原料</option>
+                          <option
+                            v-for="mat in availableMaterials"
+                            :key="mat.id"
+                            :value="mat.id"
+                          >
+                            {{ mat.name }}
+                          </option>
+                        </select>
+                      </div>
+                      <div class="flex-1">
+                        <div class="text-[10px] font-bold text-emerald-600 uppercase mb-1">消耗数量</div>
+                        <div class="relative flex items-center">
+                          <input
+                            v-model.number="selectedMaterialRate"
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            class="w-full bg-white border border-emerald-200 rounded-lg p-2 pr-10 text-sm font-medium outline-none"
+                            placeholder="请输入消耗数量"
+                          />
+                          <span class="absolute right-3 text-slate-400 font-bold text-sm">{{ selectedUnit ? `${selectedUnit}/h` : '' }}</span>
+                        </div>
+                      </div>
+                      <div class="flex items-center space-x-2">
+                        <button
+                          class="p-2 bg-emerald-500 text-white rounded-lg shadow-sm hover:bg-emerald-600"
+                          :disabled="!selectedMaterialId"
+                          @click="assignMaterial"
+                        >
+                          <Check size="16" />
+                        </button>
+                        <button
+                          class="p-2 bg-white text-slate-400 rounded-lg border border-slate-200 hover:bg-slate-50"
+                          @click="cancelMaterialAssign"
+                        >
+                          <X size="16" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <template v-if="activityResourceState.consumed_resources.length">
+                      <div
+                        v-for="material in activityResourceState.consumed_resources"
+                        :key="material.resource_id"
+                        class="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between shadow-sm hover:shadow-md hover:border-emerald-200 transition-all group mb-3"
+                      >
+                        <div class="w-1/3 flex items-center">
+                          <div class="w-10 h-10 flex-shrink-0 rounded-xl bg-emerald-50 text-emerald-500 border border-emerald-100 flex items-center justify-center mr-3">
+                            <Box size="20" />
+                          </div>
+                          <div class="text-sm font-bold text-slate-800">{{ material.name }}</div>
+                        </div>
+
+                        <div class="flex-1 flex justify-center">
+                          <template v-if="editingMaterialId === material.resource_id">
+                            <div class="flex items-center space-x-2">
+                              <input
+                                v-model="editQuantityValue"
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                class="w-24 border-b-2 border-emerald-500 bg-emerald-50 px-2 py-1 text-center font-bold text-emerald-700 outline-none"
+                              />
+                              <span class="text-xs font-bold text-slate-400">{{ getMaterialUnit(material.resource_id) ? `${getMaterialUnit(material.resource_id)}/h` : '' }}</span>
+                              <el-button
+                                link
+                                type="success"
+                                :icon="Check"
+                                @click.stop="saveEdit(material.resource_id)"
+                              >
+                                应用
+                              </el-button>
+                              <el-button
+                                link
+                                :icon="X"
+                                @click.stop="cancelEdit"
+                              >
+                                取消
+                              </el-button>
+                            </div>
+                          </template>
+                          <template v-else>
+                            <div
+                              class="flex items-baseline space-x-1 px-4 py-1.5 bg-slate-50 rounded-lg border border-slate-100 cursor-pointer hover:bg-emerald-50 transition-colors"
+                              @click="startEdit(material)"
+                            >
+                              <span class="text-lg font-black text-slate-700">{{ material.rate }}</span>
+                              <span class="text-xs font-bold text-slate-400">{{ getMaterialUnit(material.resource_id) ? `${getMaterialUnit(material.resource_id)}/h` : '' }}</span>
+                            </div>
+                          </template>
+                        </div>
+
+                        <div class="w-1/3 flex justify-end">
+                          <el-button
+                            link
+                            type="danger"
+                            :icon="Delete"
+                            @click.stop="removeMaterial(material.resource_id)"
+                          >
+                            移除
+                          </el-button>
+                        </div>
+                      </div>
+                    </template>
+
+                    <div
+                      v-else-if="!isMaterialAssigning"
+                      class="py-10 text-center text-sm text-slate-400 border-2 border-dashed border-slate-200 rounded-xl"
+                    >
+                      该活动暂无原料消耗配置
+                    </div>
                   </el-tab-pane>
                 </el-tabs>
               </div>
@@ -516,7 +621,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { WarningFilled, User, Setting, Box, Calendar, Tools, Clock, Document, Edit, Delete, Plus } from '@element-plus/icons-vue'
+import { WarningFilled, User, Setting, Box, Calendar, Tools, Clock, Document, Edit, Delete, Plus, Check as CheckIcon, Close } from '@element-plus/icons-vue'
 import type { Activity } from '@/types'
 import ActivityResourcesPanel from './ActivityResourcesPanel.vue'
 import {
@@ -557,6 +662,9 @@ const personnelSlotSelection = ref<Record<number, string>>({})
 const equipmentSlotSelection = ref<Record<number, string>>({})
 const selectedMaterialId = ref('')
 const selectedMaterialRate = ref(1)
+const isMaterialAssigning = ref(false)
+const editingMaterialId = ref<string | null>(null)
+const editQuantityValue = ref<number | string>('')
 const activityResourceState = ref<ActivityResourcesData>({
   personnel_roles_required: [],
   equipment_types_required: [],
@@ -584,6 +692,18 @@ const availableSpecs = computed(() =>
   [...new Set(availableEquipments.value.map(e => e.specification).filter(Boolean))].sort()
 )
 const availableMaterials = computed(() => allResources.value.filter(r => r.type === '原料'))
+const selectedUnit = computed(() => {
+  if (!selectedMaterialId.value) return ''
+  const target = availableMaterials.value.find(r => r.id === selectedMaterialId.value)
+  return target?.unit || ''
+})
+const materialUnitMap = computed(() => {
+  const map: Record<string, string> = {}
+  availableMaterials.value.forEach((item) => {
+    if (item.id) map[item.id] = item.unit || ''
+  })
+  return map
+})
 const assignedPersonnelIdSet = computed(() => new Set(activityResourceState.value.assigned_personnel.map(p => p.id)))
 const assignedEquipmentIdSet = computed(() => new Set(activityResourceState.value.assigned_equipment.map(e => e.id)))
 const personnelSlots = computed(() => {
@@ -1074,6 +1194,24 @@ const removeEquipment = async (id: string) => {
   ElMessage.success('设备已移除')
 }
 
+const Package = Box
+const Check = CheckIcon
+const X = Close
+const Edit2 = Edit
+const Trash2 = Delete
+
+const openMaterialAssignForm = () => {
+  isMaterialAssigning.value = true
+}
+
+const cancelMaterialAssign = () => {
+  isMaterialAssigning.value = false
+  selectedMaterialId.value = ''
+  selectedMaterialRate.value = 1
+}
+
+const getMaterialUnit = (resourceId: string) => materialUnitMap.value[resourceId] || ''
+
 const assignMaterial = async () => {
   if (!selectedMaterialId.value) return
   const material = allResources.value.find((r) => r.id === selectedMaterialId.value)
@@ -1100,9 +1238,37 @@ const assignMaterial = async () => {
     consumed_resources: nextConsumed
   }
   await saveResourceState(next)
-  selectedMaterialId.value = ''
-  selectedMaterialRate.value = 1
+  cancelMaterialAssign()
   ElMessage.success('原料分配成功')
+}
+
+const startEdit = (material: { resource_id: string; rate: number }) => {
+  editingMaterialId.value = material.resource_id
+  editQuantityValue.value = material.rate
+}
+
+const cancelEdit = () => {
+  editingMaterialId.value = null
+  editQuantityValue.value = ''
+}
+
+const saveEdit = async (materialId: string) => {
+  const parsedRate = Number(editQuantityValue.value)
+  if (!Number.isFinite(parsedRate) || parsedRate < 0) {
+    ElMessage.warning('请输入有效的消耗数量')
+    return
+  }
+  const nextConsumed = activityResourceState.value.consumed_resources.map((item) => {
+    if (item.resource_id !== materialId) return item
+    return { ...item, rate: parsedRate }
+  })
+  const next: ActivityResourcesData = {
+    ...activityResourceState.value,
+    consumed_resources: nextConsumed
+  }
+  await saveResourceState(next)
+  cancelEdit()
+  ElMessage.success('原料消耗量已更新')
 }
 
 const removeMaterial = async (resourceId: string) => {
