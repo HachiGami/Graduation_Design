@@ -1,23 +1,23 @@
 <template>
-  <div class="equipment-dashboard">
-    <div class="header-actions">
-      <div class="left-actions">
+  <div class="p-5">
+    <div class="mb-5 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex flex-wrap items-center gap-3">
         <el-input
           v-model="searchQuery"
           placeholder="搜索设备名称/ID"
           clearable
-          class="search-input"
+          class="!w-[250px]"
           :prefix-icon="Search"
         />
-        
-        <el-select v-model="sortOption" placeholder="排序方式" class="filter-select">
+
+        <el-select v-model="sortOption" placeholder="排序方式" class="!w-[150px]">
           <el-option label="默认排序" value="default" />
           <el-option label="生产日期(正序)" value="date_asc" />
           <el-option label="生产日期(倒序)" value="date_desc" />
         </el-select>
 
 
-        <el-select v-model="processFilter" placeholder="流程" clearable class="filter-select">
+        <el-select v-model="processFilter" placeholder="流程" clearable class="!w-[150px]">
           <el-option label="全部" value="" />
           <el-option
             v-for="pid in uniqueProcesses"
@@ -31,7 +31,7 @@
           v-model="filterSpecification"
           placeholder="请选择设备种类"
           clearable
-          class="filter-select"
+          class="!w-[180px]"
         >
           <el-option
             v-for="spec in availableSpecifications"
@@ -42,17 +42,24 @@
         </el-select>
       </div>
       
-      <div class="right-actions">
-        <el-button type="primary" :icon="Plus" @click="openAddEquipmentDialog">添加设备</el-button>
+      <div class="flex items-center gap-3">
         <el-badge :value="maintenanceEquipments.length" :hidden="maintenanceEquipments.length === 0" class="item">
           <el-button type="danger" @click="isMaintenanceModalVisible = true">
             <el-icon><Tools /></el-icon> 七天检修预警
           </el-button>
         </el-badge>
+        <span class="text-slate-300">|</span>
+        <el-button type="primary" :icon="Plus" @click="openAddEquipmentDialog">添加设备</el-button>
       </div>
     </div>
 
-    <div class="equipment-list" v-loading="loading">
+    <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <div class="flex items-center border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
+        <div class="flex flex-1 items-center">设备信息</div>
+        <div class="w-[450px]">设备种类</div>
+        <div class="w-32 text-right">操作</div>
+      </div>
+      <div class="p-2" v-loading="loading">
       <el-collapse v-if="processedEquipments.length > 0">
         <EquipmentAccordionItem
           v-for="equipment in processedEquipments"
@@ -62,6 +69,7 @@
         />
       </el-collapse>
       <el-empty v-else description="暂无匹配的设备数据" />
+      </div>
     </div>
 
     <!-- 添加设备弹窗 -->
@@ -141,6 +149,7 @@
         </div>
         <el-empty v-if="Object.keys(groupedMaintenanceEquipments).length === 0" description="未来 7 天内无检修计划" />
       </div>
+      <template #footer />
     </el-dialog>
   </div>
 </template>
@@ -400,64 +409,4 @@ const totalAffectedActivities = computed(() => {
 </script>
 
 <style scoped>
-.equipment-dashboard {
-  padding: 20px;
-}
-
-.header-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.left-actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.search-input {
-  width: 250px;
-}
-
-.filter-select {
-  width: 150px;
-}
-
-.warning-banner {
-  margin-bottom: 20px;
-}
-
-.maintenance-groups {
-  max-height: 60vh;
-  overflow-y: auto;
-}
-
-.date-group {
-  margin-bottom: 24px;
-}
-
-.date-header {
-  display: flex;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.date-divider {
-  flex-grow: 1;
-  margin-left: 16px;
-}
-
-.activity-tag {
-  margin-right: 8px;
-  margin-bottom: 4px;
-}
-
-.safe-text {
-  color: #67c23a;
-  font-weight: bold;
-}
 </style>
