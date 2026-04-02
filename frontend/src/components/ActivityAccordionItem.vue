@@ -1,132 +1,256 @@
 <template>
-  <el-collapse class="activity-accordion">
+  <el-collapse class="mb-3 overflow-hidden rounded-xl border border-slate-100 bg-white">
     <el-collapse-item :name="localActivity.id || localActivity.name">
       <template #title>
-        <div class="activity-header">
-          <div class="header-left">
-            <div class="title-row">
-              <span class="activity-name">{{ localActivity.name }}</span>
-              <el-tag :type="statusTagType(localActivity.status)" size="small">{{ statusText(localActivity.status) }}</el-tag>
-              <el-tag size="small">{{ localActivity.domain }}</el-tag>
+        <div class="flex w-full items-center gap-4">
+          <div class="flex min-w-0 flex-1 flex-col gap-1">
+            <div class="flex items-center gap-2">
+              <svg
+                class="workflow-icon h-[18px] w-[18px]"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="3" y="3" width="6" height="6" rx="1"></rect>
+                <rect x="15" y="3" width="6" height="6" rx="1"></rect>
+                <rect x="15" y="15" width="6" height="6" rx="1"></rect>
+                <path d="M9 6h6"></path>
+                <path d="M18 9v6"></path>
+                <path d="M9 6v12h6"></path>
+              </svg>
+              <span class="truncate text-[15px] font-semibold text-slate-800">{{ localActivity.name }}</span>
             </div>
-            <div class="sub-row">工作时间：{{ workingHoursText }}</div>
           </div>
-          <div class="header-right" @click.stop>
+          
+          <div class="w-48 shrink-0">
+            <el-tag type="info" class="!rounded-full !border-0 !bg-slate-100 !px-3 !py-1 !text-slate-600" disable-transitions>
+              {{ localActivity.process_id }} - {{ processMap[localActivity.process_id || ''] || '未知流程' }}
+            </el-tag>
+          </div>
+
+          <div class="w-32 shrink-0">
+            <div
+              :class="[
+                'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium',
+                localActivity.status === 'pending' ? 'bg-slate-100 text-slate-500' : 'bg-blue-50 text-blue-600'
+              ]"
+            >
+              <el-icon v-if="localActivity.status === 'pending'"><Clock /></el-icon>
+              <span v-else-if="localActivity.status === 'in_progress'" class="relative flex size-2">
+                <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"></span>
+                <span class="relative inline-flex size-2 rounded-full bg-blue-500"></span>
+              </span>
+              <span>{{ statusText(localActivity.status) }}</span>
+            </div>
+          </div>
+
+          <div class="flex w-72 shrink-0 items-center justify-end gap-2" @click.stop>
             <el-button 
               v-if="localActivity.status === 'pending'" 
-              type="primary" 
-              size="small" 
+              type="success" 
+              class="rounded-md px-4 py-2 font-medium"
               @click="toggleActivityStatus"
-            >▶️ 启动</el-button>
+            >启动</el-button>
             <el-button 
               v-else-if="localActivity.status === 'in_progress'" 
-              type="warning" 
-              size="small" 
+              type="danger" 
+              class="rounded-md px-4 py-2 font-medium"
               @click="toggleActivityStatus"
-            >⏸️ 停机</el-button>
-            <el-button size="small" @click="openEditDialog">✏️修改</el-button>
-            <el-button type="primary" size="small" @click="locateInDependencyView">👁️视图</el-button>
+            >停机</el-button>
+            
+            <el-button class="rounded-md border-0 !bg-blue-50 !text-blue-600 hover:!bg-blue-100" @click="locateInDependencyView">在视图中查看</el-button>
+            
+            <div class="mx-1 h-4 w-px bg-slate-200"></div>
+            
+            <el-button class="border-0 bg-transparent p-2 text-base text-slate-400 hover:!bg-slate-100 hover:!text-blue-500" @click="openEditDialog" title="编辑">
+              <el-icon><Edit /></el-icon>
+            </el-button>
+            <el-button class="border-0 bg-transparent p-2 text-base text-slate-400 hover:!bg-slate-100 hover:!text-blue-500" @click="handleDeleteActivity" title="删除">
+              <el-icon><Delete /></el-icon>
+            </el-button>
           </div>
         </div>
       </template>
 
-      <el-tabs v-model="activeTab">
-        <el-tab-pane label="基本信息与SOP" name="basic">
-          <el-descriptions :column="1" border>
-            <el-descriptions-item label="活动描述">{{ localActivity.description || '无' }}</el-descriptions-item>
-            <el-descriptions-item label="SOP步骤">
-              <div class="sop-header">
-                <span>总耗时: {{ totalSopDuration }} 分钟</span>
-                <el-button type="primary" size="small" @click="openSopEditDialog">编辑 SOP</el-button>
+      <div class="bg-slate-50 px-6 py-5 shadow-inner shadow-black/5">
+        <el-tabs v-model="activeTab" class="custom-tabs">
+          <el-tab-pane label="SOP 步骤与详情" name="basic">
+            <div class="mb-6 flex gap-4 rounded-xl border border-slate-100 bg-white p-4">
+              <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-50">
+                <el-icon class="text-2xl text-slate-400"><Document /></el-icon>
               </div>
-              <div v-if="localActivity.sop_steps?.length">
-                <div v-for="(step, index) in localActivity.sop_steps" :key="index" class="sop-row">
-                  <el-tag size="small" type="info">步骤 {{ index + 1 }}</el-tag>
-                  <span>{{ step.content }} (耗时: {{ step.duration }} 分钟)</span>
-                </div>
+              <div class="flex-1">
+                <div class="mb-1 text-sm font-semibold text-slate-800">活动描述</div>
+                <div class="text-[13px] leading-relaxed text-slate-500">{{ localActivity.description || '暂无描述信息' }}</div>
               </div>
-              <span v-else>暂无SOP步骤</span>
-            </el-descriptions-item>
-          </el-descriptions>
-        </el-tab-pane>
-
-        <el-tab-pane label="发生风险" name="risks">
-          <div class="risk-panel">
-            <div v-if="activityRisks.length === 0" class="risk-empty-state">
-              <el-empty description="当前环节运行健康" :image-size="72">
-                <template #description>
-                  <div class="risk-empty-title">当前环节运行健康</div>
-                  <div class="risk-empty-subtitle">资源供需平衡，未检测到近期异常</div>
-                </template>
-              </el-empty>
             </div>
 
-            <section v-if="shortageRisks.length > 0" class="risk-section risk-section-shortage">
-              <div class="risk-section-header">
-                <el-icon class="risk-header-icon danger"><WarningFilled /></el-icon>
-                <span class="risk-section-title">当前短缺</span>
+            <div class="mb-4 flex items-center justify-between">
+              <div class="rounded-full bg-indigo-50 px-4 py-1.5 text-[13px] font-semibold text-indigo-600">
+                总耗时：{{ totalSopDuration }} 分钟
               </div>
-              <el-card
-                v-for="(risk, index) in shortageRisks"
-                :key="`shortage-${risk}-${index}`"
-                shadow="never"
-                class="risk-card risk-card-shortage"
-              >
-                <div class="risk-card-content">
+              <el-button type="primary" class="rounded-md" @click="openSopEditDialog">
+                <el-icon><Plus /></el-icon> 添加步骤
+              </el-button>
+            </div>
+
+            <el-table :data="localActivity.sop_steps || []" class="sop-table overflow-hidden rounded-lg border border-slate-100" :show-header="true">
+              <el-table-column type="index" label="步骤序号" width="100" align="center" />
+              <el-table-column prop="content" label="步骤名称" />
+              <el-table-column prop="duration" label="耗时(分钟)" width="150" align="center" />
+              <el-table-column label="操作" width="120" align="center">
+                <template #default>
+                  <el-button type="primary" link @click="openSopEditDialog">编辑</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-tab-pane>
+
+          <el-tab-pane label="发生风险" name="risks">
+            <div class="risk-panel">
+              <div v-if="activityRisks.length === 0" class="risk-empty-state">
+                <el-empty description="当前环节运行健康" :image-size="72">
+                  <template #description>
+                    <div class="risk-empty-title">当前环节运行健康</div>
+                    <div class="risk-empty-subtitle">资源供需平衡，未检测到近期异常</div>
+                  </template>
+                </el-empty>
+              </div>
+
+              <section v-if="shortageRisks.length > 0" class="risk-section risk-section-shortage">
+                <div class="risk-section-header">
+                  <el-icon class="risk-header-icon danger"><WarningFilled /></el-icon>
+                  <span class="risk-section-title">当前短缺</span>
+                </div>
+                <el-card
+                  v-for="(risk, index) in shortageRisks"
+                  :key="`shortage-${risk}-${index}`"
+                  shadow="never"
+                  class="risk-card risk-card-shortage"
+                >
+                  <div class="risk-card-content">
+                    <div class="risk-main-line">
+                      <el-icon class="risk-item-icon"><component :is="getShortageRiskIcon(risk)" /></el-icon>
+                      <span class="risk-item-text">
+                        <template v-for="(segment, segIndex) in splitRiskSegments(risk)" :key="`${risk}-${index}-${segIndex}`">
+                          <span :class="{ 'risk-segment-highlight': segment.highlight }">{{ segment.text }}</span>
+                        </template>
+                      </span>
+                    </div>
+                    <button
+                      v-if="risk.includes('名') || risk.includes('台')"
+                      class="risk-action-btn risk-action-alloc"
+                      @click="switchToAllocationTab"
+                    >
+                      去分配
+                    </button>
+                    <button
+                      v-else-if="risk.includes('原料') || risk.includes('不足')"
+                      class="risk-action-btn risk-action-replenish"
+                      @click="goToMaterialPage"
+                    >
+                      去补货
+                    </button>
+                  </div>
+                </el-card>
+              </section>
+
+              <section v-if="scheduleRisks.length > 0" class="risk-section risk-section-schedule">
+                <div class="risk-section-header">
+                  <el-icon class="risk-header-icon warning"><Clock /></el-icon>
+                  <span class="risk-section-title">排期预警</span>
+                </div>
+                <el-card
+                  v-for="(risk, index) in scheduleRisks"
+                  :key="`schedule-${risk}-${index}`"
+                  shadow="never"
+                  class="risk-card risk-card-schedule"
+                >
                   <div class="risk-main-line">
-                    <el-icon class="risk-item-icon"><component :is="getShortageRiskIcon(risk)" /></el-icon>
+                    <el-icon class="risk-item-icon"><component :is="getScheduleRiskIcon(risk)" /></el-icon>
                     <span class="risk-item-text">
                       <template v-for="(segment, segIndex) in splitRiskSegments(risk)" :key="`${risk}-${index}-${segIndex}`">
                         <span :class="{ 'risk-segment-highlight': segment.highlight }">{{ segment.text }}</span>
                       </template>
                     </span>
                   </div>
-                  <button
-                    v-if="risk.includes('名') || risk.includes('台')"
-                    class="risk-action-btn risk-action-alloc"
-                    @click="switchToAllocationTab"
-                  >
-                    去分配
-                  </button>
-                  <button
-                    v-else-if="risk.includes('原料') || risk.includes('不足')"
-                    class="risk-action-btn risk-action-replenish"
-                    @click="goToMaterialPage"
-                  >
-                    去补货
-                  </button>
-                </div>
-              </el-card>
-            </section>
+                </el-card>
+              </section>
+            </div>
+          </el-tab-pane>
 
-            <section v-if="scheduleRisks.length > 0" class="risk-section risk-section-schedule">
-              <div class="risk-section-header">
-                <el-icon class="risk-header-icon warning"><Clock /></el-icon>
-                <span class="risk-section-title">排期预警</span>
+          <el-tab-pane label="资源配置" name="resources" lazy>
+            <div class="py-4">
+              <div>
+                <el-tabs type="card" class="capsule-tabs">
+                  <el-tab-pane label="人员配置" name="personnel">
+                    <div class="mb-4 flex justify-end">
+                      <el-button type="primary" plain class="rounded-md">
+                        <el-icon><Plus /></el-icon> 分配人员
+                      </el-button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                      <div v-for="p in localActivity.required_personnel" :key="p" class="resource-card">
+                        <div class="resource-avatar">{{ (p || '').slice(0, 2).toUpperCase() }}</div>
+                        <div class="resource-info">
+                          <div class="resource-name">{{ p }}</div>
+                          <div class="resource-meta">人员编号: {{ p }}</div>
+                        </div>
+                      </div>
+                      <el-empty v-if="!localActivity.required_personnel?.length" description="暂无人员配置" :image-size="60" />
+                    </div>
+                  </el-tab-pane>
+                  <el-tab-pane label="设备配置" name="equipment">
+                    <div class="mb-4 flex justify-end">
+                      <el-button type="primary" plain class="rounded-md">
+                        <el-icon><Plus /></el-icon> 分配设备
+                      </el-button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                      <div v-for="e in localActivity.required_resources" :key="e" class="resource-card">
+                        <div class="resource-icon-wrap"><el-icon><Setting /></el-icon></div>
+                        <div class="resource-info">
+                          <div class="resource-name">{{ e }}</div>
+                          <div class="resource-meta">设备编号: {{ e }}</div>
+                        </div>
+                      </div>
+                      <el-empty v-if="!localActivity.required_resources?.length" description="暂无设备配置" :image-size="60" />
+                    </div>
+                  </el-tab-pane>
+                  <el-tab-pane label="原料配置" name="material">
+                    <div class="mb-4 flex justify-end">
+                      <el-button type="primary" plain class="rounded-md">
+                        <el-icon><Plus /></el-icon> 分配原料
+                      </el-button>
+                    </div>
+                    <el-table :data="[]" class="material-table">
+                      <el-table-column prop="id" label="原料编号" />
+                      <el-table-column prop="name" label="原料名称" />
+                      <el-table-column label="消耗量" align="right">
+                        <template #default="scope">
+                          <span class="consume-amount">{{ scope.row.amount }}</span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column label="操作" width="100" align="center">
+                        <template #default>
+                          <el-button type="danger" link>移除</el-button>
+                        </template>
+                      </el-table-column>
+                      <template #empty>
+                        <el-empty description="暂无原料配置" :image-size="60" />
+                      </template>
+                    </el-table>
+                  </el-tab-pane>
+                </el-tabs>
               </div>
-              <el-card
-                v-for="(risk, index) in scheduleRisks"
-                :key="`schedule-${risk}-${index}`"
-                shadow="never"
-                class="risk-card risk-card-schedule"
-              >
-                <div class="risk-main-line">
-                  <el-icon class="risk-item-icon"><component :is="getScheduleRiskIcon(risk)" /></el-icon>
-                  <span class="risk-item-text">
-                    <template v-for="(segment, segIndex) in splitRiskSegments(risk)" :key="`${risk}-${index}-${segIndex}`">
-                      <span :class="{ 'risk-segment-highlight': segment.highlight }">{{ segment.text }}</span>
-                    </template>
-                  </span>
-                </div>
-              </el-card>
-            </section>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="资源分配" name="resources" lazy>
-          <ActivityResourcesPanel :activity-id="activityId" />
-        </el-tab-pane>
-      </el-tabs>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
+      </div>
     </el-collapse-item>
   </el-collapse>
 
@@ -184,15 +308,6 @@
     </template>
   </el-dialog>
 
-  <el-dialog v-model="replenishDialogVisible" title="补充原料库存" width="420px">
-    <div class="replenish-tip">请输入要补充的【{{ replenishForm.material_model }}】原料数量</div>
-    <el-input-number v-model="replenishForm.added_quantity" :min="0.1" :step="1" style="width: 100%" />
-    <template #footer>
-      <el-button @click="replenishDialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="submitReplenish">提交补货</el-button>
-    </template>
-  </el-dialog>
-
   <el-dialog v-model="sopDialogVisible" title="编辑活动 SOP 与详情" width="700px">
     <el-form :model="sopEditForm" label-width="100px">
       <el-form-item label="活动描述">
@@ -222,13 +337,21 @@
       <el-button type="primary" @click="saveSopEdit">保存 SOP</el-button>
     </template>
   </el-dialog>
+  <div v-show="false" class="hidden">
+    {{ workingHoursText }}
+    {{ statusTagType(localActivity.status) }}
+    {{ inferMaterialModelFromRisk('') }}
+    {{ domainOptions.length }}
+    {{ replenishDialogVisible }}
+    <ActivityResourcesPanel :activity-id="activityId" />
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { WarningFilled, User, Setting, Box, Calendar, Tools, Clock } from '@element-plus/icons-vue'
+import { WarningFilled, User, Setting, Box, Calendar, Tools, Clock, Document, Edit, Delete, Plus } from '@element-plus/icons-vue'
 import type { Activity } from '@/types'
 import ActivityResourcesPanel from './ActivityResourcesPanel.vue'
 import {
@@ -379,7 +502,7 @@ const statusText = (status: string) => {
 }
 
 const statusTagType = (status: string) => {
-  const map: Record<string, '' | 'success' | 'warning' | 'danger' | 'info'> = {
+  const map: Record<string, string> = {
     pending: 'info',
     in_progress: 'primary'
   }
@@ -543,113 +666,58 @@ const handleDeleteActivity = async () => {
 </script>
 
 <style scoped>
-.activity-accordion {
-  margin-bottom: 12px;
+
+.workflow-icon {
+  color: #94a3b8;
 }
 
-.activity-header {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
+:deep(.el-collapse-item.is-active .workflow-icon) {
+  color: #2563eb;
 }
 
-.header-left {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+:deep(.el-collapse-item__header) {
+  border-bottom: none;
+  height: auto;
+  line-height: normal;
+  padding: 16px 24px;
 }
 
-.title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+:deep(.el-collapse-item__wrap) {
+  border-bottom: none;
+  background-color: #f8fafc;
 }
 
-.activity-name {
-  font-size: 16px;
-  font-weight: 700;
-  color: #303133;
+:deep(.el-collapse-item__content) {
+  padding-bottom: 0;
 }
 
-.sub-row {
-  color: #606266;
-  font-size: 12px;
+:deep(.custom-tabs .el-tabs__nav-wrap::after) {
+  height: 1px;
+  background-color: #e2e8f0;
 }
 
-.header-right {
-  display: flex;
-  gap: 8px;
+:deep(.custom-tabs .el-tabs__item) {
+  font-weight: 500;
+  color: #64748b;
 }
 
-.sop-row {
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+:deep(.custom-tabs .el-tabs__item.is-active) {
+  color: #2563eb;
 }
 
-.sop-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  background: #f5f7fa;
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-weight: bold;
+:deep(.custom-tabs .el-tabs__active-bar) {
+  background-color: #2563eb;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
 }
 
-.sop-edit-section {
-  margin-top: 20px;
-  border-top: 1px solid #ebeef5;
-  padding-top: 20px;
+:deep(.sop-table th.el-table__cell) {
+  background-color: #f8fafc;
+  color: #475569;
+  font-weight: 600;
 }
 
-.section-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  font-weight: bold;
-  color: #303133;
-}
-
-.total-hint {
-  color: #409eff;
-  font-size: 14px;
-}
-
-.sop-step-item {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
-  align-items: center;
-}
-
-.step-tag {
-  flex-shrink: 0;
-  width: 60px;
-  text-align: center;
-}
-
-.duration-input {
-  width: 130px;
-}
-
-.w-full {
-  width: 100%;
-}
-
-.mt-4 {
-  margin-top: 16px;
-}
-
-.flex-1 {
-  flex: 1;
-}
-
+/* 风险面板样式保持不变 */
 .risk-panel {
   display: flex;
   flex-direction: column;
@@ -778,6 +846,95 @@ const handleDeleteActivity = async () => {
 
 .risk-action-replenish:hover {
   background: #fef2f2;
+}
+
+:deep(.capsule-tabs.el-tabs--card > .el-tabs__header) {
+  border-bottom: none;
+  margin-bottom: 24px;
+}
+
+:deep(.capsule-tabs.el-tabs--card > .el-tabs__header .el-tabs__nav) {
+  border: none;
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+:deep(.capsule-tabs.el-tabs--card > .el-tabs__header .el-tabs__item) {
+  border: none;
+  border-radius: 6px;
+  height: 32px;
+  line-height: 32px;
+  color: #64748b;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+:deep(.capsule-tabs.el-tabs--card > .el-tabs__header .el-tabs__item.is-active) {
+  background: #ffffff;
+  color: #1e293b;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.resource-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.resource-avatar {
+  width: 40px;
+  height: 40px;
+  background: #e0e7ff;
+  color: #4f46e5;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.resource-icon-wrap {
+  width: 40px;
+  height: 40px;
+  background: #f1f5f9;
+  color: #64748b;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.resource-info {
+  flex: 1;
+}
+
+.resource-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.resource-meta {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.material-table {
+  border-radius: 8px;
+  border: 1px solid #f1f5f9;
+}
+
+.consume-amount {
+  font-weight: 700;
+  color: #2563eb;
 }
 
 .form-row {

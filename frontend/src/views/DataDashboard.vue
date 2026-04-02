@@ -1,43 +1,50 @@
 <template>
-  <div class="dashboard-page">
-    <el-card>
-      <template #header>
-        <div class="toolbar">
-          <span class="toolbar-title">数据管理面板</span>
-          <div class="filter-group">
-            <el-input
-              v-model="searchQuery"
-              class="activity-search"
-              placeholder="搜索活动名称或ID..."
-              clearable
-              :prefix-icon="Search"
+  <div class="h-full p-0">
+    <div class="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+      <div class="flex items-center justify-between px-6 py-5">
+        <div class="flex items-center gap-3">
+          <el-input
+            v-model="searchQuery"
+            class="w-72"
+            placeholder="搜索活动名称或ID..."
+            clearable
+            :prefix-icon="Search"
+          />
+          <el-select v-model="selectedProcessId" placeholder="流程筛选" class="custom-select w-[200px]">
+            <el-option
+              v-for="item in processOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
             />
-            <el-select v-model="selectedProcessId" placeholder="流程筛选" style="width: 200px;">
-              <el-option
-                v-for="item in processOptions"
-                :key="item.value"
-                :label="item.label"
-                :value="item.value"
-              />
-            </el-select>
-            <el-select v-model="selectedFilter" style="width: 200px">
-              <el-option label="全部状态" value="ALL" />
-              <el-option label="待机" value="pending" />
-              <el-option label="进行中" value="in_progress" />
-            </el-select>
-            <el-button type="primary" :icon="Plus" @click="openAddActivityDialog">添加活动</el-button>
-          </div>
+          </el-select>
+          <el-select v-model="selectedFilter" class="custom-select w-[200px]">
+            <el-option label="全部状态" value="ALL" />
+            <el-option label="待机" value="pending" />
+            <el-option label="进行中" value="in_progress" />
+          </el-select>
         </div>
-      </template>
+        <el-button type="primary" class="rounded-lg border-blue-500 bg-blue-500 px-5 py-2 font-medium" :icon="Plus" @click="openAddActivityDialog">添加活动</el-button>
+      </div>
 
-      <el-empty v-if="filteredActivities.length === 0" description="暂无活动数据" />
-      <ActivityAccordionItem
-        v-for="activity in filteredActivities"
-        :key="activity.id || activity.name"
-        :activity="activity"
-        @refreshed="loadAllActivities"
-      />
-    </el-card>
+      <div class="flex items-center border-b border-slate-100 px-6 pb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+        <div class="w-10 shrink-0"></div>
+        <div class="min-w-0 flex-1">活动信息</div>
+        <div class="w-48 shrink-0">所属流程</div>
+        <div class="w-32 shrink-0">当前状态</div>
+        <div class="w-72 shrink-0 text-right">操作</div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto px-6 py-4">
+        <el-empty v-if="filteredActivities.length === 0" description="暂无活动数据" />
+        <ActivityAccordionItem
+          v-for="activity in filteredActivities"
+          :key="activity.id || activity.name"
+          :activity="activity"
+          @refreshed="loadAllActivities"
+        />
+      </div>
+    </div>
 
     <!-- 添加活动弹窗 -->
     <el-dialog v-model="addActivityDialogVisible" title="添加活动" width="580px">
@@ -258,31 +265,18 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.dashboard-page {
-  padding: 12px;
+:deep(.custom-select .el-input__wrapper) {
+  background-color: #f8fafc;
+  box-shadow: none !important;
+  border-radius: 8px;
 }
 
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+:deep(.custom-select .el-input__inner) {
+  color: #475569;
 }
 
-.filter-group {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.activity-search {
-  width: 240px;
-  min-width: 180px;
-}
-
-.toolbar-title {
-  font-size: 18px;
-  font-weight: 700;
+:deep(.el-dialog) {
+  border-radius: 12px;
 }
 </style>
 

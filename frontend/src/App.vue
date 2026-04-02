@@ -1,32 +1,34 @@
 <template>
   <div id="app">
     <el-container>
-      <el-aside width="200px">
+      <el-aside width="256px" class="bg-white border-r border-slate-100 shadow-sm">
+        <div class="logo-area">
+          <div class="logo-icon"></div>
+          <span class="logo-text">乳业生产与调度系统</span>
+        </div>
         <el-menu
           :default-active="$route.path"
           router
-          background-color="#545c64"
-          text-color="#fff"
-          active-text-color="#ffd04b"
+          class="sidebar-menu"
         >
+          <el-menu-item index="/dependencies">
+            <span>生产链路拓扑图</span>
+          </el-menu-item>
           <el-menu-item index="/">
-            <span>活动管理面板</span>
+            <span>生产活动管理</span>
           </el-menu-item>
           <el-menu-item index="/personnel">
-            <span>员工管理面板</span>
+            <span>员工排班与分配</span>
           </el-menu-item>
           <el-menu-item index="/equipment">
-            <span>设备管理面板</span>
+            <span>生产设备资产</span>
           </el-menu-item>
           <el-menu-item index="/material">
-            <span>原料管理面板</span>
-          </el-menu-item>
-          <el-menu-item index="/dependencies">
-            <span>节点关联视图</span>
+            <span>原料库存调度</span>
           </el-menu-item>
         </el-menu>
       </el-aside>
-      <el-main>
+      <el-main class="bg-slate-50">
         <router-view />
       </el-main>
     </el-container>
@@ -46,11 +48,67 @@
 }
 
 .el-aside {
-  background-color: #545c64;
+  background-color: #ffffff;
+  border-right: 1px solid #f1f5f9;
+  box-shadow: 1px 0 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.logo-area {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  background-color: #3b82f6;
+  border-radius: 8px;
+}
+
+.logo-text {
+  font-weight: 700;
+  font-size: 16px;
+  color: #1e293b;
+}
+
+.sidebar-menu {
+  border-right: none !important;
+}
+
+.sidebar-menu .el-menu-item {
+  color: #64748b;
+  margin: 4px 12px;
+  border-radius: 6px;
+  height: 44px;
+  line-height: 44px;
+}
+
+.sidebar-menu .el-menu-item.is-active {
+  background-color: #eff6ff !important;
+  color: #1d4ed8 !important;
+  font-weight: 600;
+  position: relative;
+}
+
+.sidebar-menu .el-menu-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: #3b82f6;
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
 }
 
 .el-main {
-  padding: 20px;
+  padding: 24px;
+  background-color: #f8fafc;
 }
 
 body {
