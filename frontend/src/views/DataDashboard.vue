@@ -180,9 +180,13 @@ const defaultAddActivityForm = () => ({
   name: '',
   description: '',
   process_id: 'P001',
+  domain: 'production',
   predecessor_ids: [] as string[],
   status: 'pending' as 'pending' | 'in_progress',
   sop_steps: [],
+  estimated_duration: 0,
+  required_resources: [] as string[],
+  required_personnel: [] as string[],
   working_hours: [
     { start_time: '08:00', end_time: '11:00' },
     { start_time: '13:00', end_time: '18:00' }
@@ -205,6 +209,7 @@ const onAddProcessIdChange = (val: string) => {
   const prefix = val.charAt(0).toUpperCase()
   if (!prefixToDomainMap[prefix]) return
   addActivityForm.value.predecessor_ids = []
+  addActivityForm.value.domain = prefixToDomainMap[prefix]
 }
 
 const submitAddActivity = async () => {

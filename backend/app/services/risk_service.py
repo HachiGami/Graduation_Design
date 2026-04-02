@@ -1,33 +1,9 @@
 from typing import Any, Dict, List, Set
 from collections import Counter
 from bson import ObjectId
-import json
-from datetime import datetime
-from pathlib import Path
 
 
 RUNNING_STATUSES = {"in_progress", "进行中"}
-DEBUG_LOG_PATH = Path("E:/code/Graduation_Design/debug-0409aa.log")
-
-
-# region agent log
-def _debug_log(hypothesis_id: str, location: str, message: str, data: Dict[str, Any]) -> None:
-    try:
-        payload = {
-            "sessionId": "0409aa",
-            "runId": "pre-fix",
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(datetime.utcnow().timestamp() * 1000),
-        }
-        DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
-# endregion
 
 
 def _as_list(value: Any) -> List[Any]:
@@ -212,25 +188,6 @@ async def _load_material_stock_map(db, material_ids: Set[str], material_names: S
             stock = float(doc.get("quantity") or 0.0)
             doc_id = str(doc.get("_id")) if doc.get("_id") is not None else ""
             doc_name = (doc.get("name") or "").strip().lower()
-            # region agent log
-            _debug_log(
-                "H5",
-                "risk_service._load_material_stock_map:doc",
-                "material stock candidate doc",
-                {
-                    "collection": collection_name,
-                    "doc_id": doc_id,
-                    "doc_name": doc.get("name"),
-                    "fields": {
-                        "quantity": doc.get("quantity"),
-                        "current_stock": doc.get("current_stock"),
-                        "current_inventory": doc.get("current_inventory"),
-                        "available_quantity": doc.get("available_quantity"),
-                        "safety_stock": doc.get("safety_stock"),
-                    },
-                },
-            )
-            # endregion
             for key in _material_keys(doc_id, doc_name):
                 stock_map[key] = stock_map.get(key, 0.0) + stock
 
@@ -246,40 +203,10 @@ async def calculate_activity_risks(
 ) -> Dict[str, List[str]]:
     activity_ids = [str(item.get("_id")) for item in activities if item.get("_id")]
     risks_by_activity: Dict[str, List[str]] = {aid: [] for aid in activity_ids}
-    # region agent log
-    _debug_log(
-        "H1",
-        "risk_service.calculate_activity_risks:activity_ids",
-        "risk engine start",
-        {
-            "activity_count": len(activities),
-            "mongo_activity_ids": activity_ids,
-            "statuses": [item.get("status") for item in activities],
-            "sample_names": [item.get("name") for item in activities[:5]],
-        },
-    )
-    # endregion
     if not activity_ids:
         return risks_by_activity
 
     assignments = await _load_assignments(neo4j_driver, activity_ids)
-    # region agent log
-    _debug_log(
-        "H1",
-        "risk_service.calculate_activity_risks:assignments",
-        "assignments loaded by mongo ids",
-        {
-            "assignment_counts": {
-                aid: {
-                    "personnel": len(value.get("personnel", [])),
-                    "equipment": len(value.get("equipment", [])),
-                    "materials": len(value.get("materials", [])),
-                }
-                for aid, value in assignments.items()
-            }
-        },
-    )
-    # endregion
 
     # 聚合所有运行中活动的原料总日消耗
     total_daily_consumption: Dict[str, float] = {}
@@ -307,18 +234,6 @@ async def calculate_activity_risks(
                 material_names.add(mname)
 
     stock_map = await _load_material_stock_map(db, material_ids, material_names)
-    # region agent log
-    _debug_log(
-        "H2",
-        "risk_service.calculate_activity_risks:material_pool",
-        "material stock and total daily consumption snapshot",
-        {
-            "running_activity_ids": list(running_activity_ids),
-            "total_daily_consumption": total_daily_consumption,
-            "stock_map_keys": list(stock_map.keys())[:30],
-        },
-    )
-    # endregion
 
     for activity in activities:
         aid = str(activity.get("_id"))
@@ -372,23 +287,6 @@ async def calculate_activity_risks(
                 stock = max(stock, stock_map.get(key, 0.0))
 
             runnable_days = stock / total_rate if total_rate > 0 else 0.0
-            # region agent log
-            _debug_log(
-                "H2",
-                "risk_service.calculate_activity_risks:material_eval",
-                "material risk evaluation",
-                {
-                    "activity_id": aid,
-                    "activity_name": activity_name,
-                    "material_id": material_id,
-                    "material_name": material_name,
-                    "lookup_keys": keys,
-                    "stock": stock,
-                    "total_rate": total_rate,
-                    "runnable_days": runnable_days,
-                },
-            )
-            # endregion
             if runnable_days < 7:
                 risks_by_activity[aid].append(
                     f"消耗的原料[{material_name}]库存不足7天（预计{runnable_days:.1f}天）"
@@ -405,28 +303,6 @@ async def calculate_activity_risks(
                 risks_by_activity[aid].append(
                     f"人员请假风险：{person.get('name') or '未知人员'}未来7天内有请假计划"
                 )
-            else:
-                if pid and ObjectId.is_valid(pid):
-                    mongo_person = await db.personnel.find_one({"_id": ObjectId(pid)})
-                    # region agent log
-                    _debug_log(
-                        "H6",
-                        "risk_service.calculate_activity_risks:personnel_fallback",
-                        "personnel leave fallback check",
-                        {
-                            "activity_id": aid,
-                            "person_id": pid,
-                            "person_name": person.get("name"),
-                            "neo4j_upcoming_leaves": person.get("upcoming_leaves"),
-                            "mongo_upcoming_leaves": (mongo_person or {}).get("upcoming_leaves"),
-                            "mongo_leave_fields": {
-                                "leave_info": (mongo_person or {}).get("leave_info"),
-                                "leave_plans": (mongo_person or {}).get("leave_plans"),
-                                "upcomingLeaves": (mongo_person or {}).get("upcomingLeaves"),
-                            },
-                        },
-                    )
-                    # endregion
 
         # 4) 设备检修风险（字段非空即风险）
         for equipment in assigned_equipment:
@@ -439,49 +315,5 @@ async def calculate_activity_risks(
                 risks_by_activity[aid].append(
                     f"设备检修风险：{equipment.get('name') or '未知设备'}未来7天内有检修计划"
                 )
-            else:
-                if eid and ObjectId.is_valid(eid):
-                    mongo_equipment = await db.resources.find_one({"_id": ObjectId(eid)})
-                    # region agent log
-                    _debug_log(
-                        "H7",
-                        "risk_service.calculate_activity_risks:equipment_fallback",
-                        "equipment maintenance fallback check",
-                        {
-                            "activity_id": aid,
-                            "equipment_id": eid,
-                            "equipment_name": equipment.get("name"),
-                            "neo4j_upcoming_maintenance": equipment.get("upcoming_maintenance"),
-                            "mongo_upcoming_maintenance": (mongo_equipment or {}).get("upcoming_maintenance"),
-                            "mongo_maintenance_fields": {
-                                "maintenance_plan": (mongo_equipment or {}).get("maintenance_plan"),
-                                "next_maintenance": (mongo_equipment or {}).get("next_maintenance"),
-                                "upcomingMaintenance": (mongo_equipment or {}).get("upcomingMaintenance"),
-                            },
-                        },
-                    )
-                    # endregion
-
-        # region agent log
-        _debug_log(
-            "H3",
-            "risk_service.calculate_activity_risks:activity_result",
-            "activity final risks",
-            {
-                "activity_id": aid,
-                "activity_name": activity_name,
-                "status": activity.get("status"),
-                "personnel_with_leave": [
-                    {"id": p.get("id"), "name": p.get("name"), "leave": p.get("upcoming_leaves")}
-                    for p in assigned_personnel
-                ],
-                "equipment_with_maintenance": [
-                    {"id": e.get("id"), "name": e.get("name"), "maintenance": e.get("upcoming_maintenance")}
-                    for e in assigned_equipment
-                ],
-                "risks": risks_by_activity[aid],
-            },
-        )
-        # endregion
 
     return risks_by_activity

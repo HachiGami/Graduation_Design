@@ -122,6 +122,30 @@ def _parse_activity_object_id(activity_id: str) -> ObjectId:
         raise HTTPException(status_code=400, detail="无效的活动ID")
     return ObjectId(activity_id)
 
+
+async def _ensure_activity_nodes_in_neo4j(session, db, activity_ids: List[str]) -> None:
+    """按 MongoDB 文档 MERGE Activity 节点，与 dependencies 路由一致，避免仅 MATCH 时父节点不在图中导致无法建边。"""
+    for aid in activity_ids:
+        if not isinstance(aid, str) or not ObjectId.is_valid(aid):
+            continue
+        doc = await db.activities.find_one({"_id": ObjectId(aid)})
+        if not doc:
+            continue
+        aid_str = str(doc["_id"])
+        await session.run(
+            """
+            MERGE (a:Activity {id: $activity_id})
+            SET a.name = $name, a.domain = $domain, a.process_id = $process_id
+            """,
+            {
+                "activity_id": aid_str,
+                "name": doc.get("name"),
+                "domain": doc.get("domain"),
+                "process_id": doc.get("process_id"),
+            },
+        )
+
+
 @router.post("", response_model=ActivityResponse)
 async def create_activity(activity: ActivityCreate):
     db = get_database()
@@ -145,7 +169,7 @@ async def create_activity(activity: ActivityCreate):
     result = await db.activities.insert_one(activity_dict)
     activity_id = str(result.inserted_id)
     activity_dict["_id"] = activity_id
-    
+
     # 同步到Neo4j：创建/更新活动节点
     neo4j_query = """
     MERGE (a:Activity {id: $activity_id})
@@ -161,6 +185,7 @@ async def create_activity(activity: ActivityCreate):
                 "process_id": activity_dict.get("process_id")
             })
             if predecessor_ids:
+                await _ensure_activity_nodes_in_neo4j(session, db, predecessor_ids)
                 await session.run(
                     """
                     UNWIND $pred_ids AS pred_id
@@ -567,6 +592,7 @@ async def update_activity(activity_id: str, activity: ActivityUpdate):
                     )
                     new_predecessor_ids = updated_activity.get("predecessor_ids") or []
                     if new_predecessor_ids:
+                        await _ensure_activity_nodes_in_neo4j(session, db, new_predecessor_ids)
                         await session.run(
                             """
                             UNWIND $pred_ids AS pred_id
