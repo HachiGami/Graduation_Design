@@ -189,55 +189,220 @@
                 <el-tabs type="card" class="capsule-tabs">
                   <el-tab-pane label="人员配置" name="personnel">
                     <div class="mb-4 flex justify-end">
-                      <el-button type="primary" plain class="rounded-md">
-                        <el-icon><Plus /></el-icon> 分配人员
-                      </el-button>
+                      <div class="flex items-center shadow-sm rounded-lg">
+                        <select
+                          v-model="selectedPersonnelRole"
+                          class="border border-slate-200 border-r-0 rounded-l-lg p-2 text-sm outline-none bg-slate-50 w-48 font-medium text-slate-700"
+                        >
+                          <option value="" disabled>选择职业</option>
+                          <option
+                            v-for="role in availableRoles"
+                            :key="role"
+                            :value="role"
+                          >
+                            {{ role }}
+                          </option>
+                        </select>
+                        <button
+                          class="px-4 py-2 bg-blue-50 text-blue-600 text-sm font-bold border border-slate-200 rounded-r-lg hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          :disabled="!selectedPersonnelRole"
+                          @click="addPersonnelRequirement"
+                        >
+                          + 增加名额
+                        </button>
+                      </div>
                     </div>
                     <div class="grid grid-cols-2 gap-4">
-                      <div v-for="p in localActivity.required_personnel" :key="p" class="resource-card">
-                        <div class="resource-avatar">{{ (p || '').slice(0, 2).toUpperCase() }}</div>
-                        <div class="resource-info">
-                          <div class="resource-name">{{ p }}</div>
-                          <div class="resource-meta">人员编号: {{ p }}</div>
+                      <div
+                        v-for="slot in personnelSlots"
+                        :key="`person-slot-${slot.index}`"
+                        :class="[
+                          'rounded-xl border p-4 transition',
+                          slot.assigned
+                            ? 'border-slate-200 bg-white shadow-sm'
+                            : 'border-dashed border-orange-300 bg-orange-50/50'
+                        ]"
+                      >
+                        <div class="mb-3 flex items-start justify-between">
+                          <div>
+                            <div class="text-sm font-semibold text-slate-800">岗位需求 #{{ slot.index + 1 }}</div>
+                            <div class="text-xs text-slate-500">职业：{{ slot.role }}</div>
+                          </div>
+                          <button class="text-slate-400 hover:text-red-500 tooltip" @click="removePersonnelRequirement(slot.index)">
+                            <el-icon :size="16"><Delete /></el-icon>
+                          </button>
+                        </div>
+                        <div v-if="slot.assigned" class="flex items-center justify-between gap-3">
+                          <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 flex-shrink-0 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm mr-3 shadow-inner">
+                              {{ (slot.assigned.name || '').charAt(0) }}
+                            </div>
+                            <div>
+                              <div class="text-sm font-semibold text-slate-800">{{ slot.assigned.name }}</div>
+                              <div class="text-xs text-slate-500">已分配 · {{ slot.assigned.role }}</div>
+                            </div>
+                          </div>
+                          <button
+                            class="flex items-center px-3 py-1.5 bg-white border border-red-200 text-red-600 text-xs font-bold rounded-lg hover:bg-red-50 shadow-sm transition-colors"
+                            @click="removePersonnel(slot.assigned.id)"
+                          >
+                            移除解绑
+                          </button>
+                        </div>
+                        <div v-else class="flex items-center justify-between gap-2">
+                          <div class="text-sm text-orange-700">待分配：{{ slot.role }}</div>
+                          <div class="flex items-center gap-2">
+                            <template v-if="activePersonnelAssignIndex === slot.index">
+                              <el-select
+                                v-model="personnelSlotSelection[slot.index]"
+                                placeholder="选择具体人员"
+                                style="width: 220px"
+                              >
+                                <el-option
+                                  v-for="person in getFilteredPersonsByRole(slot.role)"
+                                  :key="person.id"
+                                  :label="person.name"
+                                  :value="person.id"
+                                />
+                              </el-select>
+                              <el-button type="primary" size="small" :disabled="!personnelSlotSelection[slot.index]" @click="confirmPersonnelAssign(slot.index)">
+                                保存
+                              </el-button>
+                              <el-button size="small" @click="cancelPersonnelAssign">取消</el-button>
+                            </template>
+                            <button
+                              v-else
+                              class="flex items-center px-3 py-1.5 bg-white border border-orange-200 text-orange-600 text-xs font-bold rounded-lg hover:bg-orange-50 shadow-sm transition-colors"
+                              @click="startPersonnelAssign(slot.index)"
+                            >
+                              执行分配
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      <el-empty v-if="!localActivity.required_personnel?.length" description="暂无人员配置" :image-size="60" />
+                      <el-empty v-if="!personnelSlots.length" description="暂无岗位需求" :image-size="60" />
                     </div>
                   </el-tab-pane>
                   <el-tab-pane label="设备配置" name="equipment">
                     <div class="mb-4 flex justify-end">
-                      <el-button type="primary" plain class="rounded-md">
-                        <el-icon><Plus /></el-icon> 分配设备
-                      </el-button>
+                      <div class="flex items-center shadow-sm rounded-lg">
+                        <select
+                          v-model="selectedEquipmentSpec"
+                          class="border border-slate-200 border-r-0 rounded-l-lg p-2 text-sm outline-none bg-slate-50 w-48 font-medium text-slate-700"
+                        >
+                          <option value="" disabled>选择设备种类</option>
+                          <option
+                            v-for="spec in availableSpecs"
+                            :key="spec"
+                            :value="spec"
+                          >
+                            {{ spec }}
+                          </option>
+                        </select>
+                        <button
+                          class="px-4 py-2 bg-blue-50 text-blue-600 text-sm font-bold border border-slate-200 rounded-r-lg hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          :disabled="!selectedEquipmentSpec"
+                          @click="addEquipmentRequirement"
+                        >
+                          + 增加名额
+                        </button>
+                      </div>
                     </div>
                     <div class="grid grid-cols-2 gap-4">
-                      <div v-for="e in localActivity.required_resources" :key="e" class="resource-card">
-                        <div class="resource-icon-wrap"><el-icon><Setting /></el-icon></div>
-                        <div class="resource-info">
-                          <div class="resource-name">{{ e }}</div>
-                          <div class="resource-meta">设备编号: {{ e }}</div>
+                      <div
+                        v-for="slot in equipmentSlots"
+                        :key="`equipment-slot-${slot.index}`"
+                        :class="[
+                          'rounded-xl border p-4 transition',
+                          slot.assigned
+                            ? 'border-slate-200 bg-white shadow-sm'
+                            : 'border-dashed border-orange-300 bg-orange-50/50'
+                        ]"
+                      >
+                        <div class="mb-3 flex items-start justify-between">
+                          <div>
+                            <div class="text-sm font-semibold text-slate-800">设备需求 #{{ slot.index + 1 }}</div>
+                            <div class="text-xs text-slate-500">种类：{{ slot.specification }}</div>
+                          </div>
+                          <button class="text-slate-400 hover:text-red-500 tooltip" @click="removeEquipmentRequirement(slot.index)">
+                            <el-icon :size="16"><Delete /></el-icon>
+                          </button>
+                        </div>
+                        <div v-if="slot.assigned" class="flex items-center justify-between gap-3">
+                          <div class="flex items-center gap-3">
+                            <div class="resource-icon-wrap"><el-icon><Setting /></el-icon></div>
+                            <div>
+                              <div class="text-sm font-semibold text-slate-800">{{ slot.assigned.name }}</div>
+                              <div class="text-xs text-slate-500">已分配 · {{ slot.assigned.specification }}</div>
+                            </div>
+                          </div>
+                          <button
+                            class="flex items-center px-3 py-1.5 bg-white border border-red-200 text-red-600 text-xs font-bold rounded-lg hover:bg-red-50 shadow-sm transition-colors"
+                            @click="removeEquipment(slot.assigned.id)"
+                          >
+                            移除解绑
+                          </button>
+                        </div>
+                        <div v-else class="flex items-center justify-between gap-2">
+                          <div class="text-sm text-orange-700">待分配：{{ slot.specification }}</div>
+                          <div class="flex items-center gap-2">
+                            <template v-if="activeEquipmentAssignIndex === slot.index">
+                              <el-select
+                                v-model="equipmentSlotSelection[slot.index]"
+                                placeholder="选择具体设备"
+                                style="width: 220px"
+                              >
+                                <el-option
+                                  v-for="equipment in getFilteredEquipmentBySpec(slot.specification)"
+                                  :key="equipment.id"
+                                  :label="equipment.name"
+                                  :value="equipment.id"
+                                />
+                              </el-select>
+                              <el-button type="primary" size="small" :disabled="!equipmentSlotSelection[slot.index]" @click="confirmEquipmentAssign(slot.index)">
+                                保存
+                              </el-button>
+                              <el-button size="small" @click="cancelEquipmentAssign">取消</el-button>
+                            </template>
+                            <button
+                              v-else
+                              class="flex items-center px-3 py-1.5 bg-white border border-orange-200 text-orange-600 text-xs font-bold rounded-lg hover:bg-orange-50 shadow-sm transition-colors"
+                              @click="startEquipmentAssign(slot.index)"
+                            >
+                              执行分配
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      <el-empty v-if="!localActivity.required_resources?.length" description="暂无设备配置" :image-size="60" />
+                      <el-empty v-if="!equipmentSlots.length" description="暂无设备需求" :image-size="60" />
                     </div>
                   </el-tab-pane>
                   <el-tab-pane label="原料配置" name="material">
-                    <div class="mb-4 flex justify-end">
-                      <el-button type="primary" plain class="rounded-md">
+                    <div class="mb-4 flex justify-end gap-2">
+                      <el-select v-model="selectedMaterialId" placeholder="选择原料" style="width: 220px">
+                        <el-option
+                          v-for="mat in availableMaterials"
+                          :key="mat.id"
+                          :label="mat.name"
+                          :value="mat.id"
+                        />
+                      </el-select>
+                      <el-input-number v-model="selectedMaterialRate" :min="0" :step="0.1" :precision="2" placeholder="消耗速率" />
+                      <el-button type="primary" plain class="rounded-md" :disabled="!selectedMaterialId" @click="assignMaterial">
                         <el-icon><Plus /></el-icon> 分配原料
                       </el-button>
                     </div>
-                    <el-table :data="[]" class="material-table">
-                      <el-table-column prop="id" label="原料编号" />
+                    <el-table :data="activityResourceState.consumed_resources" class="material-table">
+                      <el-table-column prop="resource_id" label="原料编号" />
                       <el-table-column prop="name" label="原料名称" />
                       <el-table-column label="消耗量" align="right">
                         <template #default="scope">
-                          <span class="consume-amount">{{ scope.row.amount }}</span>
+                          <span class="consume-amount">{{ scope.row.rate }}</span>
                         </template>
                       </el-table-column>
                       <el-table-column label="操作" width="100" align="center">
-                        <template #default>
-                          <el-button type="danger" link>移除</el-button>
+                        <template #default="scope">
+                          <el-button type="danger" link @click="removeMaterial(scope.row.resource_id)">移除</el-button>
                         </template>
                       </el-table-column>
                       <template #empty>
@@ -358,10 +523,16 @@ import {
   getActivity,
   getActivities,
   updateActivity,
-  deleteActivity
+  deleteActivity,
+  getActivityResources,
+  updateActivityResources,
+  getOccupiedResources
 } from '@/api/activity'
 import { getDependencies } from '@/api/dependency'
+import { getPersonnelList } from '@/api/personnel'
+import { getResources } from '@/api/resource'
 import { ElMessageBox } from 'element-plus'
+import type { ActivityResourcesData, Personnel, Resource } from '@/types'
 
 const props = defineProps<{ activity: Activity }>()
 const emit = defineEmits<{ refreshed: [] }>()
@@ -373,6 +544,26 @@ const activityRisks = ref<string[]>([])
 const editDialogVisible = ref(false)
 const sopDialogVisible = ref(false)
 const replenishDialogVisible = ref(false)
+type PersonnelWithId = Personnel & { id: string }
+type ResourceWithId = Resource & { id: string }
+const allPersonnel = ref<PersonnelWithId[]>([])
+const allResources = ref<ResourceWithId[]>([])
+const occupiedIds = ref<string[]>([])
+const selectedPersonnelRole = ref('')
+const selectedEquipmentSpec = ref('')
+const activePersonnelAssignIndex = ref<number | null>(null)
+const activeEquipmentAssignIndex = ref<number | null>(null)
+const personnelSlotSelection = ref<Record<number, string>>({})
+const equipmentSlotSelection = ref<Record<number, string>>({})
+const selectedMaterialId = ref('')
+const selectedMaterialRate = ref(1)
+const activityResourceState = ref<ActivityResourcesData>({
+  personnel_roles_required: [],
+  equipment_types_required: [],
+  assigned_personnel: [],
+  assigned_equipment: [],
+  consumed_resources: []
+})
 
 const editForm = ref<Partial<Activity>>({})
 const allActivities = ref<Activity[]>([])
@@ -383,6 +574,49 @@ const sopEditForm = ref({
 
 const currentSopTotalDuration = computed(() => {
   return sopEditForm.value.sop_steps.reduce((sum, step) => sum + (step.duration || 0), 0)
+})
+const occupiedIdSet = computed<Set<string>>(() => new Set(occupiedIds.value))
+const availableRoles = computed(() =>
+  [...new Set(allPersonnel.value.map(p => p.role).filter(Boolean))].sort()
+)
+const availableEquipments = computed(() => allResources.value.filter(r => r.type === '设备'))
+const availableSpecs = computed(() =>
+  [...new Set(availableEquipments.value.map(e => e.specification).filter(Boolean))].sort()
+)
+const availableMaterials = computed(() => allResources.value.filter(r => r.type === '原料'))
+const assignedPersonnelIdSet = computed(() => new Set(activityResourceState.value.assigned_personnel.map(p => p.id)))
+const assignedEquipmentIdSet = computed(() => new Set(activityResourceState.value.assigned_equipment.map(e => e.id)))
+const personnelSlots = computed(() => {
+  const roleQueue = new Map<string, { id: string; name: string; role: string }[]>()
+  activityResourceState.value.assigned_personnel.forEach((item) => {
+    const key = item.role || ''
+    if (!roleQueue.has(key)) roleQueue.set(key, [])
+    roleQueue.get(key)!.push(item)
+  })
+  return (activityResourceState.value.personnel_roles_required || []).map((role, index) => {
+    const queue = roleQueue.get(role) || []
+    return {
+      index,
+      role,
+      assigned: queue.length > 0 ? queue.shift() : undefined
+    }
+  })
+})
+const equipmentSlots = computed(() => {
+  const specQueue = new Map<string, { id: string; name: string; specification: string }[]>()
+  activityResourceState.value.assigned_equipment.forEach((item) => {
+    const key = item.specification || ''
+    if (!specQueue.has(key)) specQueue.set(key, [])
+    specQueue.get(key)!.push(item)
+  })
+  return (activityResourceState.value.equipment_types_required || []).map((specification, index) => {
+    const queue = specQueue.get(specification) || []
+    return {
+      index,
+      specification,
+      assigned: queue.length > 0 ? queue.shift() : undefined
+    }
+  })
 })
 
 // 定义流程域下拉选项
@@ -462,7 +696,17 @@ const workingHoursText = computed(() => {
   return windows.map(w => `${w.start_time}-${w.end_time}`).join(' / ')
 })
 
-const shortageRisks = computed(() => activityRisks.value.filter(r => r.includes('缺') || r.includes('不足')))
+const shortageRisks = computed(() => activityRisks.value.filter((r) => {
+  if (!(r.includes('缺') || r.includes('不足'))) return false
+  const equipmentShortageMatch = r.match(/缺\s*(\d+)\s*台\s*(.+)/)
+  if (!equipmentShortageMatch) return true
+  const spec = (equipmentShortageMatch[2] || '').trim()
+  if (!spec) return true
+  const requiredCount = (activityResourceState.value.equipment_types_required || []).filter(item => item === spec).length
+  const assignedCount = (activityResourceState.value.assigned_equipment || []).filter(item => item.specification === spec).length
+  const shouldKeepRisk = assignedCount < requiredCount
+  return shouldKeepRisk
+}))
 const scheduleRisks = computed(() => activityRisks.value.filter(r => r.includes('请假') || r.includes('检修')))
 
 function getShortageRiskIcon(message: string) {
@@ -607,7 +851,7 @@ const saveSopEdit = async () => {
 }
 
 const refreshActivityAndRisk = async () => {
-  await Promise.all([loadLatestActivity(), loadActivityRisks()])
+  await Promise.all([loadLatestActivity(), loadActivityRisks(), loadResourceData()])
   emit('refreshed')
 }
 
@@ -622,6 +866,254 @@ const loadActivityRisks = async () => {
   activityRisks.value = Array.isArray(localActivity.value.risks) ? localActivity.value.risks : []
 }
 
+const loadResourceDictionaries = async () => {
+  const [personnelList, resourceList] = await Promise.all([
+    getPersonnelList(),
+    getResources()
+  ])
+  allPersonnel.value = (personnelList as any[]).map((p) => ({
+    ...p,
+    id: p._id || p.id || ''
+  })) as PersonnelWithId[]
+  allResources.value = (resourceList as any[]).map((r) => ({
+    ...r,
+    id: r._id || r.id || ''
+  })) as ResourceWithId[]
+}
+
+const loadResourceData = async () => {
+  if (!activityId.value) return
+  try {
+    const [data, occupied] = await Promise.all([
+      getActivityResources(activityId.value),
+      getOccupiedResources().catch(() => [])
+    ])
+    activityResourceState.value = {
+      personnel_roles_required: data.personnel_roles_required || [],
+      equipment_types_required: data.equipment_types_required || [],
+      assigned_personnel: data.assigned_personnel || [],
+      assigned_equipment: data.assigned_equipment || [],
+      consumed_resources: data.consumed_resources || []
+    }
+    occupiedIds.value = occupied
+  } catch {
+    activityResourceState.value = {
+      personnel_roles_required: [],
+      equipment_types_required: [],
+      assigned_personnel: [],
+      assigned_equipment: [],
+      consumed_resources: []
+    }
+  }
+}
+
+const saveResourceState = async (next: ActivityResourcesData) => {
+  if (!activityId.value) return
+  await updateActivityResources(activityId.value, {
+    personnel_roles: next.personnel_roles_required || [],
+    equipment_types: next.equipment_types_required || [],
+    assigned_personnel_ids: next.assigned_personnel.map(p => p.id),
+    assigned_equipment_ids: next.assigned_equipment.map(e => e.id),
+    consumed_resources: next.consumed_resources.map(m => ({ resource_id: m.resource_id, rate: m.rate })
+    )
+  })
+  await refreshActivityAndRisk()
+}
+
+const getFilteredPersonsByRole = (role: string) => {
+  if (!role) return []
+  return allPersonnel.value.filter((p) =>
+    p.role === role &&
+    !['resigned', 'inactive', 'busy', 'in_use'].includes((p.status || '').toLowerCase()) &&
+    !occupiedIdSet.value.has(p.id) &&
+    !assignedPersonnelIdSet.value.has(p.id)
+  )
+}
+
+const getFilteredEquipmentBySpec = (specification: string) => {
+  if (!specification) return []
+  return availableEquipments.value.filter((e) =>
+    e.specification === specification &&
+    ['available', 'idle', '空闲'].includes((e.status || '').toLowerCase()) &&
+    !occupiedIdSet.value.has(e.id) &&
+    !assignedEquipmentIdSet.value.has(e.id)
+  )
+}
+
+const addPersonnelRequirement = async () => {
+  if (!selectedPersonnelRole.value) return
+  const next: ActivityResourcesData = {
+    ...activityResourceState.value,
+    personnel_roles_required: [...(activityResourceState.value.personnel_roles_required || []), selectedPersonnelRole.value]
+  }
+  await saveResourceState(next)
+  selectedPersonnelRole.value = ''
+  ElMessage.success('岗位名额已增加')
+}
+
+const removePersonnelRequirement = async (slotIndex: number) => {
+  const slot = personnelSlots.value.find(s => s.index === slotIndex)
+  if (!slot) return
+  const nextRoles = [...(activityResourceState.value.personnel_roles_required || [])]
+  nextRoles.splice(slotIndex, 1)
+  const nextAssigned = slot.assigned
+    ? activityResourceState.value.assigned_personnel.filter(p => p.id !== slot.assigned!.id)
+    : [...activityResourceState.value.assigned_personnel]
+  const next: ActivityResourcesData = {
+    ...activityResourceState.value,
+    personnel_roles_required: nextRoles,
+    assigned_personnel: nextAssigned
+  }
+  await saveResourceState(next)
+  ElMessage.success('岗位名额已删除')
+}
+
+const startPersonnelAssign = (slotIndex: number) => {
+  activePersonnelAssignIndex.value = slotIndex
+}
+
+const cancelPersonnelAssign = () => {
+  activePersonnelAssignIndex.value = null
+}
+
+const confirmPersonnelAssign = async (slotIndex: number) => {
+  const personId = personnelSlotSelection.value[slotIndex]
+  if (!personId) return
+  const person = allPersonnel.value.find((p) => p.id === personId)
+  const slot = personnelSlots.value.find(s => s.index === slotIndex)
+  if (!person || !slot) return
+  const nextAssigned = [...activityResourceState.value.assigned_personnel]
+  if (slot.assigned) {
+    const oldIndex = nextAssigned.findIndex(item => item.id === slot.assigned!.id)
+    if (oldIndex >= 0) nextAssigned.splice(oldIndex, 1)
+  }
+  nextAssigned.push({ id: person.id, name: person.name, role: slot.role })
+  const next: ActivityResourcesData = {
+    ...activityResourceState.value,
+    assigned_personnel: nextAssigned
+  }
+  await saveResourceState(next)
+  delete personnelSlotSelection.value[slotIndex]
+  activePersonnelAssignIndex.value = null
+  ElMessage.success('人员已分配')
+}
+
+const removePersonnel = async (id: string) => {
+  const next: ActivityResourcesData = {
+    ...activityResourceState.value,
+    assigned_personnel: activityResourceState.value.assigned_personnel.filter(p => p.id !== id)
+  }
+  await saveResourceState(next)
+  ElMessage.success('人员已移除')
+}
+
+const addEquipmentRequirement = async () => {
+  if (!selectedEquipmentSpec.value) return
+  const next: ActivityResourcesData = {
+    ...activityResourceState.value,
+    equipment_types_required: [...(activityResourceState.value.equipment_types_required || []), selectedEquipmentSpec.value]
+  }
+  await saveResourceState(next)
+  selectedEquipmentSpec.value = ''
+  ElMessage.success('设备名额已增加')
+}
+
+const removeEquipmentRequirement = async (slotIndex: number) => {
+  const slot = equipmentSlots.value.find(s => s.index === slotIndex)
+  if (!slot) return
+  const nextTypes = [...(activityResourceState.value.equipment_types_required || [])]
+  nextTypes.splice(slotIndex, 1)
+  const nextAssigned = slot.assigned
+    ? activityResourceState.value.assigned_equipment.filter(e => e.id !== slot.assigned!.id)
+    : [...activityResourceState.value.assigned_equipment]
+  const next: ActivityResourcesData = {
+    ...activityResourceState.value,
+    equipment_types_required: nextTypes,
+    assigned_equipment: nextAssigned
+  }
+  await saveResourceState(next)
+  ElMessage.success('设备名额已删除')
+}
+
+const startEquipmentAssign = (slotIndex: number) => {
+  activeEquipmentAssignIndex.value = slotIndex
+}
+
+const cancelEquipmentAssign = () => {
+  activeEquipmentAssignIndex.value = null
+}
+
+const confirmEquipmentAssign = async (slotIndex: number) => {
+  const equipmentId = equipmentSlotSelection.value[slotIndex]
+  if (!equipmentId) return
+  const equipment = allResources.value.find((r) => r.id === equipmentId)
+  const slot = equipmentSlots.value.find(s => s.index === slotIndex)
+  if (!equipment || !slot) return
+  const nextAssigned = [...activityResourceState.value.assigned_equipment]
+  if (slot.assigned) {
+    const oldIndex = nextAssigned.findIndex(item => item.id === slot.assigned!.id)
+    if (oldIndex >= 0) nextAssigned.splice(oldIndex, 1)
+  }
+  nextAssigned.push({ id: equipment.id, name: equipment.name, specification: slot.specification })
+  const next: ActivityResourcesData = {
+    ...activityResourceState.value,
+    assigned_equipment: nextAssigned
+  }
+  await saveResourceState(next)
+  delete equipmentSlotSelection.value[slotIndex]
+  activeEquipmentAssignIndex.value = null
+  ElMessage.success('设备已分配')
+}
+
+const removeEquipment = async (id: string) => {
+  const next: ActivityResourcesData = {
+    ...activityResourceState.value,
+    assigned_equipment: activityResourceState.value.assigned_equipment.filter(e => e.id !== id)
+  }
+  await saveResourceState(next)
+  ElMessage.success('设备已移除')
+}
+
+const assignMaterial = async () => {
+  if (!selectedMaterialId.value) return
+  const material = allResources.value.find((r) => r.id === selectedMaterialId.value)
+  if (!material) return
+  const existsIndex = activityResourceState.value.consumed_resources.findIndex(
+    item => item.resource_id === selectedMaterialId.value
+  )
+  const nextConsumed = [...activityResourceState.value.consumed_resources]
+  if (existsIndex >= 0) {
+    nextConsumed[existsIndex] = {
+      ...nextConsumed[existsIndex],
+      rate: selectedMaterialRate.value,
+      name: material.name
+    }
+  } else {
+    nextConsumed.push({
+      resource_id: material.id,
+      name: material.name,
+      rate: selectedMaterialRate.value
+    })
+  }
+  const next: ActivityResourcesData = {
+    ...activityResourceState.value,
+    consumed_resources: nextConsumed
+  }
+  await saveResourceState(next)
+  selectedMaterialId.value = ''
+  selectedMaterialRate.value = 1
+  ElMessage.success('原料分配成功')
+}
+
+const removeMaterial = async (resourceId: string) => {
+  const next: ActivityResourcesData = {
+    ...activityResourceState.value,
+    consumed_resources: activityResourceState.value.consumed_resources.filter(m => m.resource_id !== resourceId)
+  }
+  await saveResourceState(next)
+  ElMessage.success('原料已移除')
+}
+
 watch(
   () => props.activity,
   (next) => {
@@ -633,6 +1125,9 @@ watch(
 
 watch(activeTab, async (tab) => {
   if (tab === 'risks') await loadActivityRisks()
+  if (tab === 'resources') {
+    await Promise.all([loadResourceDictionaries(), loadResourceData()])
+  }
 })
 
 const saveActivityEdit = async () => {
