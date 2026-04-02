@@ -438,13 +438,13 @@
                           :disabled="!selectedMaterialId"
                           @click="assignMaterial"
                         >
-                          <Check size="16" />
+                          <span class="block w-4 text-center text-sm font-bold leading-none">✓</span>
                         </button>
                         <button
-                          class="p-2 bg-white text-slate-400 rounded-lg border border-slate-200 hover:bg-slate-50"
+                          class="p-2 bg-red-500 text-white rounded-lg shadow-sm hover:bg-red-600"
                           @click="cancelMaterialAssign"
                         >
-                          <X size="16" />
+                          <span class="block w-4 text-center text-sm font-bold leading-none">✕</span>
                         </button>
                       </div>
                     </div>
