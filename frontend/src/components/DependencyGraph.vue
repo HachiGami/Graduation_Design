@@ -112,6 +112,76 @@ import { sumSopStepDurations } from '@/utils/sopDuration'
 
 cytoscape.use(fcose)
 
+/** 仅用于 ELK 牵引的不可见边：将同流程孤立活动串链并挂到锚点，避免被排离主图 */
+function buildDummyLayoutEdges(
+  nodes: Array<{ id: string; process_id?: string }>,
+  realEdges: Array<{ source: string; target: string }>
+): Array<{ id: string; source: string; target: string }> {
+  const touched = new Set<string>()
+  for (const e of realEdges) {
+    touched.add(e.source)
+    touched.add(e.target)
+  }
+
+  const outDegree = new Map<string, number>()
+  for (const n of nodes) {
+    outDegree.set(n.id, 0)
+  }
+  for (const e of realEdges) {
+    outDegree.set(e.source, (outDegree.get(e.source) ?? 0) + 1)
+  }
+
+  const byProcess = new Map<string, typeof nodes>()
+  for (const n of nodes) {
+    const pid = n.process_id ?? '__no_process__'
+    if (!byProcess.has(pid)) byProcess.set(pid, [])
+    byProcess.get(pid)!.push(n)
+  }
+
+  const dummies: Array<{ id: string; source: string; target: string }> = []
+  let idx = 0
+
+  for (const groupNodes of byProcess.values()) {
+    const sortedGroup = [...groupNodes].sort((a, b) => a.id.localeCompare(b.id))
+    const isolated = sortedGroup.filter(n => !touched.has(n.id))
+    const connected = sortedGroup.filter(n => touched.has(n.id))
+
+    if (isolated.length === 0) continue
+
+    const chain = [...isolated].sort((a, b) => a.id.localeCompare(b.id))
+
+    if (connected.length === 0) {
+      for (let i = 0; i < chain.length - 1; i++) {
+        dummies.push({
+          id: `dummy_edge_${idx++}`,
+          source: chain[i].id,
+          target: chain[i + 1].id
+        })
+      }
+      continue
+    }
+
+    const connectedSorted = [...connected].sort((a, b) => a.id.localeCompare(b.id))
+    const anchor =
+      connectedSorted.find(n => (outDegree.get(n.id) ?? 0) === 0) ?? connectedSorted[0]
+
+    dummies.push({
+      id: `dummy_edge_${idx++}`,
+      source: anchor.id,
+      target: chain[0].id
+    })
+    for (let i = 0; i < chain.length - 1; i++) {
+      dummies.push({
+        id: `dummy_edge_${idx++}`,
+        source: chain[i].id,
+        target: chain[i + 1].id
+      })
+    }
+  }
+
+  return dummies
+}
+
 const props = defineProps<{
   data: GraphData
   highlightActive?: boolean
@@ -235,16 +305,23 @@ const handleEditResource = () => {
 const initCytoscape = async () => {
   if (!chartRef.value) return
 
+  const realEdgesForLayout = props.data.edges.map(e => ({
+    source: e.source,
+    target: e.target
+  }))
+  const dummyLayoutEdges = buildDummyLayoutEdges(props.data.nodes, realEdgesForLayout)
+  const edgesForELK = [
+    ...realEdgesForLayout,
+    ...dummyLayoutEdges
+  ]
+
   const layoutResult = await computeELKLayout(
-    props.data.nodes.map(n => ({ 
-      id: n.id, 
-      width: 100, 
-      height: 60 
+    props.data.nodes.map(n => ({
+      id: n.id,
+      width: 100,
+      height: 60
     })),
-    props.data.edges.map(e => ({ 
-      source: e.source, 
-      target: e.target 
-    })),
+    edgesForELK,
     {
       direction: 'RIGHT',
       nodeSpacing: 100,
@@ -257,8 +334,8 @@ const initCytoscape = async () => {
       const pos = layoutResult.positions.get(node.id)
       const statusClass = node.status ? `status-${node.status}` : ''
       return {
-        data: { 
-          id: node.id, 
+        data: {
+          id: node.id,
           label: node.name,
           nodeType: 'activity',
           rawData: node
@@ -268,19 +345,28 @@ const initCytoscape = async () => {
       }
     }),
     ...props.data.edges.map(edge => ({
-      data: { 
+      data: {
         id: `${edge.source}-${edge.target}`,
-        source: edge.source, 
+        source: edge.source,
         target: edge.target,
         label: edge.type || '',
-        crossDomain: edge.source && edge.target && 
-          props.data.nodes.find(n => n.id === edge.source)?.domain !== 
+        crossDomain: edge.source && edge.target &&
+          props.data.nodes.find(n => n.id === edge.source)?.domain !==
           props.data.nodes.find(n => n.id === edge.target)?.domain,
         rawData: edge
       },
-      classes: edge.source && edge.target && 
-        props.data.nodes.find(n => n.id === edge.source)?.domain !== 
+      classes: edge.source && edge.target &&
+        props.data.nodes.find(n => n.id === edge.source)?.domain !==
         props.data.nodes.find(n => n.id === edge.target)?.domain ? 'cross-domain' : ''
+    })),
+    ...dummyLayoutEdges.map(de => ({
+      data: {
+        id: de.id,
+        source: de.source,
+        target: de.target,
+        dummy: true
+      },
+      classes: 'dummy-edge'
     }))
   ]
 
@@ -406,6 +492,24 @@ const initCytoscape = async () => {
         selector: 'edge.dimmed',
         style: {
           'opacity': 0.2
+        }
+      },
+      {
+        selector: 'edge.dummy-edge',
+        style: {
+          'opacity': 0,
+          'events': 'no',
+          'width': 1,
+          'line-color': 'transparent',
+          'target-arrow-color': 'transparent'
+        }
+      },
+      {
+        selector: 'edge.dummy-edge.dimmed, edge.dummy-edge.highlighted',
+        style: {
+          'opacity': 0,
+          'line-color': 'transparent',
+          'target-arrow-color': 'transparent'
         }
       }
     ],
