@@ -1,56 +1,67 @@
 <template>
-  <div class="material-dashboard">
-    <div class="dashboard-header">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h2 style="margin: 0;">原料管理面板</h2>
-        <el-button type="primary" :icon="Plus" @click="openAddMaterialDialog">添加原料</el-button>
-      </div>
-      <div class="filters-container">
-        <el-input
-          v-model="searchQuery"
-          placeholder="按原料名称搜索"
-          clearable
-          class="filter-item search-input"
-          :prefix-icon="Search"
-        />
-        
-        <el-select v-model="sortBy" placeholder="排序方式" class="filter-item">
-          <el-option label="默认排序" value="default" />
-          <el-option label="存储量 (正序)" value="quantity_asc" />
-          <el-option label="存储量 (倒序)" value="quantity_desc" />
-          <el-option label="消耗速率 (正序)" value="consumption_asc" />
-          <el-option label="消耗速率 (倒序)" value="consumption_desc" />
-        </el-select>
-        
-        <el-select v-model="stockFilter" placeholder="库存状态" class="filter-item">
-          <el-option label="全部 (ALL)" value="ALL" />
-          <el-option label="库存不足 (SHORTAGE)" value="SHORTAGE" />
-          <el-option label="库存充足 (SUFFICIENT)" value="SUFFICIENT" />
-        </el-select>
-        
-        <el-select v-model="processFilter" placeholder="流程筛选" class="filter-item" clearable>
-          <el-option
-            v-for="(name, id) in processMap"
-            :key="id"
-            :label="`${id} - ${name}`"
-            :value="id"
+  <div class="h-full flex flex-col p-5">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden">
+      <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-2xl z-10 relative">
+        <div class="flex items-center space-x-3">
+          <el-input
+            v-model="searchQuery"
+            placeholder="按原料名称搜索"
+            clearable
+            class="!w-64"
+            :prefix-icon="Search"
           />
-        </el-select>
+          <el-select v-model="sortBy" placeholder="排序方式" class="!w-52">
+            <el-option label="默认排序" value="default" />
+            <el-option label="存储量 (正序)" value="quantity_asc" />
+            <el-option label="存储量 (倒序)" value="quantity_desc" />
+            <el-option label="消耗速率 (正序)" value="consumption_asc" />
+            <el-option label="消耗速率 (倒序)" value="consumption_desc" />
+          </el-select>
+          <el-select v-model="stockFilter" placeholder="库存状态" class="!w-52">
+            <el-option label="ALL" value="ALL" />
+            <el-option label="SHORTAGE" value="SHORTAGE" />
+            <el-option label="SUFFICIENT" value="SUFFICIENT" />
+          </el-select>
+          <el-select v-model="processFilter" placeholder="流程筛选" class="!w-52" clearable>
+            <el-option
+              v-for="(name, id) in processMap"
+              :key="id"
+              :label="`${id} - ${name}`"
+              :value="id"
+            />
+          </el-select>
+        </div>
+        <el-button
+          @click="openAddMaterialDialog"
+          class="!px-5 !py-2 !bg-blue-600 !text-white !text-sm !font-bold !rounded-lg hover:!bg-blue-700 !shadow-sm !transition-colors !border-0"
+        >
+          + 添加原料
+        </el-button>
       </div>
-    </div>
 
-    <div class="dashboard-content" v-loading="loading">
-      <div v-if="processedMaterials.length === 0" class="empty-state">
-        <el-empty description="暂无符合条件的原料数据" />
-      </div>
-      <div v-else class="material-list">
-        <MaterialAccordionItem
-          v-for="material in processedMaterials"
-          :key="material._id"
-          :material="material"
-          @replenish="openReplenishDialog"
-          @edit="openEditDialog"
-        />
+      <div class="flex-1 overflow-y-auto" v-loading="loading">
+        <div
+          class="flex px-9 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider items-center sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 z-10"
+        >
+          <div class="w-8"></div>
+          <div class="flex-1">原料信息与库存</div>
+          <div class="w-48">总消耗速度</div>
+          <div class="w-48">预估可用时长</div>
+          <div class="w-32 text-right">操作</div>
+        </div>
+
+        <div v-if="processedMaterials.length === 0" class="h-full flex items-center justify-center">
+          <el-empty description="暂无符合条件的原料数据" />
+        </div>
+        <div v-else class="flex flex-col">
+          <MaterialAccordionItem
+            v-for="material in processedMaterials"
+            :key="material._id"
+            :material="material"
+            @replenish="openReplenishDialog"
+            @edit="openEditDialog"
+          />
+        </div>
       </div>
     </div>
 
@@ -65,7 +76,7 @@
         </el-form-item>
         <el-form-item label="变动数量" required>
           <el-input-number v-model="replenishForm.change_amount" :step="1" />
-          <div class="stock-change-tip">输入正数增加库存，输入负数减少库存</div>
+          <div class="mt-1.5 text-xs text-slate-400">输入正数增加库存，输入负数减少库存</div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -87,7 +98,7 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <div style="display: flex; justify-content: space-between; width: 100%;">
+        <div class="w-full flex justify-between">
           <el-button type="danger" @click="handleDeleteMaterial">删除该原料</el-button>
           <div>
             <el-button @click="editDialogVisible = false">取消</el-button>
@@ -117,7 +128,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { Search, Plus } from '@element-plus/icons-vue';
+import { Search } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
 import MaterialAccordionItem from '../components/MaterialAccordionItem.vue';
@@ -339,62 +350,3 @@ const submitAddMaterial = async () => {
   }
 };
 </script>
-
-<style scoped>
-.material-dashboard {
-  padding: 20px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.dashboard-header {
-  margin-bottom: 20px;
-}
-
-.dashboard-header h2 {
-  margin: 0 0 16px 0;
-  color: #303133;
-}
-
-.filters-container {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.filter-item {
-  width: 200px;
-}
-
-.search-input {
-  width: 250px;
-}
-
-.dashboard-content {
-  flex: 1;
-  overflow-y: auto;
-  background: #fff;
-  border-radius: 8px;
-  padding: 16px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
-}
-
-.empty-state {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100%;
-}
-
-.material-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.stock-change-tip {
-  margin-top: 6px;
-  color: #909399;
-  font-size: 12px;
-}
-</style>

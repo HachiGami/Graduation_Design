@@ -1,66 +1,109 @@
 <template>
-  <div class="material-accordion-item">
-    <div class="accordion-header" @click="toggle" :class="{ 'is-open': isOpen }">
-      <div class="header-left">
-        <span class="material-name">{{ material.name }}</span>
-        <span class="material-quantity">{{ material.quantity }} {{ material.unit }}</span>
-        <el-tag 
-          v-if="material.remaining_days > 0 && material.remaining_days <= 7" 
-          type="danger" 
-          effect="dark" 
-          size="small"
-          class="warning-tag"
-        >
-          会在 {{ material.remaining_days.toFixed(1) }} 天内耗尽
-        </el-tag>
+  <div class="border-b border-slate-100">
+    <div class="flex px-9 py-4 items-center cursor-pointer hover:bg-slate-50/70 transition-colors" @click="toggle">
+      <div class="w-8 flex items-center justify-center">
+        <el-icon class="text-slate-400 transition-transform duration-300" :class="{ 'rotate-90': isOpen }">
+          <ArrowRight />
+        </el-icon>
       </div>
-      <div class="header-right">
-        <el-icon class="toggle-icon" :class="{ 'is-rotated': isOpen }"><ArrowRight /></el-icon>
+      <div class="flex-1 flex items-center">
+        <div
+          class="w-10 h-10 rounded-lg border flex items-center justify-center mr-3"
+          :class="material.remaining_days > 0 && material.remaining_days <= 7 ? 'bg-red-50 text-red-500 border-red-100' : 'bg-slate-100 text-slate-500 border-slate-200'"
+        >
+          <el-icon><Box /></el-icon>
+        </div>
+        <div class="flex flex-col">
+          <div class="text-base font-bold text-slate-800">{{ material.name }}</div>
+          <div class="flex items-end gap-1">
+            <span class="text-base font-black text-slate-700">{{ material.quantity }}</span>
+            <span class="text-xs font-bold text-slate-500">{{ material.unit }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="w-48">
+        <div class="text-sm font-bold text-slate-700">
+          {{ material.daily_consumption }}
+          <span class="text-xs text-slate-400">{{ material.unit }}/天</span>
+        </div>
+      </div>
+      <div class="w-48">
+        <span
+          v-if="material.remaining_days > 0 && material.remaining_days <= 7"
+          class="flex items-center px-2.5 py-1 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-bold shadow-sm w-fit"
+        >
+          <div class="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5 animate-pulse"></div>
+          仅剩 {{ material.remaining_days }} 天
+        </span>
+        <span v-else class="text-xs font-bold text-slate-400 flex items-center">
+          <el-icon class="mr-1 text-emerald-400"><Select /></el-icon>
+          充足
+        </span>
+      </div>
+      <div class="w-32 flex justify-end space-x-1">
+        <button
+          type="button"
+          class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-100"
+          @click.stop="handleReplenish"
+        >
+          <el-icon><Operation /></el-icon>
+        </button>
+        <button
+          type="button"
+          class="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+          @click.stop="handleEdit"
+        >
+          <el-icon><Edit /></el-icon>
+        </button>
+        <button
+          type="button"
+          class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+          @click.stop="handleEdit"
+        >
+          <el-icon><Delete /></el-icon>
+        </button>
       </div>
     </div>
-    
+
     <el-collapse-transition>
-      <div v-show="isOpen" class="accordion-body">
-        <div class="info-section">
-          <div class="info-item">
-            <span class="label">总消耗速度:</span>
-            <span class="value">{{ material.daily_consumption != null ? Number(material.daily_consumption).toFixed(2) : '暂无' }} {{ material.unit }}/天</span>
+      <div v-show="isOpen" class="bg-[#f8fafc] border-t border-blue-100 shadow-[inset_0_4px_6px_-6px_rgba(0,0,0,0.1)] p-6 px-12">
+        <h4 class="text-sm font-bold text-slate-700 mb-4 flex items-center">
+          <el-icon class="mr-2 text-blue-500"><DataAnalysis /></el-icon>
+          正在使用的关联活动
+        </h4>
+        <div v-if="material.serving_activities_details && material.serving_activities_details.length > 0">
+          <div
+            v-for="(task, index) in material.serving_activities_details"
+            :key="index"
+            class="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-2 shadow-sm hover:border-blue-200 transition-colors mb-3"
+          >
+            <div class="flex items-center">
+              <div class="w-6 h-6 rounded bg-indigo-50 flex items-center justify-center mr-2 text-indigo-500">
+                <el-icon><Link /></el-icon>
+              </div>
+              <span class="font-bold text-slate-800 text-sm mr-3">{{ task.activity_name }}</span>
+              <span class="px-2 py-0.5 text-[10px] font-bold border rounded bg-emerald-50 text-emerald-600 border-emerald-200">进行中</span>
+              <div class="ml-3 flex items-center text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                <el-icon class="mr-1.5 text-blue-500"><Share /></el-icon>
+                {{ task.process || formatProcessName(task.process_id) }}
+              </div>
+            </div>
+
+            <div class="flex items-center text-xs font-medium text-blue-600 ml-8 bg-blue-50/50 w-fit px-2 py-1 rounded">
+              消耗速率:
+              <span class="font-bold mx-1">{{ task.hourly_rate ?? task.rate ?? task.hourly_consumption ?? '0.00' }}</span>
+              {{ material.unit }}/小时，
+              共计
+              <span class="font-bold mx-1">{{ task.daily_rate ?? computeDailyConsumption(task).toFixed(1) }}</span>
+              {{ material.unit }}/天
+            </div>
           </div>
-          <div class="info-item">
-            <span class="label">预估可运行时间:</span>
-            <span class="value">{{ material.remaining_days == null ? '暂无' : (material.remaining_days === -1 ? '充足' : Number(material.remaining_days).toFixed(1) + ' 天') }}</span>
-          </div>
         </div>
-        
-        <div class="activities-section" v-if="material.serving_activities_details && material.serving_activities_details.length > 0">
-          <div class="section-title">正在使用的活动:</div>
-          <ul class="activity-list">
-            <li v-for="(detail, index) in material.serving_activities_details" :key="index">
-              <span class="act-name">
-                {{ detail.activity_name }}
-                <el-tag
-                  size="small"
-                  :type="getActivityStatusType(detail.status)"
-                  class="activity-status-tag"
-                >
-                  {{ getActivityStatusLabel(detail.status) }}
-                </el-tag>
-                <span class="act-process">(归属: {{ formatProcessName(detail.process_id) }})</span>
-              </span>
-              <span class="act-rate">
-                消耗速率: {{ detail.rate != null ? Number(detail.rate).toFixed(2) : (detail.hourly_consumption != null ? Number(detail.hourly_consumption).toFixed(2) : '0.00') }} {{ material.unit }}/小时,
-                共 {{ computeDailyConsumption(detail).toFixed(1) }} {{ material.unit }}/天
-              </span>
-            </li>
-          </ul>
-        </div>
-        <div class="activities-section" v-else>
-          <div class="empty-text">无关联活动，空闲</div>
-        </div>
-        
-        <div class="actions-section">
-          <el-button type="primary" size="small" :icon="Operation" @click.stop="handleReplenish">修改库存</el-button>
-          <el-button type="default" size="small" @click.stop="handleEdit">✏️ 编辑</el-button>
+        <div
+          v-else
+          class="py-8 border-2 border-dashed border-slate-200 rounded-xl text-center text-sm font-medium text-slate-400"
+        >
+          该原料当前未分配给任何进行中的活动，处于空闲状态
         </div>
       </div>
     </el-collapse-transition>
@@ -69,7 +112,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { ArrowRight, Operation } from '@element-plus/icons-vue';
+import { ArrowRight, Box, DataAnalysis, Delete, Edit, Link, Operation, Select, Share } from '@element-plus/icons-vue';
 
 const props = defineProps({
   material: {
@@ -130,21 +173,6 @@ const computeDailyConsumption = (detail: any): number => {
   return Number(rate || 0) * totalHours;
 };
 
-const getActivityStatusType = (status: string) => {
-  const normalized = (status || '').toLowerCase();
-  if (normalized === 'in_progress' || normalized === '进行中') return 'success';
-  if (normalized === 'stopped' || normalized === '已停机') return 'danger';
-  return 'info';
-};
-
-const getActivityStatusLabel = (status: string) => {
-  const normalized = (status || '').toLowerCase();
-  if (normalized === 'in_progress' || normalized === '进行中') return '进行中';
-  if (normalized === 'stopped' || normalized === '已停机') return '已停机';
-  if (normalized === 'pending' || normalized === '待机') return '待机中';
-  return status || '未知状态';
-};
-
 const emit = defineEmits(['replenish', 'edit']);
 
 const isOpen = ref(false);
@@ -161,145 +189,3 @@ const handleEdit = () => {
   emit('edit', props.material);
 };
 </script>
-
-<style scoped>
-.material-accordion-item {
-  border: 1px solid #ebeef5;
-  border-radius: 4px;
-  margin-bottom: 10px;
-  background-color: #fff;
-  overflow: hidden;
-}
-
-.accordion-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  cursor: pointer;
-  background-color: #f8f9fa;
-  transition: background-color 0.3s;
-}
-
-.accordion-header:hover {
-  background-color: #f0f2f5;
-}
-
-.accordion-header.is-open {
-  border-bottom: 1px solid #ebeef5;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.material-name {
-  font-weight: bold;
-  font-size: 16px;
-  color: #303133;
-}
-
-.material-quantity {
-  color: #606266;
-  font-size: 14px;
-}
-
-.warning-tag {
-  margin-left: 8px;
-}
-
-.toggle-icon {
-  transition: transform 0.3s;
-  color: #909399;
-}
-
-.toggle-icon.is-rotated {
-  transform: rotate(90deg);
-}
-
-.accordion-body {
-  padding: 16px;
-}
-
-.info-section {
-  display: flex;
-  gap: 24px;
-  margin-bottom: 16px;
-}
-
-.info-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.info-item .label {
-  color: #909399;
-  font-size: 14px;
-}
-
-.info-item .value {
-  color: #303133;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.section-title {
-  font-size: 14px;
-  font-weight: bold;
-  color: #606266;
-  margin-bottom: 8px;
-}
-
-.activity-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 16px 0;
-  background-color: #f5f7fa;
-  border-radius: 4px;
-  padding: 8px 12px;
-}
-
-.activity-list li {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 0;
-  font-size: 13px;
-  color: #606266;
-}
-
-.act-process {
-  font-size: 12px;
-  color: #909399;
-  margin-left: 4px;
-}
-
-.activity-status-tag {
-  margin-left: 8px;
-}
-
-.act-rate {
-  font-size: 12px;
-  color: #409eff;
-}
-
-.activity-list li:not(:last-child) {
-  border-bottom: 1px dashed #ebeef5;
-}
-
-.empty-text {
-  color: #909399;
-  font-size: 13px;
-  margin-bottom: 16px;
-  font-style: italic;
-}
-
-.actions-section {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-</style>
