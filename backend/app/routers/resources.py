@@ -128,7 +128,7 @@ async def _enrich_with_neo4j(resources: list, db, driver) -> None:
         async with driver.session() as session:
             result = await session.run(
                 """
-                MATCH (a:Activity)-[r:USES|CONSUMES]->(e:Equipment)
+                MATCH (a:Activity)-[r:USES|CONSUMES]->(e)
                 WHERE e.id IN $ids OR e.name IN $names
                 RETURN e.id AS entity_id,
                        e.name AS entity_name,
@@ -178,11 +178,14 @@ async def _enrich_with_neo4j(resources: list, db, driver) -> None:
                     "activity_name": activity_name,
                     "activity_id": rec.get("activity_id", ""),
                     "process_id": process_id,
+                    "process": process_id,
                     "status": status,
                     "working_hours": working_hours,
                     "rate": rate,
+                    "hourly_rate": rate,
                     "hourly_consumption": rate,
                     "daily_consumption": daily_consumption,
+                    "daily_rate": daily_consumption,
                 }
             )
     except Exception as e:
