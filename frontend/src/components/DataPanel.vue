@@ -46,7 +46,6 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="estimated_duration" label="预估时长(分钟)" width="140" />
           <el-table-column label="合规状态" width="100">
             <template #default="scope">
               <span class="compliance-indicator">
@@ -224,7 +223,7 @@
                 {{ getStatusText(currentItem.status) }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="预估时长">{{ currentItem.estimated_duration }} 分钟</el-descriptions-item>
+            <el-descriptions-item label="SOP 合计时长(分钟)">{{ activitySopTotalMinutes }}</el-descriptions-item>
             <el-descriptions-item label="描述" :span="2">{{ currentItem.description }}</el-descriptions-item>
           </el-descriptions>
 
@@ -238,9 +237,6 @@
                 <el-option label="进行中" value="in_progress" />
                 <el-option label="已完成" value="completed" />
               </el-select>
-            </el-form-item>
-            <el-form-item label="预估时长">
-              <el-input-number v-model="editForm.estimated_duration" :min="0" />
             </el-form-item>
             <el-form-item label="描述">
               <el-input v-model="editForm.description" type="textarea" :rows="3" />
@@ -512,6 +508,7 @@ import { getActivities, batchUpdateStatus as batchUpdateStatusApi, getActivityDe
 import { getAssets } from '@/api/asset'
 import { getPersonnel } from '@/api/personnel'
 import type { ActivityDetails, ComplianceCheckResult } from '@/types'
+import { sumSopStepDurations } from '@/utils/sopDuration'
 
 interface RiskItem {
   risk_type: 'material_shortage' | 'allocation_shortage' | 'upcoming_absence'
@@ -537,7 +534,6 @@ interface Activity {
   name: string
   description: string
   sop_steps: string[]
-  estimated_duration: number
   status: string
   compliance_status?: 'compliant' | 'partial' | 'non_compliant'
 }
@@ -581,6 +577,12 @@ const isEditing = ref(false)
 const currentType = ref<'activity' | 'personnel' | 'equipment' | 'material' | null>(null)
 const currentItem = ref<any>(null)
 const editForm = ref<any>({})
+
+const activitySopTotalMinutes = computed(() =>
+  currentType.value === 'activity' && currentItem.value
+    ? sumSopStepDurations(currentItem.value.sop_steps)
+    : 0
+)
 
 // 分流程选择器状态
 const selectedDomain = ref('dairy_production')

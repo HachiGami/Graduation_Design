@@ -73,9 +73,6 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="预计时长(分)" required>
-          <el-input-number v-model="addActivityForm.estimated_duration" :min="1" style="width: 100%" />
-        </el-form-item>
         <el-form-item label="初始状态">
           <el-select v-model="addActivityForm.status" style="width: 100%">
             <el-option label="待机" value="pending" />
@@ -184,7 +181,6 @@ const defaultAddActivityForm = () => ({
   description: '',
   process_id: 'P001',
   predecessor_ids: [] as string[],
-  estimated_duration: 60,
   status: 'pending' as 'pending' | 'in_progress',
   sop_steps: [],
   working_hours: [

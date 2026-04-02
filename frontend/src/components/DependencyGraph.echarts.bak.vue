@@ -22,7 +22,7 @@
           <el-descriptions-item label="状态">
             <el-tag :type="getStatusType(selectedActivity.status)">{{ selectedActivity.status }}</el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="预计时长">{{ selectedActivity.estimated_duration }}分钟</el-descriptions-item>
+          <el-descriptions-item label="SOP 合计时长">{{ graphDrawerSopTotalMinutes }} 分钟</el-descriptions-item>
           <el-descriptions-item label="描述">{{ selectedActivity.description || '无' }}</el-descriptions-item>
         </el-descriptions>
       </div>
@@ -31,10 +31,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import * as echarts from 'echarts'
 import dagre from 'dagre'
 import type { GraphData } from '@/types'
+import { sumSopStepDurations } from '@/utils/sopDuration'
 
 const props = defineProps<{
   data: GraphData
@@ -51,6 +52,9 @@ let chartInstance: echarts.ECharts | null = null
 const expandedActivities = ref<Set<string>>(new Set())
 const detailDrawerVisible = ref(false)
 const selectedActivity = ref<any>(null)
+const graphDrawerSopTotalMinutes = computed(() =>
+  selectedActivity.value ? sumSopStepDurations(selectedActivity.value.sop_steps) : 0
+)
 
 // T5: 高亮状态管理
 // let currentHoverNode: string | null = null

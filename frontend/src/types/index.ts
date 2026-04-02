@@ -108,7 +108,8 @@ export interface Activity {
   description: string
   activity_type?: string
   sop_steps: SOPStep[]
-  estimated_duration: number
+  /** @deprecated 由后端根据 SOP 计算，前端不再手动维护或提交 */
+  estimated_duration?: number
   duration_minutes?: number
   deadline?: string
   required_resources: string[]
@@ -234,7 +235,8 @@ export interface ActivityDetails {
   status: string
   process_id: string
   domain: string
-  estimated_duration: number
+  /** @deprecated 由后端根据 SOP 计算 */
+  estimated_duration?: number
   material_requirements: MaterialRequirement[]
   personnel_requirements: PersonnelRequirement[]
   equipment_requirements: EquipmentRequirement[]

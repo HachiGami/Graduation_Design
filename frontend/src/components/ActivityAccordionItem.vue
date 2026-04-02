@@ -330,9 +330,9 @@ const loadAllActivitiesForPredecessor = async () => {
 
 const activityId = computed(() => localActivity.value.id || '')
 const totalSopDuration = computed(() => {
-  if (!localActivity.value.sop_steps || localActivity.value.sop_steps.length === 0) return localActivity.value.estimated_duration || 0;
-  return localActivity.value.sop_steps.reduce((sum, step) => sum + (step.duration || 0), 0);
-});
+  if (!localActivity.value.sop_steps || localActivity.value.sop_steps.length === 0) return 0
+  return localActivity.value.sop_steps.reduce((sum, step) => sum + (step.duration || 0), 0)
+})
 const workingHoursText = computed(() => {
   const windows = localActivity.value.working_hours || []
   if (windows.length === 0) return '未配置'
@@ -472,8 +472,7 @@ const saveSopEdit = async () => {
   try {
     const payload = {
       description: sopEditForm.value.description,
-      sop_steps: sopEditForm.value.sop_steps,
-      estimated_duration: currentSopTotalDuration.value
+      sop_steps: sopEditForm.value.sop_steps
     }
     await updateActivity(activityId.value, payload)
     ElMessage.success('SOP 已更新')

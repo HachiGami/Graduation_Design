@@ -152,7 +152,7 @@
             <el-tag v-else-if="activityForm.status === 'paused'" type="warning">已暂停</el-tag>
             <el-tag v-else type="danger">已取消</el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="预计时长">{{ activityForm.estimated_duration }} 分钟</el-descriptions-item>
+          <el-descriptions-item label="SOP 合计时长">{{ sopTotalMinutesDetail }} 分钟</el-descriptions-item>
           <el-descriptions-item label="截止日期">{{ activityForm.deadline || '未设置' }}</el-descriptions-item>
           <el-descriptions-item label="流程ID">{{ activityForm.process_id }}</el-descriptions-item>
           <el-descriptions-item label="版本">{{ activityForm.version || 1 }}</el-descriptions-item>
@@ -205,10 +205,6 @@
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="activityForm.description" type="textarea" />
-        </el-form-item>
-        <el-form-item label="预计时长">
-          <el-input-number v-model="activityForm.estimated_duration" :min="0" />
-          <span style="margin-left: 10px;">分钟</span>
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="activityForm.status">
@@ -394,6 +390,7 @@ import DashboardPanel from '@/components/DashboardPanel.vue'
 import { analyzeGraph, type AnalysisScope } from '@/utils/graphAnalyzer'
 import { checkResources } from '@/utils/resourceChecker'
 import { getDynamicRisks, getRisks, type RiskItem } from '@/api/analytics'
+import { sumSopStepDurations } from '@/utils/sopDuration'
 
 const route = useRoute()
 const router = useRouter()
@@ -795,13 +792,14 @@ const activityForm = ref<Activity>({
   description: '',
   activity_type: '',
   sop_steps: [],
-  estimated_duration: 0,
   required_resources: [],
   required_personnel: [],
   status: 'pending',
   domain: 'production',
   process_id: 'P001'
 })
+
+const sopTotalMinutesDetail = computed(() => sumSopStepDurations(activityForm.value.sop_steps))
 
 // 资源对话框
 const resourceDialogVisible = ref(false)
@@ -970,11 +968,12 @@ const handleDependencySubmit = async () => {
 // 活动操作
 const handleActivitySubmit = async () => {
   try {
+    const { estimated_duration: _omit, ...payload } = activityForm.value
     if (currentActivity.value?.id) {
-      await updateActivity(currentActivity.value.id, activityForm.value)
+      await updateActivity(currentActivity.value.id, payload)
       ElMessage.success('更新成功')
     } else {
-      await createActivity(activityForm.value)
+      await createActivity(payload as Activity)
       ElMessage.success('创建成功')
     }
     activityDialogVisible.value = false

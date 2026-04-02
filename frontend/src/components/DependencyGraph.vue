@@ -28,7 +28,7 @@
           <el-descriptions-item label="状态">
             <el-tag :type="getStatusType(selectedActivity.status)">{{ getStatusName(selectedActivity.status) }}</el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="预计时长">{{ selectedActivity.estimated_duration }}分钟</el-descriptions-item>
+          <el-descriptions-item label="SOP 合计时长">{{ graphDrawerSopTotalMinutes }} 分钟</el-descriptions-item>
           <el-descriptions-item label="描述">{{ selectedActivity.description || '无' }}</el-descriptions-item>
           <el-descriptions-item label="SOP步骤" v-if="selectedActivity.sop_steps && selectedActivity.sop_steps.length > 0">
             <div v-for="(step, index) in selectedActivity.sop_steps" :key="index" style="margin-bottom: 8px;">
@@ -100,7 +100,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import cytoscape from 'cytoscape'
 import fcose from 'cytoscape-fcose'
 import { computeELKLayout } from '@/utils/elkLayout'
@@ -108,6 +108,7 @@ import type { GraphData } from '@/types'
 import { getActivity } from '@/api/activity'
 import { getPersonnelById } from '@/api/personnel'
 import { getResource } from '@/api/resource'
+import { sumSopStepDurations } from '@/utils/sopDuration'
 
 cytoscape.use(fcose)
 
@@ -129,6 +130,9 @@ let cy: any = null
 const expandedActivities = ref<Set<string>>(new Set())
 const detailDrawerVisible = ref(false)
 const selectedActivity = ref<any>(null)
+const graphDrawerSopTotalMinutes = computed(() =>
+  selectedActivity.value ? sumSopStepDurations(selectedActivity.value.sop_steps) : 0
+)
 const selectedPersonnel = ref<any>(null)
 const selectedResource = ref<any>(null)
 const personnelDrawerVisible = ref(false)
