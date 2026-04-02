@@ -1,57 +1,147 @@
 <template>
   <el-collapse-item :name="personnel.id">
     <template #title>
-      <div class="accordion-header">
-        <div class="header-left">
-          <span class="name">{{ personnel.name }}</span>
-          <el-tag size="small" type="info" class="ml-2">{{ personnel.role }}</el-tag>
-          <el-tag size="small" type="warning" class="ml-2" v-if="personnel.department">{{ personnel.department }}</el-tag>
-          <el-tag size="small" :type="personnel.status === 'active' ? 'success' : 'info'" class="ml-2">
-            {{ personnel.status === 'active' ? '在职' : '离职' }}
-          </el-tag>
-          <el-tag size="small" type="danger" class="ml-2" v-if="personnel.upcoming_leaves && personnel.upcoming_leaves.length > 0">
-            请假: {{ personnel.upcoming_leaves.join(', ') }}
-          </el-tag>
+      <div class="flex w-full items-center pr-3">
+        <div class="w-10"></div>
+
+        <div class="flex flex-1 items-center gap-3">
+          <div
+            class="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold"
+            :class="personnel.status === 'active' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'"
+          >
+            {{ (personnel.name || '?').slice(0, 1).toUpperCase() }}
+          </div>
+          <span class="text-sm font-semibold text-slate-800">{{ personnel.name }}</span>
         </div>
-        <div class="header-right" @click.stop>
-          <el-button type="warning" link icon="Calendar" @click="handleLeave">请假</el-button>
-          <el-button type="primary" link icon="Edit" @click="handleEdit">编辑</el-button>
+
+        <div class="w-48">
+          <div class="truncate text-sm text-slate-700">{{ personnel.department || '-' }}</div>
+          <div class="truncate text-xs text-slate-500">{{ personnel.role || '-' }}</div>
+        </div>
+
+        <div class="w-48 text-center">
+          <span
+            class="inline-flex min-w-[64px] items-center justify-center rounded-full px-3 py-1 text-xs font-semibold"
+            :class="personnel.status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600'"
+          >
+            {{ personnel.status === 'active' ? '在职' : '离职' }}
+          </span>
+        </div>
+
+        <div class="w-40 text-center text-sm text-slate-600">
+          {{ personnel.hire_date || '-' }}
+        </div>
+
+        <div class="w-32 flex justify-end space-x-2" @click.stop>
+          <el-button link type="primary" @click="handleEdit">
+            <el-icon :size="18"><Edit /></el-icon>
+          </el-button>
+          <el-button link type="danger" @click="handleDeletePersonnel">
+            <el-icon :size="18"><Delete /></el-icon>
+          </el-button>
         </div>
       </div>
     </template>
-    
-    <div class="accordion-body">
-      <el-descriptions border :column="3" size="small" class="detail-grid">
-        <el-descriptions-item label="年龄">{{ personnel.age || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="性别">{{ personnel.gender || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="籍贯">{{ personnel.native_place || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="入职日期">{{ personnel.hire_date || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="学历">{{ personnel.education || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="薪资">{{ personnel.salary ? `¥${personnel.salary}/月` : '-' }}</el-descriptions-item>
-      </el-descriptions>
 
-      <div class="tasks-section mt-3">
-        <h4>从事的工作 (参与的活动)</h4>
-        <el-empty v-if="!personnel.serving_activities_details || personnel.serving_activities_details.length === 0" description="目前无分配任务，待命中" :image-size="60"></el-empty>
-        <div v-else class="serving-activities-block">
-          <div
-            v-for="(act, index) in personnel.serving_activities_details"
-            :key="index"
-            class="activity-detail-row"
-          >
-            <span class="activity-name">{{ act.activity_name }}</span>
-            <el-tag size="small" :type="getActivityStatusType(act.status)">
-              {{ getActivityStatusLabel(act.status) }}
-            </el-tag>
-            <span class="activity-meta">
-              归属: {{ formatProcessName(act.process_id) }}
-            </span>
-            <span class="activity-hours" v-if="act.working_hours && act.working_hours.length > 0">
-              | 运行时间: {{ formatWorkingHours(act.working_hours) }}
-            </span>
+    <div class="rounded-xl bg-slate-50 p-4 shadow-inner">
+      <el-tabs>
+        <el-tab-pane label="当前分配任务">
+          <el-empty
+            v-if="!personnel.serving_activities_details || personnel.serving_activities_details.length === 0"
+            description="目前无分配任务，待命中"
+            :image-size="60"
+          />
+          <div v-else class="space-y-3">
+            <div
+              v-for="(act, index) in personnel.serving_activities_details"
+              :key="index"
+              class="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md"
+            >
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-500">
+                    <i class="fas fa-link text-xs"></i>
+                  </div>
+                  <span class="truncate text-sm font-semibold text-slate-800">{{ act.activity_name }}</span>
+                  <span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-600">
+                    {{ getActivityStatusLabel(act.status) }}
+                  </span>
+                </div>
+                <div class="ml-11 mt-2 flex flex-wrap items-center gap-4 text-xs">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-slate-600">
+                    <i class="fas fa-project-diagram"></i>
+                    归属: {{ formatProcessName(act.process_id) }}
+                  </span>
+                  <span
+                    v-if="act.working_hours && act.working_hours.length > 0"
+                    class="inline-flex items-center gap-1 font-medium text-blue-600"
+                  >
+                    <i class="far fa-clock"></i>
+                    运行时间: {{ formatWorkingHours(act.working_hours) }}
+                  </span>
+                </div>
+              </div>
+              <el-button class="!border-blue-200 !bg-white !text-blue-600" plain>
+                查看活动详情
+                <i class="fas fa-chevron-right ml-1 text-xs"></i>
+              </el-button>
+            </div>
           </div>
-        </div>
-      </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="员工资料">
+          <div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div class="grid grid-cols-6 border-b border-slate-200 text-sm">
+              <div class="bg-slate-100 px-3 py-2 font-medium text-slate-600">年龄</div>
+              <div class="border-l border-slate-200 px-3 py-2 text-slate-700">{{ personnel.age || '-' }}</div>
+              <div class="border-l border-slate-200 bg-slate-100 px-3 py-2 font-medium text-slate-600">性别</div>
+              <div class="border-l border-slate-200 px-3 py-2 text-slate-700">{{ personnel.gender || '-' }}</div>
+              <div class="border-l border-slate-200 bg-slate-100 px-3 py-2 font-medium text-slate-600">籍贯</div>
+              <div class="border-l border-slate-200 px-3 py-2 text-slate-700">{{ personnel.native_place || '-' }}</div>
+            </div>
+            <div class="grid grid-cols-6 text-sm">
+              <div class="bg-slate-100 px-3 py-2 font-medium text-slate-600">入职日期</div>
+              <div class="border-l border-slate-200 px-3 py-2 text-slate-700">{{ personnel.hire_date || '-' }}</div>
+              <div class="border-l border-slate-200 bg-slate-100 px-3 py-2 font-medium text-slate-600">学历</div>
+              <div class="border-l border-slate-200 px-3 py-2 text-slate-700">{{ personnel.education || '-' }}</div>
+              <div class="border-l border-slate-200 bg-slate-100 px-3 py-2 font-medium text-slate-600">薪资</div>
+              <div class="border-l border-slate-200 px-3 py-2 text-slate-700">
+                {{ personnel.salary ? `¥${personnel.salary}/月` : '-' }}
+              </div>
+            </div>
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane :label="`请假记录 (${(personnel.upcoming_leaves || []).length})`">
+          <div class="mb-3 flex justify-end">
+            <el-button type="primary" @click.stop="handleLeave">+ 添加请假记录</el-button>
+          </div>
+          <div
+            v-if="personnel.upcoming_leaves && personnel.upcoming_leaves.length > 0"
+            class="grid grid-cols-3 gap-4"
+          >
+            <div
+              v-for="(leave, idx) in personnel.upcoming_leaves"
+              :key="idx"
+              class="group flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-all hover:border-amber-400 hover:shadow-md"
+            >
+              <div class="flex items-center">
+                <div class="mr-3 flex h-8 w-8 items-center justify-center rounded-lg border border-amber-100 bg-amber-50 text-amber-500">
+                  <el-icon :size="16"><Calendar /></el-icon>
+                </div>
+                <span class="text-sm font-bold text-slate-700">{{ leave }}</span>
+              </div>
+              <el-button
+                link
+                icon="Delete"
+                class="!text-slate-300 opacity-0 transition-opacity hover:!text-red-500 group-hover:opacity-100"
+                @click.stop
+              />
+            </div>
+          </div>
+          <el-empty v-else description="暂无请假记录" :image-size="60" />
+        </el-tab-pane>
+      </el-tabs>
     </div>
 
     <!-- 编辑弹窗 -->
@@ -101,12 +191,9 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <div style="display: flex; justify-content: space-between; width: 100%;">
-          <el-button type="danger" @click="handleDeletePersonnel">删除该员工</el-button>
-          <div>
-            <el-button @click="editDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="submitEdit" :loading="submitting">保存</el-button>
-          </div>
+        <div class="flex justify-end gap-2">
+          <el-button @click="editDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitEdit" :loading="submitting">保存</el-button>
         </div>
       </template>
     </el-dialog>
@@ -115,19 +202,22 @@
     <el-dialog v-model="leaveDialogVisible" title="安排员工请假" width="400px" append-to-body>
       <el-form label-width="100px">
         <el-form-item label="请假日期">
-          <el-select
-            v-model="selectedLeaveDays"
-            multiple
-            placeholder="请选择请假日期"
-            style="width: 100%"
-          >
-            <el-option
+          <div class="flex flex-wrap gap-2.5">
+            <button
               v-for="item in leaveOptions"
               :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
+              type="button"
+              class="rounded-lg border px-4 py-2 text-sm font-bold transition-all"
+              :class="selectedLeaveDays.includes(item.value)
+                ? 'border-blue-400 bg-blue-50 text-blue-700 shadow-[0_0_0_2px_rgba(59,130,246,0.1)]'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-slate-50'"
+              @click="selectedLeaveDays.includes(item.value)
+                ? selectedLeaveDays.splice(selectedLeaveDays.indexOf(item.value), 1)
+                : selectedLeaveDays.push(item.value)"
+            >
+              {{ item.label }}
+            </button>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -142,7 +232,7 @@
 
 <script setup lang="ts">
 import { ref, PropType } from 'vue'
-import { Calendar, Edit } from '@element-plus/icons-vue'
+import { Calendar, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { updatePersonnel, deletePersonnel } from '@/api/personnel'
 import type { Personnel } from '@/types'
@@ -314,62 +404,3 @@ const handleDeletePersonnel = async () => {
   }
 }
 </script>
-
-<style scoped>
-.accordion-header {
-  display: flex;
-  justify-content: space-between;
-  align-width: center;
-  width: 100%;
-  padding-right: 10px;
-}
-.header-left {
-  display: flex;
-  align-items: center;
-}
-.name {
-  font-weight: bold;
-  font-size: 16px;
-}
-.ml-2 {
-  margin-left: 8px;
-}
-.mt-3 {
-  margin-top: 12px;
-}
-.tasks-section h4 {
-  margin: 0 0 8px 0;
-  font-size: 14px;
-  color: #606266;
-}
-.serving-activities-block {
-  margin-top: 8px;
-}
-.activity-detail-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 6px;
-}
-.activity-name {
-  flex-shrink: 0;
-  font-size: 13px;
-  color: #303133;
-  font-weight: 500;
-}
-.activity-meta {
-  font-size: 12px;
-  color: #606266;
-}
-.activity-hours {
-  font-size: 12px;
-  color: #409eff;
-}
-.tasks-section ul {
-  margin: 0;
-  padding-left: 20px;
-  color: #606266;
-  font-size: 13px;
-}
-</style>

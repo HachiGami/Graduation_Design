@@ -1,111 +1,113 @@
 <template>
-  <div class="personnel-dashboard">
-    <el-card class="filter-card">
-      <div class="filter-container">
-        <!-- 搜索框 -->
-        <div class="filter-item">
-          <span class="label">搜索:</span>
-          <el-input v-model="searchQuery" placeholder="按姓名模糊搜索" clearable style="width: 200px" />
-        </div>
+  <div class="flex h-full min-h-0 flex-col">
+    <div class="flex-1 rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-200 px-6 py-4">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div class="flex flex-wrap items-center gap-3">
+            <el-input
+              v-model="searchQuery"
+              placeholder="按姓名模糊搜索"
+              clearable
+              class="!w-64"
+            >
+              <template #prefix>
+                <i class="fas fa-search text-slate-400"></i>
+              </template>
+            </el-input>
 
-        <!-- 5个维度筛选 -->
-        <div class="filter-item">
-          <span class="label">职业:</span>
-          <el-select v-model="filters.role" placeholder="全部" clearable style="width: 120px">
-            <el-option label="全部(ALL)" value="" />
-            <el-option v-for="role in uniqueRoles" :key="role" :label="role" :value="role" />
-          </el-select>
-        </div>
+            <el-select v-model="filters.department" placeholder="部门筛选" clearable class="!w-44">
+              <el-option label="全部(ALL)" value="" />
+              <el-option v-for="dept in uniqueDepartments" :key="dept" :label="dept" :value="dept" />
+            </el-select>
 
-        <div class="filter-item">
-          <span class="label">性别:</span>
-          <el-select v-model="filters.gender" placeholder="全部" clearable style="width: 100px">
-            <el-option label="全部(ALL)" value="" />
-            <el-option label="男" value="男" />
-            <el-option label="女" value="女" />
-          </el-select>
-        </div>
+            <el-select v-model="sortBy" placeholder="排序方式" class="!w-48">
+              <el-option
+                v-for="item in sortOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
 
-        <div class="filter-item">
-          <span class="label">状态:</span>
-          <el-select v-model="filters.status" placeholder="全部" clearable style="width: 100px">
-            <el-option label="全部(ALL)" value="" />
-            <el-option label="在职" value="active" />
-            <el-option label="离职" value="resigned" />
-          </el-select>
-        </div>
+            <el-popover placement="bottom-start" :width="620" trigger="click">
+              <template #reference>
+                <el-button class="!border-slate-200 !bg-white !text-slate-700" plain>
+                  更多筛选
+                </el-button>
+              </template>
+              <div class="grid grid-cols-5 gap-3">
+                <el-select v-model="filters.role" placeholder="职业" clearable>
+                  <el-option label="全部(ALL)" value="" />
+                  <el-option v-for="role in uniqueRoles" :key="role" :label="role" :value="role" />
+                </el-select>
+                <el-select v-model="filters.gender" placeholder="性别" clearable>
+                  <el-option label="全部(ALL)" value="" />
+                  <el-option label="男" value="男" />
+                  <el-option label="女" value="女" />
+                </el-select>
+                <el-select v-model="filters.status" placeholder="状态" clearable>
+                  <el-option label="全部(ALL)" value="" />
+                  <el-option label="在职" value="active" />
+                  <el-option label="离职" value="resigned" />
+                </el-select>
+                <el-select v-model="filters.education" placeholder="学历" clearable>
+                  <el-option label="全部(ALL)" value="" />
+                  <el-option v-for="edu in uniqueEducations" :key="edu" :label="edu" :value="edu" />
+                </el-select>
+                <el-select v-model="filters.process" placeholder="流程" clearable>
+                  <el-option label="全部(ALL)" value="" />
+                  <el-option v-for="(_, id) in processMap" :key="id" :label="formatProcessName(id)" :value="id" />
+                </el-select>
+              </div>
+            </el-popover>
+          </div>
 
-        <div class="filter-item">
-          <span class="label">部门:</span>
-          <el-select v-model="filters.department" placeholder="全部" clearable style="width: 150px">
-            <el-option label="全部(ALL)" value="" />
-            <el-option v-for="dept in uniqueDepartments" :key="dept" :label="dept" :value="dept" />
-          </el-select>
-        </div>
+          <div class="flex items-center gap-3">
+            <el-button
+              @click="isLeaveModalVisible = true"
+              class="!border-amber-200 !bg-amber-50 !text-amber-600 hover:!bg-amber-100"
+            >
+              <span class="relative mr-2 inline-flex h-2 w-2">
+                <span class="h-2 w-2 rounded-full bg-red-500"></span>
+              </span>
+              七天请假预警
+              <el-badge :value="leaveStats.total" class="ml-2" type="danger" />
+            </el-button>
 
-        <div class="filter-item">
-          <span class="label">学历:</span>
-          <el-select v-model="filters.education" placeholder="全部" clearable style="width: 120px">
-            <el-option label="全部(ALL)" value="" />
-            <el-option v-for="edu in uniqueEducations" :key="edu" :label="edu" :value="edu" />
-          </el-select>
-        </div>
+            <div class="h-6 w-px bg-slate-200"></div>
 
-        <!-- 流程筛选 -->
-        <div class="filter-item">
-          <span class="label">流程:</span>
-          <el-select v-model="filters.process" placeholder="全部" clearable style="width: 150px">
-            <el-option label="全部(ALL)" value="" />
-            <el-option v-for="(name, id) in processMap" :key="id" :label="formatProcessName(id)" :value="id" />
-          </el-select>
-        </div>
-
-        <!-- 复合排序 -->
-        <div class="filter-item">
-          <span class="label">排序:</span>
-          <el-select v-model="sortBy" placeholder="请选择排序方式" style="width: 160px;">
-            <el-option
-              v-for="item in sortOptions"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
-        </div>
-
-        <!-- 请假预警按钮 -->
-        <div class="filter-item ml-auto">
-          <el-button type="warning" @click="isLeaveModalVisible = true">
-            <i class="fas fa-calendar-alt mr-2"></i> 七天请假预警
-            <el-badge :value="leaveStats.total" class="ml-2" type="danger" />
-          </el-button>
-        </div>
-      </div>
-    </el-card>
-
-    <el-card class="list-card mt-4">
-      <template #header>
-        <div class="card-header">
-          <span>员工列表 (共 {{ filteredAndSortedPersonnel.length }} 人)</span>
-          <div style="display: flex; gap: 8px;">
             <el-button type="primary" :icon="Plus" @click="openAddPersonnelDialog">添加员工</el-button>
-            <el-button type="primary" icon="Refresh" @click="fetchData" circle />
           </div>
         </div>
-      </template>
-
-      <div v-loading="loading">
-        <el-collapse v-if="filteredAndSortedPersonnel.length > 0">
-          <PersonnelAccordionItem
-            v-for="person in filteredAndSortedPersonnel"
-            :key="person.id"
-            :personnel="person"
-            @updated="fetchData"
-          />
-        </el-collapse>
-        <el-empty v-else description="暂无符合条件的员工数据" />
       </div>
-    </el-card>
+
+      <div class="px-6 py-4">
+        <div class="mb-3 flex items-center justify-between">
+          <p class="text-sm font-semibold text-slate-700">员工列表 (共 {{ filteredAndSortedPersonnel.length }} 人)</p>
+        </div>
+
+        <div class="mb-2 flex items-center border-b border-slate-200 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <div class="w-10"></div>
+          <div class="flex-1">员工信息</div>
+          <div class="w-48">所属部门/岗位</div>
+          <div class="w-48 text-center">状态</div>
+          <div class="w-40 text-center">入职时间</div>
+          <div class="w-32 text-right">操作</div>
+        </div>
+
+        <div v-loading="loading">
+          <el-collapse v-if="filteredAndSortedPersonnel.length > 0">
+            <PersonnelAccordionItem
+              v-for="person in filteredAndSortedPersonnel"
+              :key="person.id"
+              :personnel="person"
+              @updated="fetchData"
+            />
+          </el-collapse>
+          <el-empty v-else description="暂无符合条件的员工数据" />
+        </div>
+      </div>
+    </div>
 
     <!-- 添加员工弹窗 -->
     <el-dialog v-model="addPersonnelDialogVisible" title="添加员工" width="520px">
@@ -176,7 +178,12 @@
             <div class="h-px bg-gray-200 flex-1 ml-4"></div>
           </div>
           
-          <el-table :data="group" border stripe style="width: 100%">
+          <el-table
+            :data="group"
+            stripe
+            class="!overflow-hidden !rounded-xl"
+            :header-cell-style="{ background: '#f8fafc', color: '#475569', fontWeight: '600' }"
+          >
             <el-table-column label="员工姓名" width="150">
               <template #default="{ row }">
                 <span class="font-bold">{{ row.name }}</span>
@@ -204,11 +211,6 @@
       
       <el-empty v-else description="未来 7 天内没有员工请假" />
       
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="isLeaveModalVisible = false">关闭</el-button>
-        </span>
-      </template>
     </el-dialog>
   </div>
 </template>
@@ -453,36 +455,3 @@ onMounted(() => {
   fetchData()
 })
 </script>
-
-<style scoped>
-.personnel-dashboard {
-  padding: 0;
-}
-.filter-card {
-  margin-bottom: 20px;
-}
-.filter-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 15px;
-  align-items: center;
-}
-.filter-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.filter-item .label {
-  font-size: 14px;
-  color: #606266;
-  white-space: nowrap;
-}
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.mt-4 {
-  margin-top: 16px;
-}
-</style>
