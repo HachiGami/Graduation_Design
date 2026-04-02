@@ -1,8 +1,23 @@
 <template>
-  <div class="graph-container">
+  <div class="graph-container" ref="graphContainerRef">
     <div class="graph-controls">
-      <el-button @click="resetView" :icon="'Refresh'">重置视图</el-button>
-      <el-button @click="fitToView" :icon="'FullScreen'">适配视图</el-button>
+      <div class="flex items-center bg-white/90 backdrop-blur-md border border-slate-200 rounded-xl shadow-lg overflow-hidden p-1">
+        <button
+          @click="resetView"
+          class="flex items-center justify-center p-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all group"
+          title="重置视图"
+        >
+          <el-icon :size="20"><RefreshLeft /></el-icon>
+        </button>
+        <div class="w-px h-5 bg-slate-200 mx-1"></div>
+        <button
+          @click="toggleGraphFullscreen"
+          class="flex items-center justify-center p-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all group"
+          title="全屏显示图谱 (按 ESC 退出)"
+        >
+          <el-icon :size="20"><FullScreen /></el-icon>
+        </button>
+      </div>
       <div class="status-legend">
         <span class="legend-title">状态图例：</span>
         <span class="legend-item"><span class="legend-circle pending"></span>待机</span>
@@ -101,6 +116,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { RefreshLeft, FullScreen } from '@element-plus/icons-vue'
 import cytoscape from 'cytoscape'
 import fcose from 'cytoscape-fcose'
 import { computeELKLayout } from '@/utils/elkLayout'
@@ -196,6 +212,7 @@ const emit = defineEmits<{
 }>()
 
 const chartRef = ref<HTMLElement>()
+const graphContainerRef = ref<HTMLElement>()
 let cy: any = null
 const expandedActivities = ref<Set<string>>(new Set())
 const detailDrawerVisible = ref(false)
@@ -839,9 +856,11 @@ const resetView = async () => {
   selectedActivity.value = null
 }
 
-const fitToView = () => {
-  if (cy) {
-    cy.fit(cy.elements(), 50)
+const toggleGraphFullscreen = () => {
+  if (!document.fullscreenElement) {
+    graphContainerRef.value?.requestFullscreen().catch((err) => console.error(err))
+  } else {
+    document.exitFullscreen()
   }
 }
 
@@ -916,6 +935,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
+  justify-content: space-between;
   flex-shrink: 0;
 }
 
@@ -970,6 +990,21 @@ onUnmounted(() => {
 .dependency-graph {
   flex: 1;
   background: #fff;
+}
+
+:global(.graph-container:fullscreen) {
+  width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #fff !important;
+}
+
+:global(.graph-container:fullscreen .dependency-graph),
+:global(.graph-container:fullscreen .graph-wrapper),
+:global(.graph-container:fullscreen canvas) {
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .activity-detail {

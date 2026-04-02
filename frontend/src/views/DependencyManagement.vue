@@ -61,17 +61,7 @@
       </div>
 
       <div class="flex flex-1 gap-4 overflow-hidden">
-        <div class="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col" ref="graphContainerRef">
-          <div class="absolute top-4 left-4 z-10 flex bg-white/80 backdrop-blur-md border border-slate-200 rounded-lg shadow-sm overflow-hidden p-1">
-            <button class="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors" title="重置视图" @click="clearFlowHighlight">
-              <el-icon><RefreshLeft /></el-icon>
-            </button>
-            <div class="w-px h-4 bg-slate-200 self-center mx-1"></div>
-            <button class="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors" title="全屏显示图谱 (按 ESC 退出)" @click="toggleGraphFullscreen">
-              <el-icon><FullScreen /></el-icon>
-            </button>
-          </div>
-
+        <div class="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col">
           <div class="flex-1 overflow-hidden">
             <DependencyGraph
               :data="graphData"
@@ -398,7 +388,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { DataLine, Odometer, Clock, Warning, RefreshLeft, FullScreen } from '@element-plus/icons-vue'
+import { DataLine, Odometer, Clock, Warning } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createDependency, updateDependency, getGraphData } from '@/api/dependency'
 import { getActivities, getActivity, createActivity, updateActivity, deleteActivity } from '@/api/activity'
@@ -414,7 +404,6 @@ import { sumSopStepDurations } from '@/utils/sopDuration'
 
 const route = useRoute()
 const router = useRouter()
-const graphContainerRef = ref<HTMLElement | null>(null)
 
 const processOptions = computed(() => {
   const seen = new Set<string>()
@@ -461,14 +450,6 @@ const applySelectedProcessHighlight = () => {
   }
   const domain = inferDomainFromProcessId(currentProcessId.value)
   handleProcessChange(domain, currentProcessId.value)
-}
-
-const toggleGraphFullscreen = () => {
-  if (!document.fullscreenElement) {
-    graphContainerRef.value?.requestFullscreen().catch(err => console.error(err))
-  } else {
-    document.exitFullscreen()
-  }
 }
 
 // 当前选择的流程
