@@ -66,7 +66,7 @@
                     </span>
                   </div>
                 </div>
-                <el-button plain class="!border-blue-200 !bg-white !text-blue-600">
+                <el-button plain class="!border-blue-200 !bg-white !text-blue-600" @click="goToActivityDetail(detail)">
                   查看活动详情
                 </el-button>
               </div>
@@ -204,6 +204,7 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
 import { Edit, Delete, Monitor, Calendar, Clock, Share, Connection } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteResource } from '@/api/resource'
@@ -213,6 +214,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits(['update'])
+const router = useRouter()
 
 const isEditModalVisible = ref(false)
 const isSubmitting = ref(false)
@@ -277,6 +279,20 @@ const getActivityStatusLabel = (status: string) => {
   if (normalized === 'stopped' || normalized === '已停机') return '已停机'
   if (normalized === 'pending' || normalized === '待机') return '待机中'
   return status || '未知状态'
+}
+
+const goToActivityDetail = (task: any) => {
+  const activityId = task?.activity_id || task?.id || task?._id
+  if (!activityId) {
+    ElMessage.warning('当前任务缺少 activity_id，暂无法定位活动详情')
+    return
+  }
+  router.push({
+    name: 'Dashboard',
+    query: {
+      highlightId: String(activityId)
+    }
+  })
 }
 
 const openEditModal = () => {

@@ -1,5 +1,11 @@
 <template>
-  <el-collapse class="mb-3 overflow-hidden rounded-xl border border-slate-100 bg-white">
+  <el-collapse
+    v-model="expandedPanels"
+    :class="[
+      'mb-3 overflow-hidden rounded-xl border border-slate-100 bg-white',
+      highlighted ? 'activity-highlight-flash' : ''
+    ]"
+  >
     <el-collapse-item :name="localActivity.id || localActivity.name">
       <template #title>
         <div class="flex w-full items-center gap-4">
@@ -639,11 +645,19 @@ import { getResources } from '@/api/resource'
 import { ElMessageBox } from 'element-plus'
 import type { ActivityResourcesData, Personnel, Resource } from '@/types'
 
-const props = defineProps<{ activity: Activity }>()
+const props = withDefaults(defineProps<{
+  activity: Activity
+  forceExpand?: boolean
+  highlighted?: boolean
+}>(), {
+  forceExpand: false,
+  highlighted: false
+})
 const emit = defineEmits<{ refreshed: [] }>()
 const router = useRouter()
 
 const localActivity = ref<Activity>({ ...props.activity })
+const expandedPanels = ref<Array<string | number>>([])
 const activeTab = ref('basic')
 const activityRisks = ref<string[]>([])
 const editDialogVisible = ref(false)
@@ -806,6 +820,7 @@ const loadAllActivitiesForPredecessor = async () => {
 }
 
 const activityId = computed(() => localActivity.value.id || '')
+const collapseName = computed(() => localActivity.value.id || localActivity.value.name || '')
 const totalSopDuration = computed(() => {
   if (!localActivity.value.sop_steps || localActivity.value.sop_steps.length === 0) return 0
   return localActivity.value.sop_steps.reduce((sum, step) => sum + (step.duration || 0), 0)
@@ -1284,9 +1299,21 @@ watch(
   () => props.activity,
   (next) => {
     localActivity.value = { ...next }
+    if (props.forceExpand && collapseName.value) {
+      expandedPanels.value = [collapseName.value]
+    }
     void loadActivityRisks()
   },
   { deep: true, immediate: true }
+)
+
+watch(
+  () => props.forceExpand,
+  (shouldExpand) => {
+    if (!collapseName.value) return
+    expandedPanels.value = shouldExpand ? [collapseName.value] : []
+  },
+  { immediate: true }
 )
 
 watch(activeTab, async (tab) => {
@@ -1330,6 +1357,21 @@ const handleDeleteActivity = async () => {
 
 .workflow-icon {
   color: #94a3b8;
+}
+
+.activity-highlight-flash {
+  animation: activity-highlight-flash 1.8s ease;
+}
+
+@keyframes activity-highlight-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+  20%,
+  60% {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+  }
 }
 
 :deep(.el-collapse-item.is-active .workflow-icon) {

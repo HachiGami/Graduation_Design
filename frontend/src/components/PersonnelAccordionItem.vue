@@ -81,7 +81,7 @@
                   </span>
                 </div>
               </div>
-              <el-button class="!border-blue-200 !bg-white !text-blue-600" plain>
+              <el-button class="!border-blue-200 !bg-white !text-blue-600" plain @click="goToActivityDetail(act)">
                 查看活动详情
                 <i class="fas fa-chevron-right ml-1 text-xs"></i>
               </el-button>
@@ -232,6 +232,7 @@
 
 <script setup lang="ts">
 import { ref, PropType } from 'vue'
+import { useRouter } from 'vue-router'
 import { Calendar, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { updatePersonnel, deletePersonnel } from '@/api/personnel'
@@ -246,6 +247,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['updated'])
+const router = useRouter()
 
 const editDialogVisible = ref(false)
 const submitting = ref(false)
@@ -311,6 +313,20 @@ const getActivityStatusLabel = (status: string) => {
   if (normalized === 'stopped' || normalized === '已停机') return '已停机'
   if (normalized === 'pending' || normalized === '待机') return '待机中'
   return status || '未知状态'
+}
+
+const goToActivityDetail = (task: any) => {
+  const activityId = task?.activity_id || task?.id || task?._id
+  if (!activityId) {
+    ElMessage.warning('当前任务缺少 activity_id，暂无法定位活动详情')
+    return
+  }
+  router.push({
+    name: 'Dashboard',
+    query: {
+      highlightId: String(activityId)
+    }
+  })
 }
 
 const handleEdit = () => {

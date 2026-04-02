@@ -107,6 +107,7 @@ async def get_personnel():
                     WHERE p.name IN $names
                     RETURN p.name AS entity_name,
                            a.name AS activity_name,
+                           a.id AS activity_id_neo4j,
                            a.status AS activity_status_neo4j
                     """,
                     {"names": names},
@@ -118,6 +119,7 @@ async def get_personnel():
             if activity_names:
                 async for act in db.activities.find({"name": {"$in": activity_names}}):
                     activities_mongo_map[act["name"]] = {
+                        "activity_id": str(act.get("_id", "")),
                         "process_id": act.get("process_id"),
                         "working_hours": act.get("working_hours") or [],
                         "status": act.get("status", ""),
@@ -127,6 +129,7 @@ async def get_personnel():
                 entity_name = rec.get("entity_name")
                 activity_name = rec.get("activity_name")
                 activity_info = activities_mongo_map.get(activity_name, {})
+                activity_id = rec.get("activity_id_neo4j") or activity_info.get("activity_id", "")
                 process_id = activity_info.get("process_id")
                 working_hours = activity_info.get("working_hours") or []
                 status = rec.get("activity_status_neo4j") or activity_info.get("status", "")
@@ -136,6 +139,7 @@ async def get_personnel():
                 entity_activities_map.setdefault(entity_name, []).append(
                     {
                         "activity_name": activity_name,
+                        "activity_id": activity_id,
                         "process_id": process_id,
                         "status": status,
                         "working_hours": working_hours,

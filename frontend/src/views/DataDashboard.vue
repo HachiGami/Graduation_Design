@@ -37,12 +37,18 @@
 
       <div class="flex-1 overflow-y-auto px-6 py-4">
         <el-empty v-if="filteredActivities.length === 0" description="暂无活动数据" />
-        <ActivityAccordionItem
+        <div
           v-for="activity in filteredActivities"
           :key="activity.id || activity.name"
-          :activity="activity"
-          @refreshed="loadAllActivities"
-        />
+          :id="'activity-row-' + String(activity.id || (activity as any)._id || activity.name || '')"
+        >
+          <ActivityAccordionItem
+            :activity="activity"
+            :force-expand="String(activity.id || (activity as any)._id || '') === highlightedActivityId"
+            :highlighted="String(activity.id || (activity as any)._id || '') === highlightedActivityId"
+            @refreshed="loadAllActivities"
+          />
+        </div>
       </div>
     </div>
 
@@ -103,18 +109,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getActivities, createActivity } from '@/api/activity'
 import type { Activity } from '@/types'
 import ActivityAccordionItem from '@/components/ActivityAccordionItem.vue'
 import { Plus, Search } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
 
 const DOMAIN_LIST = ['production', 'transport', 'sales', 'quality', 'warehouse']
 const activities = ref<Activity[]>([])
 const selectedFilter = ref('ALL')
 const selectedProcessId = ref('ALL')
 const searchQuery = ref('')
+const highlightedActivityId = ref('')
+const route = useRoute()
+const router = useRouter()
 
 const processMap: Record<string, string> = {
   'P001': '主生产线',
@@ -189,9 +199,47 @@ const loadAllActivities = async () => {
       return item
     })
     activities.value = merged
+    await handleRouteHighlight()
   } catch (error) {
     ElMessage.error('加载活动失败')
   }
+}
+
+const handleRouteHighlight = async () => {
+  const rawId = route.query.highlightId
+  const highlightId = Array.isArray(rawId) ? rawId[0] : rawId
+  if (!highlightId) return
+
+  const targetId = String(highlightId)
+  const target = activities.value.find((item) => String(item.id || (item as any)._id || '') === targetId)
+  if (!target) {
+    ElMessage.warning('未找到目标活动，可能已被删除或无权限查看')
+    highlightedActivityId.value = ''
+    const nextQuery = { ...route.query } as Record<string, any>
+    delete nextQuery.highlightId
+    await router.replace({ query: nextQuery })
+    return
+  }
+
+  selectedFilter.value = 'ALL'
+  selectedProcessId.value = 'ALL'
+  searchQuery.value = ''
+  highlightedActivityId.value = targetId
+
+  await nextTick()
+  const targetEl = document.getElementById(`activity-row-${targetId}`)
+  if (!targetEl) {
+    ElMessage.warning('活动定位失败，请稍后重试')
+    return
+  }
+
+  targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  setTimeout(() => {
+    highlightedActivityId.value = ''
+  }, 1800)
+  const nextQuery = { ...route.query } as Record<string, any>
+  delete nextQuery.highlightId
+  await router.replace({ query: nextQuery })
 }
 
 const addActivityDialogVisible = ref(false)
@@ -262,6 +310,13 @@ const submitAddActivity = async () => {
 onMounted(async () => {
   await loadAllActivities()
 })
+
+watch(
+  () => route.query.highlightId,
+  async () => {
+    await handleRouteHighlight()
+  }
+)
 </script>
 
 <style scoped>
@@ -278,6 +333,7 @@ onMounted(async () => {
 :deep(.el-dialog) {
   border-radius: 12px;
 }
+
 </style>
 
 
