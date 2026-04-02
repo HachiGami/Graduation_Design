@@ -77,16 +77,21 @@
             :key="index"
             class="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-2 shadow-sm hover:border-blue-200 transition-colors mb-3"
           >
-            <div class="flex items-center">
-              <div class="w-6 h-6 rounded bg-indigo-50 flex items-center justify-center mr-2 text-indigo-500">
-                <el-icon><Link /></el-icon>
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex min-w-0 items-center">
+                <div class="w-6 h-6 rounded bg-indigo-50 flex items-center justify-center mr-2 text-indigo-500">
+                  <el-icon><Link /></el-icon>
+                </div>
+                <span class="font-bold text-slate-800 text-sm mr-3 truncate">{{ task.activity_name }}</span>
+                <span class="px-2 py-0.5 text-[10px] font-bold border rounded bg-emerald-50 text-emerald-600 border-emerald-200">进行中</span>
+                <div class="ml-3 flex items-center text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                  <el-icon class="mr-1.5 text-blue-500"><Share /></el-icon>
+                  {{ task.process || formatProcessName(task.process_id) }}
+                </div>
               </div>
-              <span class="font-bold text-slate-800 text-sm mr-3">{{ task.activity_name }}</span>
-              <span class="px-2 py-0.5 text-[10px] font-bold border rounded bg-emerald-50 text-emerald-600 border-emerald-200">进行中</span>
-              <div class="ml-3 flex items-center text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                <el-icon class="mr-1.5 text-blue-500"><Share /></el-icon>
-                {{ task.process || formatProcessName(task.process_id) }}
-              </div>
+              <el-button class="!border-blue-200 !bg-white !text-blue-600" plain @click="goToActivityDetail(task)">
+                查看活动详情
+              </el-button>
             </div>
 
             <div class="flex items-center text-xs font-medium text-blue-600 ml-8 bg-blue-50/50 w-fit px-2 py-1 rounded">
@@ -113,6 +118,8 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { ArrowRight, Box, DataAnalysis, Delete, Edit, Link, Operation, Select, Share } from '@element-plus/icons-vue';
+import { useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
 
 const props = defineProps({
   material: {
@@ -174,6 +181,7 @@ const computeDailyConsumption = (detail: any): number => {
 };
 
 const emit = defineEmits(['replenish', 'edit']);
+const router = useRouter();
 
 const isOpen = ref(false);
 
@@ -187,5 +195,19 @@ const handleReplenish = () => {
 
 const handleEdit = () => {
   emit('edit', props.material);
+};
+
+const goToActivityDetail = (task: any) => {
+  const activityId = task?.activity_id || task?.id || task?._id;
+  if (!activityId) {
+    ElMessage.warning('当前任务缺少 activity_id，暂无法定位活动详情');
+    return;
+  }
+  router.push({
+    name: 'Dashboard',
+    query: {
+      highlightId: String(activityId)
+    }
+  });
 };
 </script>
