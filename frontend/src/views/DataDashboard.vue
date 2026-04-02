@@ -5,7 +5,14 @@
         <div class="toolbar">
           <span class="toolbar-title">数据管理面板</span>
           <div class="filter-group">
-            <el-select v-model="selectedProcessId" placeholder="流程筛选" style="width: 200px;" class="mr-4">
+            <el-input
+              v-model="searchQuery"
+              class="activity-search"
+              placeholder="搜索活动名称或ID..."
+              clearable
+              :prefix-icon="Search"
+            />
+            <el-select v-model="selectedProcessId" placeholder="流程筛选" style="width: 200px;">
               <el-option
                 v-for="item in processOptions"
                 :key="item.value"
@@ -13,7 +20,7 @@
                 :value="item.value"
               />
             </el-select>
-            <el-select v-model="selectedFilter" style="width: 200px" class="mr-4">
+            <el-select v-model="selectedFilter" style="width: 200px">
               <el-option label="全部状态" value="ALL" />
               <el-option label="待机" value="pending" />
               <el-option label="进行中" value="in_progress" />
@@ -94,12 +101,13 @@ import { ElMessage } from 'element-plus'
 import { getActivities, createActivity } from '@/api/activity'
 import type { Activity } from '@/types'
 import ActivityAccordionItem from '@/components/ActivityAccordionItem.vue'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Search } from '@element-plus/icons-vue'
 
 const DOMAIN_LIST = ['production', 'transport', 'sales', 'quality', 'warehouse']
 const activities = ref<Activity[]>([])
 const selectedFilter = ref('ALL')
 const selectedProcessId = ref('ALL')
+const searchQuery = ref('')
 
 const processMap: Record<string, string> = {
   'P001': '主生产线',
@@ -151,6 +159,16 @@ const filteredActivities = computed(() => {
   // 2. 流程 ID 过滤
   if (selectedProcessId.value !== 'ALL') {
     result = result.filter((item) => item.process_id === selectedProcessId.value)
+  }
+
+  // 3. 文本搜索（与上述条件 AND；清空后仅受流程/状态筛选影响）
+  const q = searchQuery.value.trim().toLowerCase()
+  if (q) {
+    result = result.filter((item) => {
+      const name = (item.name ?? '').toLowerCase()
+      const idStr = String(item.id ?? '').toLowerCase()
+      return name.includes(q) || idStr.includes(q)
+    })
   }
 
   return result
@@ -253,10 +271,13 @@ onMounted(async () => {
 .filter-group {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
-.mr-4 {
-  margin-right: 16px;
+.activity-search {
+  width: 240px;
+  min-width: 180px;
 }
 
 .toolbar-title {
