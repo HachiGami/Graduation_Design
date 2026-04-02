@@ -18,10 +18,10 @@
             <span>生产活动管理</span>
           </el-menu-item>
           <el-menu-item index="/personnel">
-            <span>员工排班与分配</span>
+            <span>员工管理</span>
           </el-menu-item>
           <el-menu-item index="/equipment">
-            <span>生产设备资产</span>
+            <span>生产设备管理</span>
           </el-menu-item>
           <el-menu-item index="/material">
             <span>原料库存调度</span>
