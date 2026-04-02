@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 from bson import ObjectId
@@ -184,7 +186,6 @@ async def delete_dependency(dependency_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
 
-@router.get("/graph/data")
 @router.get("/graph/data")
 async def get_graph_data(
     scope: str = Query("global", description="查询范围: global/domain/process"),
@@ -407,6 +408,16 @@ async def get_graph_data(
                     "relation": "ASSIGNS",
                     "role": rel.get("role")
                 })
+        
+        # 将当前 scope 下 MongoDB 中的活动并入（含无任何 Neo4j 边的孤立活动）
+        if scope == "global":
+            mongo_activity_filter = {}
+        elif scope == "domain":
+            mongo_activity_filter = {"domain": domain}
+        else:
+            mongo_activity_filter = {"domain": domain, "process_id": process_id}
+        async for doc in db.activities.find(mongo_activity_filter, {"_id": 1}):
+            activity_ids.add(str(doc["_id"]))
         
         # 构建活动节点列表
         nodes = []
