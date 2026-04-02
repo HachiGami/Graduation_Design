@@ -1,70 +1,100 @@
 <template>
-  <div class="dependency-management">
-    <el-card class="fullscreen-container">
-      <template #header>
-        <div class="card-header">
-          <span>节点关联视图</span>
-        </div>
-      </template>
-      
-      <div class="toolbar">
+  <div class="flex flex-col h-screen bg-slate-50 overflow-hidden p-4 gap-4 max-w-[1800px] mx-auto" ref="dashboardRef">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex justify-between items-center shrink-0">
+        <div class="flex items-center space-x-4">
         <ProcessSelector
           :domain="currentDomain"
           :process-id="currentProcessId"
           @change="handleProcessChange"
           @clear="clearFlowHighlight"
         />
-        
-        <div class="mini-kpi-hud">
-          <div class="mini-kpi-title">运行状态概览</div>
-          <div class="mini-kpi-content">
-            <div class="mini-kpi-group mini-kpi-group-fixed">
-              <div class="mini-kpi-item" @click="handleKpiClick('internalDependencies')">
-                <div class="mini-value">{{ metrics.internalDependencyCount }}</div>
-                <div class="mini-label">内部依赖</div>
-              </div>
-              <div class="mini-kpi-item" @click="handleKpiClick('externalDependencies')">
-                <div class="mini-value">{{ metrics.externalDependencyCount }}</div>
-                <div class="mini-label">外部依赖</div>
-              </div>
+        </div>
+
+        <div class="flex items-center">
+          <div class="flex items-center bg-indigo-50 border border-indigo-100 rounded-lg p-1 mr-4 shadow-sm">
+            <div class="px-3 py-1 text-indigo-700 flex items-center cursor-pointer hover:bg-indigo-100 rounded-md transition-colors" @click="handleKpiClick('internalDependencies')" title="内部依赖">
+              <span class="text-[11px] font-bold mr-2">内依赖</span>
+              <span class="text-lg font-black">{{ metrics.internalDependencyCount }}</span>
             </div>
-            <div class="mini-kpi-divider"></div>
-            <div class="mini-kpi-group mini-kpi-group-dynamic">
-              <div class="mini-kpi-item" @click="handleKpiClick('activities')">
-                <div class="mini-value">{{ metrics.activityCount }}</div>
-                <div class="mini-label">活动数</div>
-              </div>
-              <div class="mini-kpi-item" @click="handleKpiClick('health')">
-                <div class="mini-value">{{ metrics.healthScore }}</div>
-                <div class="mini-label">健康评分</div>
-              </div>
-              <div class="mini-kpi-item" @click="handleKpiClick('resource')">
-                <div class="mini-value">{{ miniRunnableTimeText }}</div>
-                <div class="mini-label">可运行时间</div>
-              </div>
-              <div class="mini-kpi-item" @click="handleKpiClick('dynamic')">
-                <div class="mini-value">{{ riskList.length }}</div>
-                <div class="mini-label">风险数</div>
-              </div>
+            <div class="w-px h-6 bg-indigo-200 mx-1"></div>
+            <div class="px-3 py-1 text-indigo-700 flex items-center cursor-pointer hover:bg-indigo-100 rounded-md transition-colors" @click="handleKpiClick('externalDependencies')" title="外部依赖">
+              <span class="text-[11px] font-bold mr-2">外依赖</span>
+              <span class="text-lg font-black">{{ metrics.externalDependencyCount }}</span>
+            </div>
+          </div>
+
+          <div class="flex items-center px-3 py-1.5 rounded-xl border cursor-pointer transition-colors shadow-sm bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100 mr-2" @click="handleKpiClick('activities')">
+            <div class="mr-2 flex items-center justify-center bg-white p-1 rounded-lg shadow-sm">
+              <el-icon :size="14" class="text-blue-500"><DataLine /></el-icon>
+            </div>
+            <div class="flex flex-col">
+              <span class="text-[10px] font-bold uppercase opacity-70 leading-none mb-0.5">活动数</span>
+              <div class="flex items-baseline leading-none"><span class="text-base font-black">{{ metrics.activityCount }}</span></div>
+            </div>
+          </div>
+
+          <div class="flex items-center px-3 py-1.5 rounded-xl border cursor-pointer transition-colors shadow-sm bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100 mr-2" @click="handleKpiClick('health')">
+            <div class="mr-2 flex items-center justify-center bg-white p-1 rounded-lg shadow-sm">
+              <el-icon :size="14" class="text-emerald-500"><Odometer /></el-icon>
+            </div>
+            <div class="flex flex-col">
+              <span class="text-[10px] font-bold uppercase opacity-70 leading-none mb-0.5">健康评分</span>
+              <div class="flex items-baseline leading-none"><span class="text-base font-black">{{ metrics.healthScore }}</span><span class="text-[10px] ml-0.5 font-bold">分</span></div>
+            </div>
+          </div>
+
+          <div class="flex items-center px-3 py-1.5 rounded-xl border cursor-pointer transition-colors shadow-sm bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100 mr-2" @click="handleKpiClick('resource')">
+            <div class="mr-2 flex items-center justify-center bg-white p-1 rounded-lg shadow-sm">
+              <el-icon :size="14" class="text-amber-500"><Clock /></el-icon>
+            </div>
+            <div class="flex flex-col">
+              <span class="text-[10px] font-bold uppercase opacity-70 leading-none mb-0.5">可运行</span>
+              <div class="flex items-baseline leading-none"><span class="text-base font-black">{{ miniRunnableTimeText }}</span></div>
+            </div>
+          </div>
+
+          <div class="flex items-center px-3 py-1.5 rounded-xl border cursor-pointer transition-colors shadow-sm bg-red-50 text-red-700 border-red-100 hover:bg-red-100" @click="handleKpiClick('dynamic')">
+            <div class="mr-2 flex items-center justify-center bg-white p-1 rounded-lg shadow-sm">
+              <el-icon :size="14" class="text-red-500"><Warning /></el-icon>
+            </div>
+            <div class="flex flex-col">
+              <span class="text-[10px] font-bold uppercase opacity-70 leading-none mb-0.5">异常风险</span>
+              <div class="flex items-baseline leading-none"><span class="text-base font-black">{{ riskList.length }}</span></div>
             </div>
           </div>
         </div>
       </div>
-      
-      <div class="main-layout">
-        <div class="graph-panel">
-          <DependencyGraph 
-            :data="graphData" 
-            :highlight-active="highlightActive"
-            :highlight-set="highlightSet"
-            @node-click="handleNodeClick"
-            @edit-activity="handleEditActivityFromGraph"
-            @edit-personnel="handleEditPersonnelFromGraph"
-            @edit-resource="handleEditResourceFromGraph"
-          />
+
+      <div class="flex flex-1 gap-4 overflow-hidden">
+        <div class="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col">
+          <div class="absolute top-4 left-4 z-10 flex space-x-2">
+            <button @click="loadGraphData" class="p-2 bg-white/90 backdrop-blur border border-slate-200 rounded-lg text-slate-600 hover:text-blue-600 hover:bg-white shadow-sm tooltip" title="刷新图数据">
+              <el-icon :size="18"><RefreshRight /></el-icon>
+            </button>
+            <button @click="toggleFullscreen" class="p-2 bg-white/90 backdrop-blur border border-slate-200 rounded-lg text-slate-600 hover:text-blue-600 hover:bg-white shadow-sm tooltip" title="全屏显示">
+              <el-icon :size="18"><FullScreen /></el-icon>
+            </button>
+          </div>
+
+          <div class="absolute bottom-4 left-4 z-10 bg-white/90 backdrop-blur border border-slate-200 rounded-lg p-2.5 shadow-sm flex items-center space-x-4 text-xs font-bold text-slate-600">
+            <div class="flex items-center"><div class="w-2.5 h-2.5 rounded-full bg-slate-300 mr-1.5"></div>待机 (Pending)</div>
+            <div class="flex items-center"><div class="w-2.5 h-2.5 rounded-full bg-blue-500 mr-1.5"></div>运行中 (In Progress)</div>
+          </div>
+
+          <div class="flex-1 overflow-hidden">
+            <DependencyGraph
+              :data="graphData"
+              :highlight-active="highlightActive"
+              :highlight-set="highlightSet"
+              @node-click="handleNodeClick"
+              @edit-activity="handleEditActivityFromGraph"
+              @edit-personnel="handleEditPersonnelFromGraph"
+              @edit-resource="handleEditResourceFromGraph"
+            />
+          </div>
         </div>
-        
-        <aside class="sidebar">
+
+        <aside class="w-[420px] bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden shrink-0">
           <DashboardPanel
             mode="sidebar"
             :graph-data="graphData"
@@ -78,7 +108,6 @@
           />
         </aside>
       </div>
-    </el-card>
 
     <!-- 依赖关系对话框 -->
     <el-dialog 
@@ -378,6 +407,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { DataLine, Odometer, Clock, Warning, RefreshRight, FullScreen } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createDependency, updateDependency, getGraphData } from '@/api/dependency'
 import { getActivities, getActivity, createActivity, updateActivity, deleteActivity } from '@/api/activity'
@@ -394,6 +424,16 @@ import { sumSopStepDurations } from '@/utils/sopDuration'
 
 const route = useRoute()
 const router = useRouter()
+const dashboardRef = ref<HTMLElement | null>(null)
+
+const toggleFullscreen = async () => {
+  if (!dashboardRef.value) return
+  if (document.fullscreenElement) {
+    await document.exitFullscreen()
+    return
+  }
+  await dashboardRef.value.requestFullscreen()
+}
 
 // 当前选择的流程
 const currentDomain = ref<string>('')
@@ -1152,127 +1192,7 @@ watch(
 </script>
 
 <style scoped>
-.dependency-management {
-  height: 100vh;
-  overflow: hidden;
-}
-
-.fullscreen-container {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.fullscreen-container :deep(.el-card__body) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 0;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  background: #f5f7fa;
-  border-bottom: 1px solid #e4e7ed;
-}
-
-.mini-kpi-hud {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-left: auto;
-  background: #fff;
-  padding: 8px 12px;
-  border-radius: 4px;
-  border: 1px solid #dcdfe6;
-}
-
-.mini-kpi-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.mini-kpi-content {
-  display: flex;
-  align-items: stretch;
-}
-
-.mini-kpi-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.mini-kpi-group-fixed {
-  background: #f8fafc;
-  border-radius: 6px;
-  padding: 4px 6px;
-}
-
-.mini-kpi-divider {
-  width: 1px;
-  background: #e5e7eb;
-  margin: 0 12px;
-}
-
-.mini-kpi-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 10px;
+.tooltip {
   cursor: pointer;
-  transition: background 0.2s;
-  border-radius: 4px;
-  min-width: 60px;
-}
-
-.mini-kpi-item:hover {
-  background: #f0f9ff;
-}
-
-.mini-value {
-  font-size: 18px;
-  font-weight: bold;
-  color: #409eff;
-  line-height: 1.2;
-}
-
-.mini-label {
-  font-size: 11px;
-  color: #606266;
-  margin-top: 2px;
-  white-space: nowrap;
-}
-
-.main-layout {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-}
-
-.graph-panel {
-  flex: 1;
-  overflow: hidden;
-  position: relative;
-}
-
-.sidebar {
-  width: 450px;
-  background: #fff;
-  border-left: 1px solid #e4e7ed;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 </style>
