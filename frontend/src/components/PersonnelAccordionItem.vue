@@ -1,5 +1,9 @@
 <template>
-  <el-collapse-item :name="personnel.id">
+  <el-collapse-item
+    :id="anchorId || undefined"
+    :name="personnel.id"
+    :class="highlighted ? 'personnel-highlight-ring' : ''"
+  >
     <template #title>
       <div class="flex w-full items-center pr-3">
         <div class="w-10"></div>
@@ -243,6 +247,14 @@ const props = defineProps({
   personnel: {
     type: Object as PropType<Personnel>,
     required: true
+  },
+  anchorId: {
+    type: String,
+    default: ''
+  },
+  highlighted: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -420,3 +432,20 @@ const handleDeletePersonnel = async () => {
   }
 }
 </script>
+
+<style scoped>
+.personnel-highlight-ring {
+  animation: personnel-highlight-ring 1.8s ease;
+}
+
+@keyframes personnel-highlight-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+  20%,
+  60% {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+  }
+}
+</style>

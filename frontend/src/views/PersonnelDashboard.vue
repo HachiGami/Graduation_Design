@@ -96,11 +96,13 @@
         </div>
 
         <div v-loading="loading">
-          <el-collapse v-if="filteredAndSortedPersonnel.length > 0">
+          <el-collapse v-if="filteredAndSortedPersonnel.length > 0" v-model="personnelExpandedNames">
             <PersonnelAccordionItem
               v-for="person in filteredAndSortedPersonnel"
               :key="person.id"
               :personnel="person"
+              :anchor-id="'personnel-row-' + String(person.id || (person as any)._id || '')"
+              :highlighted="highlightedPersonnelId === String(person.id || (person as any)._id || '')"
               @updated="fetchData"
             />
           </el-collapse>
@@ -216,15 +218,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { getPersonnelList, createPersonnel } from '@/api/personnel'
 import type { Personnel } from '@/types'
 import PersonnelAccordionItem from '@/components/PersonnelAccordionItem.vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
 
 const loading = ref(false)
 const rawPersonnelList = ref<Personnel[]>([])
+const route = useRoute()
+const router = useRouter()
+const personnelExpandedNames = ref<(string | number)[]>([])
+const highlightedPersonnelId = ref('')
 
 // 请假预警状态与逻辑
 const isLeaveModalVisible = ref(false)
@@ -433,6 +440,53 @@ const submitAddPersonnel = async () => {
   }
 }
 
+const handleRouteHighlight = async () => {
+  const rawId = route.query.highlightId
+  const highlightId = Array.isArray(rawId) ? rawId[0] : rawId
+  if (!highlightId) return
+
+  const targetId = String(highlightId)
+  const target = rawPersonnelList.value.find(
+    (p) => String(p.id || (p as any)._id || '') === targetId
+  )
+  if (!target) {
+    ElMessage.warning('未找到目标员工，可能已被删除')
+    highlightedPersonnelId.value = ''
+    const nextQuery = { ...route.query } as Record<string, any>
+    delete nextQuery.highlightId
+    await router.replace({ query: nextQuery })
+    return
+  }
+
+  searchQuery.value = ''
+  filters.value = {
+    role: '',
+    gender: '',
+    status: '',
+    department: '',
+    education: '',
+    process: ''
+  }
+  sortBy.value = 'NONE'
+  highlightedPersonnelId.value = targetId
+  personnelExpandedNames.value = [targetId]
+
+  await nextTick()
+  const targetEl = document.getElementById(`personnel-row-${targetId}`)
+  if (!targetEl) {
+    ElMessage.warning('定位失败，请稍后重试')
+    return
+  }
+
+  targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  setTimeout(() => {
+    highlightedPersonnelId.value = ''
+  }, 1800)
+  const nextQuery = { ...route.query } as Record<string, any>
+  delete nextQuery.highlightId
+  await router.replace({ query: nextQuery })
+}
+
 const fetchData = async () => {
   loading.value = true
   try {
@@ -443,6 +497,7 @@ const fetchData = async () => {
       ...item,
       id: item.id || item._id
     }))
+    await handleRouteHighlight()
   } catch (error) {
     console.error('Failed to fetch personnel:', error)
     ElMessage.error('获取员工数据失败')
@@ -454,4 +509,11 @@ const fetchData = async () => {
 onMounted(() => {
   fetchData()
 })
+
+watch(
+  () => route.query.highlightId,
+  async () => {
+    if (rawPersonnelList.value.length) await handleRouteHighlight()
+  }
+)
 </script>

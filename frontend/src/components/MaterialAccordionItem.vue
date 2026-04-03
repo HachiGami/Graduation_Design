@@ -1,5 +1,9 @@
 <template>
-  <div class="border-b border-slate-100">
+  <div
+    class="border-b border-slate-100"
+    :id="anchorId || undefined"
+    :class="{ 'material-highlight-flash': highlighted }"
+  >
     <div class="flex px-9 py-4 items-center cursor-pointer hover:bg-slate-50/70 transition-colors" @click="toggle">
       <div class="w-8 flex items-center justify-center">
         <el-icon class="text-slate-400 transition-transform duration-300" :class="{ 'rotate-90': isOpen }">
@@ -116,7 +120,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { ArrowRight, Box, DataAnalysis, Delete, Edit, Link, Operation, Select, Share } from '@element-plus/icons-vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
@@ -125,6 +129,18 @@ const props = defineProps({
   material: {
     type: Object,
     required: true
+  },
+  anchorId: {
+    type: String,
+    default: ''
+  },
+  highlighted: {
+    type: Boolean,
+    default: false
+  },
+  forceOpen: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -185,6 +201,14 @@ const router = useRouter();
 
 const isOpen = ref(false);
 
+watch(
+  () => props.forceOpen,
+  (open) => {
+    if (open) isOpen.value = true;
+  },
+  { immediate: true }
+);
+
 const toggle = () => {
   isOpen.value = !isOpen.value;
 };
@@ -211,3 +235,20 @@ const goToActivityDetail = (task: any) => {
   });
 };
 </script>
+
+<style scoped>
+.material-highlight-flash {
+  animation: material-highlight-flash 1.8s ease;
+}
+
+@keyframes material-highlight-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+  20%,
+  60% {
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.35);
+  }
+}
+</style>

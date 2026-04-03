@@ -1,5 +1,9 @@
 <template>
-  <div class="rounded-xl border border-slate-200 bg-white">
+  <div
+    class="rounded-xl border border-slate-200 bg-white"
+    :id="anchorId || undefined"
+    :class="{ 'equipment-highlight-flash': highlighted }"
+  >
     <el-collapse-item :name="equipment._id">
       <template #title>
         <div class="flex w-full items-center gap-3 pr-3">
@@ -209,9 +213,17 @@ import { Edit, Delete, Monitor, Calendar, Clock, Share, Connection } from '@elem
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteResource } from '@/api/resource'
 
-const props = defineProps<{
-  equipment: any
-}>()
+const props = withDefaults(
+  defineProps<{
+    equipment: any
+    anchorId?: string
+    highlighted?: boolean
+  }>(),
+  {
+    anchorId: '',
+    highlighted: false
+  }
+)
 
 const emit = defineEmits(['update'])
 const router = useRouter()
@@ -395,4 +407,18 @@ const handleDeleteEquipment = async () => {
 </script>
 
 <style scoped>
+.equipment-highlight-flash {
+  animation: equipment-highlight-flash 1.8s ease;
+}
+
+@keyframes equipment-highlight-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+  20%,
+  60% {
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35);
+  }
+}
 </style>

@@ -217,7 +217,7 @@
         </div>
         <!-- 底部跳转按钮 -->
         <div class="mt-6">
-          <button @click="() => { /* TODO: 添加跳转到活动列表的逻辑 */ }" class="w-full flex items-center justify-center py-3 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-sm hover:bg-indigo-100 hover:shadow-sm transition-all border border-indigo-100">
+          <button type="button" @click="goToActivityManagementFromDialog" class="w-full flex items-center justify-center py-3 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-sm hover:bg-indigo-100 hover:shadow-sm transition-all border border-indigo-100">
             前往【生产活动管理】面板查看完整档案 <el-icon class="ml-2"><TopRight /></el-icon>
           </button>
         </div>
@@ -290,7 +290,7 @@
         </div>
         <!-- 底部跳转按钮 -->
         <div class="mt-6">
-          <button @click="() => { /* TODO: 添加跳转到设备资产的逻辑 */ }" class="w-full flex items-center justify-center py-3 bg-amber-50 text-amber-600 rounded-xl font-bold text-sm hover:bg-amber-100 hover:shadow-sm transition-all border border-amber-100">
+          <button type="button" @click="goToEquipmentManagementFromDialog" class="w-full flex items-center justify-center py-3 bg-amber-50 text-amber-600 rounded-xl font-bold text-sm hover:bg-amber-100 hover:shadow-sm transition-all border border-amber-100">
             前往【生产设备资产】面板查看完整档案 <el-icon class="ml-2"><TopRight /></el-icon>
           </button>
         </div>
@@ -336,7 +336,7 @@
         </div>
         <!-- 底部跳转按钮 -->
         <div class="mt-6">
-          <button @click="() => { /* TODO: 添加跳转到原料调度的逻辑 */ }" class="w-full flex items-center justify-center py-3 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-sm hover:bg-emerald-100 hover:shadow-sm transition-all border border-emerald-100">
+          <button type="button" @click="goToMaterialManagementFromDialog" class="w-full flex items-center justify-center py-3 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-sm hover:bg-emerald-100 hover:shadow-sm transition-all border border-emerald-100">
             前往【原料库存调度】面板查看完整档案 <el-icon class="ml-2"><TopRight /></el-icon>
           </button>
         </div>
@@ -434,7 +434,7 @@
         </div>
         <!-- 底部跳转按钮 -->
         <div class="mt-6">
-          <button @click="() => { /* TODO: 添加跳转到员工排班的逻辑 */ }" class="w-full flex items-center justify-center py-3 bg-blue-50 text-blue-600 rounded-xl font-bold text-sm hover:bg-blue-100 hover:shadow-sm transition-all border border-blue-100">
+          <button type="button" @click="goToPersonnelManagementFromDialog" class="w-full flex items-center justify-center py-3 bg-blue-50 text-blue-600 rounded-xl font-bold text-sm hover:bg-blue-100 hover:shadow-sm transition-all border border-blue-100">
             前往【员工排班与分配】面板查看完整档案 <el-icon class="ml-2"><TopRight /></el-icon>
           </button>
         </div>
@@ -994,6 +994,81 @@ const personnelForm = ref<Personnel>({
   assigned_tasks: [],
   status: 'available'
 })
+
+const closeEntityDetailDialogs = () => {
+  activityDialogVisible.value = false
+  resourceDialogVisible.value = false
+  personnelDialogVisible.value = false
+  isEditActivity.value = false
+  isEditResource.value = false
+  isEditPersonnel.value = false
+}
+
+const resolveActivityIdForNavigation = () =>
+  currentActivity.value?.id ||
+  activityForm.value.id ||
+  (activityForm.value as any)._id
+
+const resolveResourceIdForNavigation = () =>
+  currentResource.value?.id ||
+  resourceForm.value.id ||
+  (resourceForm.value as any)._id
+
+const resolvePersonnelIdForNavigation = () =>
+  currentPersonnel.value?.id ||
+  personnelForm.value.id ||
+  (personnelForm.value as any)._id
+
+const goToActivityManagementFromDialog = () => {
+  const id = resolveActivityIdForNavigation()
+  if (!id) {
+    ElMessage.warning('缺少活动 ID，无法跳转到生产活动管理')
+    return
+  }
+  closeEntityDetailDialogs()
+  router.push({ name: 'Dashboard', query: { highlightId: String(id) } })
+}
+
+const goToEquipmentManagementFromDialog = () => {
+  if (currentResource.value?.type !== '设备') {
+    ElMessage.warning('当前不是设备资源')
+    return
+  }
+  const id = resolveResourceIdForNavigation()
+  if (!id) {
+    ElMessage.warning('缺少设备 ID，无法跳转')
+    return
+  }
+  closeEntityDetailDialogs()
+  router.push({ name: 'Equipment', query: { highlightId: String(id) } })
+}
+
+const goToMaterialManagementFromDialog = () => {
+  const t = currentResource.value?.type || resourceForm.value.type
+  const isMaterial =
+    t === '原料' || String(t || '').toLowerCase() === 'material'
+  if (!isMaterial) {
+    ElMessage.warning('当前不是原料资源')
+    return
+  }
+  const id = resolveResourceIdForNavigation()
+  if (!id) {
+    ElMessage.warning('缺少原料 ID，无法跳转')
+    return
+  }
+  closeEntityDetailDialogs()
+  router.push({ name: 'Material', query: { highlightId: String(id) } })
+}
+
+const goToPersonnelManagementFromDialog = () => {
+  const id = resolvePersonnelIdForNavigation()
+  if (!id) {
+    ElMessage.warning('缺少人员 ID，无法跳转')
+    return
+  }
+  closeEntityDetailDialogs()
+  router.push({ name: 'Personnel', query: { highlightId: String(id) } })
+}
 
 // 节点点击处理
 const handleNodeClick = async (node: any) => {

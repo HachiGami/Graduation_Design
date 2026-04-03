@@ -58,6 +58,9 @@
             v-for="material in processedMaterials"
             :key="material._id"
             :material="material"
+            :anchor-id="'material-row-' + String(material._id || material.id || '')"
+            :highlighted="highlightedMaterialId === String(material._id || material.id || '')"
+            :force-open="highlightedMaterialId === String(material._id || material.id || '')"
             @replenish="openReplenishDialog"
             @edit="openEditDialog"
           />
@@ -127,7 +130,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { Search } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
@@ -150,6 +154,9 @@ const processMap: Record<string, string> = {
 
 const materials = ref<any[]>([]);
 const loading = ref(false);
+const route = useRoute();
+const router = useRouter();
+const highlightedMaterialId = ref('');
 
 // Filters
 const searchQuery = ref('');
@@ -172,6 +179,46 @@ const editForm = ref({
   unit: ''
 });
 
+const handleRouteHighlight = async () => {
+  const rawId = route.query.highlightId;
+  const highlightId = Array.isArray(rawId) ? rawId[0] : rawId;
+  if (!highlightId) return;
+
+  const targetId = String(highlightId);
+  const target = materials.value.find(
+    (m) => String(m._id || m.id || '') === targetId
+  );
+  if (!target) {
+    ElMessage.warning('未找到目标原料，可能已被删除');
+    highlightedMaterialId.value = '';
+    const nextQuery = { ...route.query } as Record<string, any>;
+    delete nextQuery.highlightId;
+    await router.replace({ query: nextQuery });
+    return;
+  }
+
+  searchQuery.value = '';
+  sortBy.value = 'default';
+  stockFilter.value = 'ALL';
+  processFilter.value = '';
+  highlightedMaterialId.value = targetId;
+
+  await nextTick();
+  const targetEl = document.getElementById(`material-row-${targetId}`);
+  if (!targetEl) {
+    ElMessage.warning('定位失败，请稍后重试');
+    return;
+  }
+
+  targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => {
+    highlightedMaterialId.value = '';
+  }, 1800);
+  const nextQuery = { ...route.query } as Record<string, any>;
+  delete nextQuery.highlightId;
+  await router.replace({ query: nextQuery });
+};
+
 const fetchMaterials = async () => {
   loading.value = true;
   try {
@@ -179,6 +226,7 @@ const fetchMaterials = async () => {
       params: { type: '原料' }
     });
     materials.value = response.data;
+    await handleRouteHighlight();
   } catch (error) {
     console.error('Failed to fetch materials:', error);
     ElMessage.error('获取原料数据失败');
@@ -190,6 +238,13 @@ const fetchMaterials = async () => {
 onMounted(() => {
   fetchMaterials();
 });
+
+watch(
+  () => route.query.highlightId,
+  async () => {
+    if (materials.value.length) await handleRouteHighlight();
+  }
+);
 
 // Computed pipeline
 const processedMaterials = computed(() => {

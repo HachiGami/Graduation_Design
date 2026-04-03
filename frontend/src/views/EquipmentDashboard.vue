@@ -60,11 +60,13 @@
         <div class="w-32 text-right">操作</div>
       </div>
       <div class="p-2" v-loading="loading">
-      <el-collapse v-if="processedEquipments.length > 0">
+      <el-collapse v-if="processedEquipments.length > 0" v-model="equipmentExpandedNames">
         <EquipmentAccordionItem
           v-for="equipment in processedEquipments"
           :key="equipment._id"
           :equipment="equipment"
+          :anchor-id="'equipment-row-' + String(equipment._id || equipment.id || '')"
+          :highlighted="highlightedEquipmentId === String(equipment._id || equipment.id || '')"
           @update="fetchEquipments"
         />
       </el-collapse>
@@ -155,7 +157,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Search, Tools, Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -164,6 +167,10 @@ import { createResource } from '@/api/resource'
 
 const equipments = ref<any[]>([])
 const loading = ref(false)
+const route = useRoute()
+const router = useRouter()
+const equipmentExpandedNames = ref<(string | number)[]>([])
+const highlightedEquipmentId = ref('')
 
 const searchQuery = ref('')
 const sortOption = ref('default')
@@ -283,6 +290,47 @@ const submitAddEquipment = async () => {
   }
 }
 
+const handleRouteHighlight = async () => {
+  const rawId = route.query.highlightId
+  const highlightId = Array.isArray(rawId) ? rawId[0] : rawId
+  if (!highlightId) return
+
+  const targetId = String(highlightId)
+  const target = equipments.value.find(
+    (eq) => String(eq._id || eq.id || '') === targetId
+  )
+  if (!target) {
+    ElMessage.warning('未找到目标设备，可能已被删除')
+    highlightedEquipmentId.value = ''
+    const nextQuery = { ...route.query } as Record<string, any>
+    delete nextQuery.highlightId
+    await router.replace({ query: nextQuery })
+    return
+  }
+
+  searchQuery.value = ''
+  sortOption.value = 'default'
+  processFilter.value = ''
+  filterSpecification.value = ''
+  highlightedEquipmentId.value = targetId
+  equipmentExpandedNames.value = [target._id || target.id]
+
+  await nextTick()
+  const targetEl = document.getElementById(`equipment-row-${targetId}`)
+  if (!targetEl) {
+    ElMessage.warning('定位失败，请稍后重试')
+    return
+  }
+
+  targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  setTimeout(() => {
+    highlightedEquipmentId.value = ''
+  }, 1800)
+  const nextQuery = { ...route.query } as Record<string, any>
+  delete nextQuery.highlightId
+  await router.replace({ query: nextQuery })
+}
+
 const fetchEquipments = async () => {
   loading.value = true
   try {
@@ -290,6 +338,7 @@ const fetchEquipments = async () => {
     if (response.ok) {
       equipments.value = await response.json()
     }
+    await handleRouteHighlight()
   } catch (error) {
     console.error('Failed to fetch equipments:', error)
   } finally {
@@ -300,6 +349,13 @@ const fetchEquipments = async () => {
 onMounted(() => {
   fetchEquipments()
 })
+
+watch(
+  () => route.query.highlightId,
+  async () => {
+    if (equipments.value.length) await handleRouteHighlight()
+  }
+)
 
 
 const uniqueProcesses = computed(() => Object.keys(processMap))
