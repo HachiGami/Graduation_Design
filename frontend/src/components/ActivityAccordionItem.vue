@@ -1434,8 +1434,8 @@ watch(
 watch(
   () => props.forceExpand,
   (shouldExpand) => {
-    if (!collapseName.value) return
-    expandedPanels.value = shouldExpand ? [collapseName.value] : []
+    if (!collapseName.value || !shouldExpand) return
+    expandedPanels.value = [collapseName.value]
   },
   { immediate: true }
 )
