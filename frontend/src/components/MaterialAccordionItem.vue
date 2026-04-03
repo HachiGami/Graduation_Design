@@ -13,7 +13,7 @@
       <div class="flex-1 flex items-center">
         <div
           class="w-10 h-10 rounded-lg border flex items-center justify-center mr-3"
-          :class="material.remaining_days > 0 && material.remaining_days <= 7 ? 'bg-red-50 text-red-500 border-red-100' : 'bg-slate-100 text-slate-500 border-slate-200'"
+          :class="materialRowIconEtaClass"
         >
           <el-icon><Box /></el-icon>
         </div>
@@ -32,17 +32,27 @@
         </div>
       </div>
       <div class="w-48">
-        <span
-          v-if="material.remaining_days > 0 && material.remaining_days <= 7"
-          class="flex items-center px-2.5 py-1 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-bold shadow-sm w-fit"
-        >
-          <div class="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5 animate-pulse"></div>
-          仅剩 {{ material.remaining_days }} 天
-        </span>
-        <span v-else class="text-xs font-bold text-slate-400 flex items-center">
-          <el-icon class="mr-1 text-emerald-400"><Select /></el-icon>
-          充足
-        </span>
+        <template v-if="remainingDaysForUi === -1 || remainingDaysForUi > 999">
+          <span class="inline-flex items-center text-sm font-black text-emerald-500">
+            <el-icon class="mr-1"><Select /></el-icon> 充足
+          </span>
+        </template>
+        <template v-else-if="remainingDaysForUi <= 7">
+          <span
+            class="inline-flex items-center px-2.5 py-1 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-bold shadow-sm"
+          >
+            <div class="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5 animate-pulse"></div>
+            仅剩 {{ Number(remainingDaysForUi).toFixed(2) }} 天
+          </span>
+        </template>
+        <template v-else>
+          <span
+            class="inline-flex items-center px-2.5 py-1 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-lg text-xs font-bold shadow-sm"
+          >
+            <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></div>
+            约 {{ Number(remainingDaysForUi).toFixed(2) }} 天
+          </span>
+        </template>
       </div>
       <div class="w-32 flex justify-end space-x-1">
         <button
@@ -120,7 +130,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { ArrowRight, Box, DataAnalysis, Delete, Edit, Link, Operation, Select, Share } from '@element-plus/icons-vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
@@ -200,6 +210,30 @@ const emit = defineEmits(['replenish', 'edit']);
 const router = useRouter();
 
 const isOpen = ref(false);
+
+const dailyConsumptionNum = computed(() => Number(props.material?.daily_consumption ?? 0) || 0);
+
+/**
+ * 与列表徽章分支一致：无消耗为 -1（充足）；有消耗时优先接口 remaining_days，无效则用 库存/日耗。
+ */
+const remainingDaysForUi = computed((): number => {
+  const dc = dailyConsumptionNum.value;
+  if (dc <= 0) return -1;
+  const raw = props.material?.remaining_days;
+  const n = raw === null || raw === undefined ? NaN : Number(raw);
+  const q = Number(props.material?.quantity ?? 0);
+  if (!Number.isFinite(n) || n < 0) {
+    return q / dc;
+  }
+  return n;
+});
+
+const materialRowIconEtaClass = computed(() => {
+  const rd = remainingDaysForUi.value;
+  if (rd === -1 || rd > 999) return 'bg-slate-100 text-slate-500 border-slate-200';
+  if (rd <= 7) return 'bg-red-50 text-red-500 border-red-100';
+  return 'bg-emerald-50 text-emerald-600 border-emerald-100';
+});
 
 watch(
   () => props.forceOpen,
