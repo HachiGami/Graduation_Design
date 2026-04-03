@@ -24,7 +24,7 @@ export interface RiskItem {
 }
 
 export const getRisks = (domain?: string) => {
-  return request.get('/analytics/risks', { params: { domain } })
+  return request.get<any, RiskItem[]>('/analytics/risks', { params: { domain } })
 }
 
 /**

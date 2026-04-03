@@ -504,7 +504,7 @@ import DependencyGraph from '@/components/DependencyGraph.vue'
 import DashboardPanel from '@/components/DashboardPanel.vue'
 import { analyzeGraph, type AnalysisScope } from '@/utils/graphAnalyzer'
 import { checkResources } from '@/utils/resourceChecker'
-import { getDynamicRisks, getRisks, type RiskItem } from '@/api/analytics'
+import { getRisks, type RiskItem } from '@/api/analytics'
 import { sumSopStepDurations } from '@/utils/sopDuration'
 
 void VideoPlay
@@ -733,30 +733,6 @@ const loadPersonnel = async () => {
   } catch (error) {
     ElMessage.error('加载人员失败')
   }
-}
-
-// 通过ID获取资源名称
-const getResourceNameById = (id: string) => {
-  const resource = resources.value.find(r => r.id === id)
-  return resource?.name || id
-}
-
-// 通过ID获取人员名称
-const getPersonnelNameById = (id: string) => {
-  const person = personnel.value.find(p => p.id === id)
-  return person?.name || id
-}
-
-// 获取流程域中文名称
-const getDomainName = (domain: string) => {
-  const domainMap: Record<string, string> = {
-    'production': '生产',
-    'transport': '运输',
-    'sales': '销售',
-    'quality': '质检',
-    'warehouse': '仓储'
-  }
-  return domainMap[domain] || domain
 }
 
 // 加载全局图数据
