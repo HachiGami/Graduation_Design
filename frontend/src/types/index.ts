@@ -16,6 +16,15 @@ export interface Resource {
   updated_at?: string
 }
 
+/** 列表接口从 Neo4j 聚合的当前服务活动（见后端 PersonnelResponse） */
+export interface PersonnelServingActivityDetail {
+  activity_name: string
+  activity_id?: string
+  process_id?: string
+  status?: string
+  working_hours?: Array<{ start_time?: string; end_time?: string }>
+}
+
 export interface Personnel {
   id?: string
   name: string
@@ -35,6 +44,8 @@ export interface Personnel {
   salary?: number
   created_at?: string
   updated_at?: string
+  serving_activities_details?: PersonnelServingActivityDetail[]
+  serving_processes?: string[]
 }
 
 export interface Dependency {

@@ -68,13 +68,13 @@
                   </div>
                   <span class="truncate text-sm font-semibold text-slate-800">{{ act.activity_name }}</span>
                   <span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-600">
-                    {{ getActivityStatusLabel(act.status) }}
+                    {{ getActivityStatusLabel(act.status ?? '') }}
                   </span>
                 </div>
                 <div class="ml-11 mt-2 flex flex-wrap items-center gap-4 text-xs">
                   <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-slate-600">
                     <i class="fas fa-project-diagram"></i>
-                    归属: {{ formatProcessName(act.process_id) }}
+                    归属: {{ formatProcessName(act.process_id ?? '') }}
                   </span>
                   <span
                     v-if="act.working_hours && act.working_hours.length > 0"
@@ -403,13 +403,6 @@ const formatWorkingHours = (workingHours: Array<{ start_time?: string; end_time?
     .join(', ')
 }
 
-const getActivityStatusType = (status: string) => {
-  const normalized = (status || '').toLowerCase()
-  if (normalized === 'in_progress' || normalized === '进行中') return 'success'
-  if (normalized === 'stopped' || normalized === '已停机') return 'danger'
-  return 'info'
-}
-
 const getActivityStatusLabel = (status: string) => {
   const normalized = (status || '').toLowerCase()
   if (normalized === 'in_progress' || normalized === '进行中') return '进行中'
@@ -464,6 +457,11 @@ const submitLeave = async () => {
   }
 }
 
+const isResigningStatus = (s: string | undefined) => {
+  const v = String(s || '').toLowerCase()
+  return v === 'resigned' || v === '离职'
+}
+
 const submitEdit = async () => {
   const personnelId = props.personnel.id || (props.personnel as any)._id
   if (!personnelId) {
@@ -476,6 +474,25 @@ const submitEdit = async () => {
     console.error('表单校验失败')
     ElMessage.warning('请检查表单填写是否有误')
     return
+  }
+
+  const prevStatus = props.personnel.status
+  const nextStatus = editForm.value.status
+  if (!isResigningStatus(prevStatus) && isResigningStatus(nextStatus)) {
+    try {
+      await ElMessageBox.confirm(
+        '将员工状态设为「离职」将自动解除其当前在图谱中关联的所有生产活动分配，是否继续？',
+        '高危操作确认',
+        {
+          confirmButtonText: '确定离职并解绑',
+          cancelButtonText: '取消',
+          type: 'warning',
+          confirmButtonClass: 'el-button--danger'
+        }
+      )
+    } catch {
+      return
+    }
   }
 
   const { id, work_hours, assigned_tasks, created_at, updated_at, ...rest } = editForm.value as Personnel
@@ -501,6 +518,9 @@ const submitEdit = async () => {
   try {
     await updatePersonnel(personnelId, payload)
     ElMessage.success('更新成功')
+    if (!isResigningStatus(prevStatus) && isResigningStatus(nextStatus)) {
+      window.dispatchEvent(new CustomEvent('personnel-neo4j-assignments-changed'))
+    }
     editDialogVisible.value = false
     emit('updated')
   } catch (error) {

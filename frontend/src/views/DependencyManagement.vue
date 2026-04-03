@@ -490,7 +490,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { TopRight } from '@element-plus/icons-vue'
 import { DataLine, Odometer, Clock, Warning, VideoPlay, User, Monitor, Box, Select } from '@element-plus/icons-vue'
@@ -1314,11 +1314,38 @@ const handleDeleteResource = async () => {
 }
 
 // 人员操作
+const isPersonnelResigningStatus = (s: string | undefined) => {
+  const v = String(s || '').toLowerCase()
+  return v === 'resigned' || v === '离职'
+}
+
 const handlePersonnelSubmit = async () => {
   if (!personnelForm.value.name?.trim() || !personnelForm.value.role?.trim() || !personnelForm.value.responsibility?.trim()) {
     console.error('表单校验失败')
     ElMessage.warning('请检查表单填写是否有误')
     return
+  }
+  const prevStatus = currentPersonnel.value?.status
+  const nextStatus = personnelForm.value.status
+  if (
+    currentPersonnel.value?.id &&
+    !isPersonnelResigningStatus(prevStatus) &&
+    isPersonnelResigningStatus(nextStatus)
+  ) {
+    try {
+      await ElMessageBox.confirm(
+        '将员工状态设为「离职」将自动解除其当前在图谱中关联的所有生产活动分配，是否继续？',
+        '高危操作确认',
+        {
+          confirmButtonText: '确定离职并解绑',
+          cancelButtonText: '取消',
+          type: 'warning',
+          confirmButtonClass: 'el-button--danger'
+        }
+      )
+    } catch {
+      return
+    }
   }
   const { id, work_hours, assigned_tasks, created_at, updated_at, department, ...restPersonnel } = personnelForm.value as Personnel
   const payload = {
@@ -1377,7 +1404,13 @@ const handleDeletePersonnel = async () => {
   }
 }
 
+const onPersonnelNeo4jAssignmentsChanged = () => {
+  void loadPersonnel()
+  void loadGraphData()
+}
+
 onMounted(async () => {
+  window.addEventListener('personnel-neo4j-assignments-changed', onPersonnelNeo4jAssignmentsChanged)
   initFromUrl()
   await loadGlobalGraphData()
   applyRouteFocusHighlight()
@@ -1389,6 +1422,10 @@ onMounted(async () => {
   await loadResources()
   await loadPersonnel()
   await loadRiskList()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('personnel-neo4j-assignments-changed', onPersonnelNeo4jAssignmentsChanged)
 })
 
 watch([currentDomain, currentProcessId], async () => {

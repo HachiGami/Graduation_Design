@@ -206,9 +206,11 @@ async def update_personnel(personnel_id: str, personnel: PersonnelUpdate):
                         "name": personnel.name
                     })
                 
-                if personnel.status == "resigned":
+                # 活动→人员为 ASSIGNED_TO / ASSIGNS；历史脚本可能存在人员→活动的 ASSIGNED_TO
+                if update_data.get("status") == "resigned":
                     neo4j_query_resign = """
-                    MATCH (p:Personnel {id: $personnel_id})-[r:ASSIGNED_TO]->()
+                    MATCH (p:Personnel {id: $personnel_id})
+                    MATCH (p)-[r:ASSIGNED_TO|ASSIGNS]-()
                     DELETE r
                     """
                     await session.run(neo4j_query_resign, {
