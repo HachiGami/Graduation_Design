@@ -79,21 +79,17 @@
 
           <el-tab-pane label="设备履历与参数">
             <div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <div class="grid grid-cols-6 border-b border-slate-200 text-sm">
+              <div class="grid grid-cols-4 border-b border-slate-200 text-sm">
                 <div class="bg-slate-100 px-3 py-2 font-medium text-slate-600">设备名称</div>
                 <div class="border-l border-slate-200 px-3 py-2 text-slate-700">{{ equipment.name || '-' }}</div>
                 <div class="border-l border-slate-200 bg-slate-100 px-3 py-2 font-medium text-slate-600">设备种类</div>
                 <div class="border-l border-slate-200 px-3 py-2 text-slate-700">{{ equipment.specification || '-' }}</div>
-                <div class="border-l border-slate-200 bg-slate-100 px-3 py-2 font-medium text-slate-600">当前状态</div>
-                <div class="border-l border-slate-200 px-3 py-2 text-slate-700">{{ getStatusLabel(equipment.status) }}</div>
               </div>
-              <div class="grid grid-cols-6 text-sm">
+              <div class="grid grid-cols-4 text-sm">
                 <div class="bg-slate-100 px-3 py-2 font-medium text-slate-600">生产厂家</div>
                 <div class="border-l border-slate-200 px-3 py-2 text-slate-700">{{ equipment.manufacturer || '-' }}</div>
                 <div class="border-l border-slate-200 bg-slate-100 px-3 py-2 font-medium text-slate-600">生产时间</div>
                 <div class="border-l border-slate-200 px-3 py-2 text-slate-700">{{ equipment.production_date || '-' }}</div>
-                <div class="border-l border-slate-200 bg-slate-100 px-3 py-2 font-medium text-slate-600">设备ID</div>
-                <div class="border-l border-slate-200 px-3 py-2 text-slate-700">{{ equipment._id || '-' }}</div>
               </div>
             </div>
           </el-tab-pane>
@@ -250,16 +246,6 @@ const maintenanceOptions = [
   { label: '6天后', value: '6天后' },
   { label: '7天后', value: '7天后' }
 ]
-
-const getStatusLabel = (status: string) => {
-  const map: Record<string, string> = {
-    idle: '空闲',
-    in_use: '使用中',
-    maintenance: '维护中',
-    available: '可用'
-  }
-  return map[status] || status
-}
 
 const processMap: Record<string, string> = {
   'P001': '主生产线',
