@@ -151,58 +151,66 @@
       width="800px"
     >
       <!-- 详情展示模式 -->
-      <div v-if="currentActivity?.id && !isEditActivity">
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="活动名称" :span="2">{{ activityForm.name }}</el-descriptions-item>
-          <el-descriptions-item label="活动类型">{{ getDomainName(activityForm.domain) || '未知' }}</el-descriptions-item>
-          <el-descriptions-item label="状态">
-            <el-tag v-if="activityForm.status === 'pending'" type="info">待开始</el-tag>
-            <el-tag v-else-if="activityForm.status === 'in_progress'" type="warning">进行中</el-tag>
-            <el-tag v-else-if="activityForm.status === 'completed'" type="success">已完成</el-tag>
-            <el-tag v-else-if="activityForm.status === 'paused'" type="warning">已暂停</el-tag>
-            <el-tag v-else type="danger">已取消</el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="SOP 合计时长">{{ sopTotalMinutesDetail }} 分钟</el-descriptions-item>
-          <el-descriptions-item label="截止日期">{{ activityForm.deadline || '未设置' }}</el-descriptions-item>
-          <el-descriptions-item label="流程ID">{{ activityForm.process_id }}</el-descriptions-item>
-          <el-descriptions-item label="版本">{{ activityForm.version || 1 }}</el-descriptions-item>
-          <el-descriptions-item label="描述" :span="2">{{ activityForm.description || '无' }}</el-descriptions-item>
-          
-          <el-descriptions-item label="SOP步骤" :span="2">
-            <div v-if="activityForm.sop_steps && activityForm.sop_steps.length > 0">
-              <div v-for="(step, index) in activityForm.sop_steps" :key="index" style="margin-bottom: 8px;">
-                <el-tag type="primary" style="margin-right: 8px;">步骤{{ step.step_number }}</el-tag>
-                {{ step.description }} ({{ step.duration }}分钟)
+      <div v-if="currentActivity?.id && !isEditActivity" class="flex flex-col gap-5 animate-in slide-in-from-right-4 duration-300">
+        <div class="bg-slate-50 rounded-xl p-4 border border-slate-200 flex justify-between items-center shadow-sm">
+          <div>
+            <div class="text-[10px] font-bold text-slate-400 uppercase mb-1 tracking-wider">所属流程</div>
+            <div class="text-sm font-black text-slate-800">{{ activityForm.process_id }}</div>
+          </div>
+          <div class="h-8 w-px bg-slate-200"></div>
+          <div>
+            <div class="text-[10px] font-bold text-slate-400 uppercase mb-1 tracking-wider">SOP 合计</div>
+            <div class="text-sm font-black text-blue-600">{{ sopTotalMinutesDetail }} <span class="text-[10px] font-bold text-slate-500">分钟</span></div>
+          </div>
+          <div class="h-8 w-px bg-slate-200"></div>
+          <div class="text-right">
+            <div class="text-[10px] font-bold text-slate-400 uppercase mb-1 tracking-wider">当前状态</div>
+            <span v-if="activityForm.status === 'in_progress'" class="px-2 py-1 bg-blue-500 text-white rounded text-[10px] font-bold shadow-sm">进行中</span>
+            <span v-else-if="activityForm.status === 'completed'" class="px-2 py-1 bg-emerald-500 text-white rounded text-[10px] font-bold shadow-sm">已完成</span>
+            <span v-else class="px-2 py-1 bg-slate-400 text-white rounded text-[10px] font-bold shadow-sm">{{ activityForm.status }}</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="border border-slate-200 bg-white p-3.5 rounded-xl shadow-sm">
+            <div class="text-[11px] font-bold text-slate-400 mb-1">活动名称</div>
+            <div class="text-sm font-bold text-slate-700">{{ activityForm.name }}</div>
+          </div>
+          <div class="border border-slate-200 bg-white p-3.5 rounded-xl shadow-sm">
+            <div class="text-[11px] font-bold text-slate-400 mb-1">运行时间段</div>
+            <div class="text-xs font-bold text-slate-700 mt-1">
+              <template v-if="Array.isArray(activityForm.working_hours)">{{ activityForm.working_hours.join(', ') }}</template>
+              <template v-else>{{ activityForm.working_hours || '未设置' }}</template>
+            </div>
+          </div>
+          <div class="col-span-2 border border-slate-200 bg-white p-3.5 rounded-xl shadow-sm">
+            <div class="text-[11px] font-bold text-slate-400 mb-1">活动描述</div>
+            <div class="text-xs font-medium text-slate-600 leading-relaxed mt-1">{{ activityForm.description || '暂无描述' }}</div>
+          </div>
+        </div>
+
+        <div class="mt-2">
+          <div class="text-xs font-bold text-slate-800 mb-3 flex items-center">
+            <div class="w-1.5 h-3 bg-blue-500 rounded-full mr-2"></div>SOP 执行步骤
+          </div>
+          <div v-if="activityForm.sop_steps?.length > 0" class="space-y-2.5 relative">
+            <div class="absolute left-4 top-4 bottom-4 w-px bg-blue-100 z-0"></div>
+            <div v-for="(step, index) in activityForm.sop_steps" :key="index" class="relative z-10 flex items-center p-3 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-blue-300 hover:shadow-md transition-all">
+              <div class="flex-shrink-0">
+                <span class="inline-flex items-center justify-center bg-blue-50 text-blue-600 text-[11px] font-black px-2.5 py-1 rounded-md border border-blue-100 shadow-sm">
+                  步骤 {{ (step as any).step_number || index + 1 }}
+                </span>
+              </div>
+              <div class="ml-3 flex-1 text-sm font-bold text-slate-700 truncate">{{ (step as any).description || (step as any).name || step.content }}</div>
+              <div class="ml-3 flex-shrink-0 flex items-center">
+                <span class="text-[11px] font-black text-slate-600 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                  {{ step.duration }} <span class="font-bold text-slate-400">分</span>
+                </span>
               </div>
             </div>
-            <span v-else>无</span>
-          </el-descriptions-item>
-          
-          <el-descriptions-item label="所需资源" :span="2">
-            <div v-if="activityForm.required_resources && activityForm.required_resources.length > 0">
-              <el-tag v-for="resourceId in activityForm.required_resources" :key="resourceId" style="margin-right: 5px;">
-                {{ getResourceNameById(resourceId) }}
-              </el-tag>
-            </div>
-            <span v-else>无</span>
-          </el-descriptions-item>
-          
-          <el-descriptions-item label="所需人员" :span="2">
-            <div v-if="activityForm.required_personnel && activityForm.required_personnel.length > 0">
-              <el-tag v-for="personnelId in activityForm.required_personnel" :key="personnelId" style="margin-right: 5px;" type="success">
-                {{ getPersonnelNameById(personnelId) }}
-              </el-tag>
-            </div>
-            <span v-else>无</span>
-          </el-descriptions-item>
-          
-          <el-descriptions-item label="创建时间" v-if="activityForm.created_at">
-            {{ new Date(activityForm.created_at).toLocaleString('zh-CN') }}
-          </el-descriptions-item>
-          <el-descriptions-item label="更新时间" v-if="activityForm.updated_at">
-            {{ new Date(activityForm.updated_at).toLocaleString('zh-CN') }}
-          </el-descriptions-item>
-        </el-descriptions>
+          </div>
+          <div v-else class="text-xs text-center py-4 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">无SOP配置</div>
+        </div>
       </div>
 
       <!-- 编辑/添加模式 -->
@@ -230,7 +238,6 @@
       <template #footer>
         <div style="display: flex; justify-content: space-between;">
           <div>
-            <el-button v-if="currentActivity?.id && !isEditActivity" type="primary" @click="isEditActivity = true">编辑</el-button>
             <el-button v-if="currentActivity?.id" type="danger" @click="handleDeleteActivity">删除</el-button>
           </div>
           <div>
@@ -248,21 +255,68 @@
       width="600px"
     >
       <!-- 详情展示模式 -->
-      <div v-if="currentResource?.id && !isEditResource">
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="资源名称" :span="2">{{ resourceForm.name }}</el-descriptions-item>
-          <el-descriptions-item label="资源类型">{{ resourceForm.type }}</el-descriptions-item>
-          <el-descriptions-item label="状态">
-            <el-tag v-if="resourceForm.status === 'available'" type="success">可用</el-tag>
-            <el-tag v-else-if="resourceForm.status === 'in_use'" type="warning">使用中</el-tag>
-            <el-tag v-else-if="resourceForm.status === 'maintenance'" type="info">维护中</el-tag>
-            <el-tag v-else type="danger">不可用</el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="规格" :span="2">{{ resourceForm.specification }}</el-descriptions-item>
-          <el-descriptions-item label="供应商">{{ resourceForm.supplier }}</el-descriptions-item>
-          <el-descriptions-item label="单位">{{ resourceForm.unit }}</el-descriptions-item>
-          <el-descriptions-item label="数量">{{ resourceForm.quantity }}</el-descriptions-item>
-        </el-descriptions>
+      <div v-if="currentResource?.id && !isEditResource && currentResource?.type === '设备'" class="flex flex-col gap-4 animate-in slide-in-from-right-4 duration-300">
+        <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-5 rounded-2xl shadow-lg flex items-center mb-2">
+          <div class="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center mr-4 border border-white/20">
+            <el-icon :size="24" class="text-amber-400"><Monitor /></el-icon>
+          </div>
+          <div>
+            <div class="text-lg font-black text-white">{{ resourceForm.name }}</div>
+            <div class="text-xs font-bold text-amber-400 mt-1 uppercase tracking-widest">工业设备资产</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="border border-slate-200 bg-white p-3.5 rounded-xl shadow-sm">
+            <div class="text-[11px] font-bold text-slate-400 mb-1">设备类型</div><div class="text-sm font-bold text-slate-700">{{ resourceForm.specification || '未知' }}</div>
+          </div>
+          <div class="border border-slate-200 bg-white p-3.5 rounded-xl shadow-sm">
+            <div class="text-[11px] font-bold text-slate-400 mb-1">生产时间</div><div class="text-sm font-bold text-slate-700">{{ (resourceForm as any).production_time || (resourceForm as any).manufacture_date || '未知' }}</div>
+          </div>
+          <div class="col-span-2 border border-slate-200 bg-white p-3.5 rounded-xl shadow-sm">
+            <div class="text-[11px] font-bold text-slate-400 mb-1">供应商</div><div class="text-sm font-bold text-slate-700">{{ resourceForm.supplier || '未知' }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="currentResource?.id && !isEditResource && currentResource?.type === '原料'" class="flex flex-col gap-4 animate-in slide-in-from-right-4 duration-300">
+        <div class="bg-white p-5 rounded-2xl border border-emerald-200 shadow-sm flex items-center justify-between">
+          <div class="flex items-center">
+            <div class="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center mr-4 border border-emerald-100">
+              <el-icon :size="24" class="text-emerald-500"><Box /></el-icon>
+            </div>
+            <div>
+              <div class="text-lg font-black text-slate-800">{{ resourceForm.name }}</div>
+              <div class="text-xs font-bold text-emerald-600 mt-1 uppercase tracking-widest">生产流转原料</div>
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="text-[10px] font-bold text-slate-400 uppercase mb-0.5">库存总量</div>
+            <div class="text-xl font-black text-slate-700">{{ resourceForm.quantity }} <span class="text-[10px] font-bold text-slate-400">{{ resourceForm.unit }}</span></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="border border-slate-200 bg-white p-4 rounded-xl shadow-sm flex flex-col justify-center">
+            <div class="text-[11px] font-bold text-slate-400 mb-2">预估可用时长</div>
+            <div>
+              <span v-if="(resourceForm as any).remaining_days === -1 || (resourceForm as any).remaining_days > 999" class="inline-flex items-center text-sm font-black text-emerald-500">
+                <el-icon class="mr-1"><Select /></el-icon> 充足
+              </span>
+              <span v-else class="inline-flex items-center px-2.5 py-1 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-bold shadow-sm">
+                <div class="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5 animate-pulse"></div>
+                仅剩 {{ Number((resourceForm as any).remaining_days).toFixed(1) }} 天
+              </span>
+            </div>
+          </div>
+          
+          <div class="border border-blue-100 bg-blue-50/50 p-4 rounded-xl shadow-sm flex flex-col justify-center">
+            <div class="text-[11px] font-bold text-slate-500 mb-1">当前活动消耗速率</div>
+            <div class="text-lg font-black text-blue-700">
+              {{ currentResourceEdgeRate }} <span class="text-[10px] font-bold text-blue-400 uppercase ml-0.5">/ Hour</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 编辑/添加模式 -->
@@ -298,7 +352,6 @@
       <template #footer>
         <div style="display: flex; justify-content: space-between;">
           <div>
-            <el-button v-if="currentResource?.id && !isEditResource" type="primary" @click="isEditResource = true">编辑</el-button>
             <el-button v-if="currentResource?.id" type="danger" @click="handleDeleteResource">删除</el-button>
           </div>
           <div>
@@ -316,23 +369,45 @@
       width="600px"
     >
       <!-- 详情展示模式 -->
-      <div v-if="currentPersonnel?.id && !isEditPersonnel">
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="姓名" :span="2">{{ personnelForm.name }}</el-descriptions-item>
-          <el-descriptions-item label="角色">{{ personnelForm.role }}</el-descriptions-item>
-          <el-descriptions-item label="状态">
-            <el-tag v-if="personnelForm.status === 'available'" type="success">可用</el-tag>
-            <el-tag v-else-if="personnelForm.status === 'busy'" type="warning">忙碌</el-tag>
-            <el-tag v-else-if="personnelForm.status === 'on_leave'" type="info">休假</el-tag>
-            <el-tag v-else type="danger">离职</el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="职责" :span="2">{{ personnelForm.responsibility }}</el-descriptions-item>
-          <el-descriptions-item label="工作时间" :span="2">{{ personnelForm.work_hours }}</el-descriptions-item>
-          <el-descriptions-item label="技能" :span="2">
-            <el-tag v-for="skill in personnelForm.skills" :key="skill" style="margin-right: 5px;">{{ skill }}</el-tag>
-            <span v-if="!personnelForm.skills || personnelForm.skills.length === 0">无</span>
-          </el-descriptions-item>
-        </el-descriptions>
+      <div v-if="currentPersonnel?.id && !isEditPersonnel" class="flex flex-col gap-4 animate-in slide-in-from-right-4 duration-300">
+        <div class="flex items-center p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
+          <div class="w-14 h-14 bg-gradient-to-br from-blue-400 to-blue-600 text-white rounded-full flex items-center justify-center text-xl font-black shadow-md mr-4 ring-4 ring-blue-50">
+            {{ personnelForm.name?.charAt(0) || 'P' }}
+          </div>
+          <div class="flex-1">
+            <div class="text-xl font-black text-slate-800 flex items-center">
+              {{ personnelForm.name }}
+              <span class="ml-3 px-2.5 py-0.5 bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-bold rounded-md uppercase tracking-wider">{{ personnelForm.role }}</span>
+            </div>
+            <div class="text-xs font-bold text-slate-400 mt-1 flex items-center">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span> 状态: {{ personnelForm.status === 'available' ? '活跃' : personnelForm.status }}
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="border border-slate-200 bg-white p-3.5 rounded-xl shadow-sm">
+            <div class="text-[11px] font-bold text-slate-400 mb-1">性别</div><div class="text-sm font-bold text-slate-700">{{ personnelForm.gender || '未知' }}</div>
+          </div>
+          <div class="border border-slate-200 bg-white p-3.5 rounded-xl shadow-sm">
+            <div class="text-[11px] font-bold text-slate-400 mb-1">年龄</div><div class="text-sm font-bold text-slate-700">{{ personnelForm.age ? personnelForm.age + ' 岁' : '未知' }}</div>
+          </div>
+          <div class="border border-slate-200 bg-white p-3.5 rounded-xl shadow-sm">
+            <div class="text-[11px] font-bold text-slate-400 mb-1">学历</div><div class="text-sm font-bold text-slate-700">{{ personnelForm.education || '未知' }}</div>
+          </div>
+          <div class="border border-blue-100 bg-blue-50/50 p-3.5 rounded-xl shadow-sm">
+            <div class="text-[11px] font-bold text-blue-500 mb-1">所属部门</div><div class="text-sm font-black text-blue-700">{{ personnelForm.department || '暂无部门' }}</div>
+          </div>
+          <div class="border border-slate-200 bg-white p-3.5 rounded-xl shadow-sm">
+            <div class="text-[11px] font-bold text-slate-400 mb-1">薪资</div><div class="text-sm font-black text-emerald-600">{{ personnelForm.salary ? '¥ ' + personnelForm.salary + ' /月' : '保密' }}</div>
+          </div>
+          <div class="border border-slate-200 bg-white p-3.5 rounded-xl shadow-sm">
+            <div class="text-[11px] font-bold text-slate-400 mb-1">入职日期</div><div class="text-sm font-bold text-slate-700">{{ personnelForm.hire_date || '未知' }}</div>
+          </div>
+          <div class="col-span-2 border border-slate-200 bg-white p-3.5 rounded-xl shadow-sm">
+            <div class="text-[11px] font-bold text-slate-400 mb-1">籍贯</div><div class="text-sm font-bold text-slate-700">{{ personnelForm.native_place || '未知' }}</div>
+          </div>
+        </div>
       </div>
 
       <!-- 编辑/添加模式 -->
@@ -372,7 +447,6 @@
       <template #footer>
         <div style="display: flex; justify-content: space-between;">
           <div>
-            <el-button v-if="currentPersonnel?.id && !isEditPersonnel" type="primary" @click="isEditPersonnel = true">编辑</el-button>
             <el-button v-if="currentPersonnel?.id" type="danger" @click="handleDeletePersonnel">删除</el-button>
           </div>
           <div>
@@ -388,7 +462,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { DataLine, Odometer, Clock, Warning } from '@element-plus/icons-vue'
+import { DataLine, Odometer, Clock, Warning, VideoPlay, User, Monitor, Box, Select } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createDependency, updateDependency, getGraphData } from '@/api/dependency'
 import { getActivities, getActivity, createActivity, updateActivity, deleteActivity } from '@/api/activity'
@@ -401,6 +475,9 @@ import { analyzeGraph, type AnalysisScope } from '@/utils/graphAnalyzer'
 import { checkResources } from '@/utils/resourceChecker'
 import { getDynamicRisks, getRisks, type RiskItem } from '@/api/analytics'
 import { sumSopStepDurations } from '@/utils/sopDuration'
+
+void VideoPlay
+void User
 
 const route = useRoute()
 const router = useRouter()
@@ -862,6 +939,7 @@ const sopTotalMinutesDetail = computed(() => sumSopStepDurations(activityForm.va
 const resourceDialogVisible = ref(false)
 const isEditResource = ref(false)
 const currentResource = ref<Resource | null>(null)
+const currentResourceEdgeRate = ref<number | string>(0)
 const resourceForm = ref<Resource>({
   name: '',
   type: '',
@@ -917,6 +995,15 @@ const handleNodeClick = async (node: any) => {
       if ((resource as any)._id && !resource.id) {
         resource.id = (resource as any)._id
       }
+
+      const relatedEdge = graphData.value.edges?.find((e: any) => e.source === node.id || e.target === node.id)
+      if (relatedEdge) {
+        const edgeData = relatedEdge as any
+        currentResourceEdgeRate.value = edgeData.rate || edgeData.quantity || edgeData.value || 0
+      } else {
+        currentResourceEdgeRate.value = 0
+      }
+
       currentResource.value = resource
       resourceForm.value = { ...resource }
       isEditResource.value = false

@@ -52,9 +52,6 @@
             </div>
           </el-descriptions-item>
         </el-descriptions>
-        <div style="margin-top: 20px; text-align: right;">
-          <el-button type="primary" @click="handleEditActivity">编辑活动</el-button>
-        </div>
       </div>
     </el-drawer>
 
@@ -80,9 +77,6 @@
             </el-tag>
           </el-descriptions-item>
         </el-descriptions>
-        <div style="margin-top: 20px; text-align: right;">
-          <el-button type="primary" @click="handleEditPersonnel">编辑人员</el-button>
-        </div>
       </div>
     </el-drawer>
 
@@ -106,9 +100,6 @@
             </el-tag>
           </el-descriptions-item>
         </el-descriptions>
-        <div style="margin-top: 20px; text-align: right;">
-          <el-button type="primary" @click="handleEditResource">编辑资源</el-button>
-        </div>
       </div>
     </el-drawer>
   </div>
@@ -548,49 +539,18 @@ const initCytoscape = async () => {
     const node = evt.target
     const nodeType = node.data('nodeType')
     const rawData = node.data('rawData')
-    
-    if (nodeType === 'activity') {
-      try {
-        const fullActivity = await getActivity(rawData.id)
-        if ((fullActivity as any)._id && !fullActivity.id) {
-          fullActivity.id = (fullActivity as any)._id
-        }
-        selectedActivity.value = fullActivity
-      } catch (error) {
-        selectedActivity.value = rawData
-      }
-      detailDrawerVisible.value = true
-      emit('nodeClick', node.data())
-    } else if (nodeType === 'personnel' && rawData) {
-      try {
-        let personnelId = rawData.original_id || rawData.id
-        if (personnelId && personnelId.includes('_inst_')) {
-          personnelId = personnelId.split('_inst_')[0]
-        }
-        const fullPersonnel = await getPersonnelById(personnelId)
-        if ((fullPersonnel as any)._id && !fullPersonnel.id) {
-          fullPersonnel.id = (fullPersonnel as any)._id
-        }
-        selectedPersonnel.value = fullPersonnel
-      } catch (error) {
-        selectedPersonnel.value = rawData
-      }
-      personnelDrawerVisible.value = true
-    } else if (nodeType === 'resource' && rawData) {
-      try {
-        let resourceId = rawData.original_id || rawData.id
-        if (resourceId && resourceId.includes('_inst_')) {
-          resourceId = resourceId.split('_inst_')[0]
-        }
-        const fullResource = await getResource(resourceId)
-        if ((fullResource as any)._id && !fullResource.id) {
-          fullResource.id = (fullResource as any)._id
-        }
-        selectedResource.value = fullResource
-      } catch (error) {
-        selectedResource.value = rawData
-      }
-      resourceDrawerVisible.value = true
+
+    // 左键详情统一交由父组件弹窗处理，避免与内部抽屉双轨并存
+    if (nodeType === 'activity' && rawData) {
+      emit('nodeClick', { ...rawData, category: 'Activity' })
+      return
+    }
+    if (nodeType === 'personnel' && rawData) {
+      emit('nodeClick', { ...rawData, category: 'Personnel', rawData })
+      return
+    }
+    if (nodeType === 'resource' && rawData) {
+      emit('nodeClick', { ...rawData, category: 'Resource', rawData })
     }
   })
 
