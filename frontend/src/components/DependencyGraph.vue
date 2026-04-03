@@ -440,6 +440,18 @@ const initCytoscape = async () => {
         }
       },
       {
+        selector: 'node.equipment-node',
+        style: {
+          'background-color': '#fbbf24',
+          'shape': 'round-rectangle',
+          'width': 92,
+          'height': 52,
+          'border-color': '#d97706',
+          'border-width': 2,
+          'color': '#422006'
+        }
+      },
+      {
         selector: 'node.personnel-node',
         style: {
           'background-color': '#E6A23C',
@@ -575,6 +587,39 @@ const initCytoscape = async () => {
   })
 }
 
+/** 图谱展开：原料与设备均按「活动维度」克隆实例，避免多活动共用同一可视节点导致连线牵拉重叠 */
+function isMaterialResourceNode(rn: any): boolean {
+  const t = String(rn.type || '').toLowerCase()
+  return (
+    t === 'material' ||
+    String(rn.type || '') === '原料' ||
+    String(rn.category || '').toLowerCase() === 'material' ||
+    (Array.isArray(rn.labels) && rn.labels.includes('Material'))
+  )
+}
+
+function isEquipmentResourceNode(rn: any): boolean {
+  const t = String(rn.type || '').toLowerCase()
+  return (
+    t === 'equipment' ||
+    String(rn.type || '') === '设备' ||
+    (Array.isArray(rn.labels) && (rn.labels.includes('Equipment')))
+  )
+}
+
+function shouldCloneResourceForActivity(rn: any): boolean {
+  return isMaterialResourceNode(rn) || isEquipmentResourceNode(rn)
+}
+
+function visualCloneResourceId(rn: any, activityId: string): string {
+  const instSuffix = `_inst_${activityId}`
+  const rawId = String(rn.id || '')
+  const base =
+    (rn.original_id && String(rn.original_id)) ||
+    (rawId.endsWith(instSuffix) ? rawId.slice(0, -instSuffix.length) : rawId) ||
+    rawId
+  return `${base}_clone_for_${activityId}`
+}
 
 const expandActivity = (activityId: string) => {
   if (!cy) return
@@ -586,23 +631,28 @@ const expandActivity = (activityId: string) => {
     props.data.resource_nodes
       .filter((rn: any) => rn.parent_activity === activityId)
       .forEach((rn: any) => {
-        const isMaterial = String(rn.type || '').toLowerCase() === 'material'
-          || String(rn.category || '').toLowerCase() === 'material'
-          || Array.isArray(rn.labels) && rn.labels.includes('Material')
-        const visualId = isMaterial ? `${rn.id}_clone_for_${activityId}` : rn.id
+        const split = shouldCloneResourceForActivity(rn)
+        const visualId = split ? visualCloneResourceId(rn, activityId) : rn.id
 
         if (!cy.$id(visualId).length) {
-          if (isMaterial) {
+          if (split) {
             visualResourceIdMap.set(rn.id, visualId)
           }
+          const styleHint = isMaterialResourceNode(rn)
+            ? 'material-node'
+            : isEquipmentResourceNode(rn)
+              ? 'equipment-node'
+              : ''
           toExpand.push({
             id: visualId,
             name: rn.name,
             category: 'resource',
-            classes: `expanded-node resource-node ${isMaterial ? 'material-node' : ''}`.trim(),
+            classes: ['expanded-node', 'resource-node', styleHint].filter(Boolean).join(' '),
             rawData: {
               ...rn,
-              original_id: rn.original_id || rn.id,
+              original_id: split
+                ? (rn.original_id || visualCloneResourceId(rn, activityId).replace(/_clone_for_.+$/, ''))
+                : (rn.original_id || rn.id),
               id: visualId
             }
           })
@@ -660,11 +710,10 @@ const expandActivity = (activityId: string) => {
       .filter((edge: any) => edge.source === activityId)
       .forEach((edge: any) => {
         const relation = edge.relation || edge.type
-        const isConsumes = relation === 'CONSUMES'
-        const targetId = isConsumes && visualResourceIdMap.has(edge.target)
+        const targetId = visualResourceIdMap.has(edge.target)
           ? visualResourceIdMap.get(edge.target)!
           : edge.target
-        const sourceId = isConsumes && visualResourceIdMap.has(edge.source)
+        const sourceId = visualResourceIdMap.has(edge.source)
           ? visualResourceIdMap.get(edge.source)!
           : edge.source
 

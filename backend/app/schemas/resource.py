@@ -34,6 +34,10 @@ class ResourceUpdate(BaseModel):
     manufacturer: Optional[str] = None
     production_date: Optional[str] = None
     upcoming_maintenance: Optional[list[str]] = None
+    equipment_activity_priority_order: Optional[List[str]] = Field(
+        default=None,
+        description="设备被多活动占用时的执行优先级（activity_id 顺序，靠前优先）",
+    )
 
 class ActivityConsumerResponse(BaseModel):
     activity_id: str = Field(default="", description="活动ID")
@@ -71,6 +75,10 @@ class ResourceResponse(BaseModel):
     serving_processes: Optional[List[str]] = Field(
         default=[],
         description="动态从Neo4j计算出的所涉流程ID数组"
+    )
+    equipment_activity_priority_order: Optional[List[str]] = Field(
+        default=[],
+        description="设备多活动占用时的优先级（activity_id，仅设备）",
     )
 
     class Config:

@@ -14,6 +14,8 @@ export interface Resource {
   is_active?: boolean
   created_at?: string
   updated_at?: string
+  /** 设备多活动占用时拖拽排序持久化（activity_id 列表，靠前优先） */
+  equipment_activity_priority_order?: string[]
 }
 
 /** 列表接口从 Neo4j 聚合的当前服务活动（见后端 PersonnelResponse） */

@@ -326,11 +326,8 @@ const getFilteredEquipment = (type: string, currentSelectedId = ''): ResourceWit
       e.specification === type &&
       (
         e.id === currentSelectedId ||
-        (
-          !occupiedIdSet.value.has(e.id) &&
-          !draftReqs.value.equipment.some(
-            entry => entry.equipment_id === e.id && e.id !== currentSelectedId
-          )
+        !draftReqs.value.equipment.some(
+          entry => entry.equipment_id === e.id && e.id !== currentSelectedId
         )
       )
   )

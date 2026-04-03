@@ -20,10 +20,12 @@
     "echarts": "^6.0.0",
     "element-plus": "^2.5.3",
     "elkjs": "^0.11.0",
+    "sortablejs": "^1.15.7",
     "vue": "^3.4.0",
     "vue-router": "^4.2.5"
   },
   "devDependencies": {
+    "@types/sortablejs": "^1.15.9",
     "@vitejs/plugin-vue": "^5.0.0",
     "autoprefixer": "^10.4.27",
     "postcss": "^8.5.8",

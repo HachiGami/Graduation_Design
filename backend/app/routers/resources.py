@@ -61,6 +61,7 @@ def _normalize_resource_for_response(resource: dict) -> dict:
     resource.setdefault("remaining_days", -1.0)
     resource.setdefault("serving_activities_details", [])
     resource.setdefault("serving_processes", [])
+    resource.setdefault("equipment_activity_priority_order", [])
     resource.setdefault("created_at", resource.get("updated_at") or now)
     resource.setdefault("updated_at", resource.get("created_at") or now)
     return resource
@@ -128,7 +129,7 @@ async def _enrich_with_neo4j(resources: list, db, driver) -> None:
         async with driver.session() as session:
             result = await session.run(
                 """
-                MATCH (a:Activity)-[r:USES|CONSUMES]->(e)
+                MATCH (a:Activity)-[r:USES|CONSUMES|ASSIGNED_TO|ASSIGNS]->(e)
                 WHERE e.id IN $ids OR e.name IN $names
                 RETURN e.id AS entity_id,
                        e.name AS entity_name,
@@ -197,6 +198,15 @@ async def _enrich_with_neo4j(resources: list, db, driver) -> None:
         details = entity_activities_map.get(rid, [])
         if not details and name:
             details = entity_activities_map.get(name, [])
+        if (r.get("type") or "") == "设备" and details:
+            prio = r.get("equipment_activity_priority_order") or []
+            if prio:
+                rank = {str(pid): i for i, pid in enumerate(prio)}
+
+                def _prio_key(row: dict) -> int:
+                    return rank.get(str(row.get("activity_id") or ""), 10_000)
+
+                details = sorted(details, key=_prio_key)
         r["serving_activities_details"] = details
         r["serving_processes"] = list({d["process_id"] for d in details if d["process_id"]})
         total_daily_consumption = round(

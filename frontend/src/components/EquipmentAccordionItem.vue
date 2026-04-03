@@ -35,45 +35,67 @@
         <el-tabs>
           <el-tab-pane label="当前占用任务">
             <el-empty
-              v-if="!equipment.serving_activities_details || equipment.serving_activities_details.length === 0"
+              v-if="!priorityList.length"
               description="当前无占用任务，设备空闲"
               :image-size="60"
             />
-            <div v-else class="space-y-3">
-              <div
-                v-for="(detail, index) in equipment.serving_activities_details"
-                :key="index"
-                class="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md"
-              >
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-2">
-                    <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-500">
-                      <el-icon :size="14"><Connection /></el-icon>
-                    </div>
-                    <span class="truncate text-sm font-semibold text-slate-800">{{ detail.activity_name }}</span>
-                    <span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-600">
-                      {{ getActivityStatusLabel(detail.status) }}
-                    </span>
-                  </div>
-                  <div class="ml-10 mt-2 flex flex-wrap items-center gap-4 text-xs">
-                    <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-slate-600">
-                      <el-icon><Share /></el-icon>
-                      归属流程: {{ formatProcessName(detail.process_id) }}
-                    </span>
-                    <span
-                      v-if="detail.working_hours && detail.working_hours.length > 0"
-                      class="inline-flex items-center gap-1 font-medium text-blue-600"
-                    >
-                      <el-icon><Clock /></el-icon>
-                      运行时间:
-                      {{ detail.working_hours.map((wh: any) => `${wh.start_time}-${wh.end_time}`).join(', ') }}
-                    </span>
-                  </div>
-                </div>
-                <el-button plain class="!border-blue-200 !bg-white !text-blue-600" @click="goToActivityDetail(detail)">
-                  查看活动详情
-                </el-button>
+            <div v-else class="mb-4">
+              <div class="text-xs font-bold text-slate-500 mb-2 flex items-center justify-between">
+                <span>当前占用活动队列 (拖拽 ☰ 图标以调整执行优先级)</span>
+                <span class="text-[10px] text-amber-500 bg-amber-50 px-2 py-1 rounded">顶部优先级最高</span>
               </div>
+
+              <el-table
+                :data="priorityList"
+                row-key="activity_id"
+                ref="priorityTableRef"
+                border
+                style="width: 100%; border-radius: 8px; overflow: hidden;"
+              >
+                <el-table-column label="优先级" width="80" align="center">
+                  <template #default="scope">
+                    <div
+                      class="flex items-center justify-center text-slate-400 font-black drag-handle cursor-move hover:text-amber-500 transition-colors"
+                    >
+                      <el-icon class="mr-1"><Operation /></el-icon>
+                      P{{ scope.$index + 1 }}
+                    </div>
+                  </template>
+                </el-table-column>
+
+                <el-table-column prop="activity_name" label="占用活动名称" min-width="150">
+                  <template #default="scope">
+                    <span class="font-bold text-slate-700">{{ scope.row.activity_name }}</span>
+                  </template>
+                </el-table-column>
+
+                <el-table-column prop="process_id" label="所属流程" min-width="160">
+                  <template #default="scope">
+                    <span class="text-slate-600">{{ formatProcessName(scope.row.process_id || '') }}</span>
+                  </template>
+                </el-table-column>
+
+                <el-table-column prop="status" label="状态" width="110">
+                  <template #default="scope">
+                    <el-tag size="small" type="info" class="!font-bold">
+                      {{ getActivityStatusLabel(scope.row.status) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+
+                <el-table-column label="操作" width="120" align="center">
+                  <template #default="scope">
+                    <el-button
+                      link
+                      type="primary"
+                      class="!font-bold"
+                      @click="goToActivityDetail(scope.row)"
+                    >
+                      查看活动
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
             </div>
           </el-tab-pane>
 
@@ -165,11 +187,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { Edit, Delete, Monitor, Calendar, Clock, Share, Connection } from '@element-plus/icons-vue'
+import Sortable from 'sortablejs'
+import { Edit, Delete, Monitor, Calendar, Operation } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { deleteResource } from '@/api/resource'
+import { deleteResource, updateResource } from '@/api/resource'
 
 const props = withDefaults(
   defineProps<{
@@ -194,6 +217,63 @@ const isMaintenanceModalVisible = ref(false)
 const isSubmittingMaintenance = ref(false)
 const selectedMaintenanceDays = ref<string[]>([])
 
+const priorityList = ref<any[]>([])
+const priorityTableRef = ref<any>(null)
+let prioritySortable: Sortable | null = null
+
+const destroyPrioritySortable = () => {
+  prioritySortable?.destroy()
+  prioritySortable = null
+}
+
+const persistEquipmentPriority = async (activityIds: string[]) => {
+  const id = props.equipment._id || props.equipment.id
+  if (!id || !activityIds.length) return
+  try {
+    await updateResource(id, { equipment_activity_priority_order: activityIds })
+    emit('update')
+  } catch (e) {
+    console.error(e)
+    ElMessage.error('保存优先级失败')
+  }
+}
+
+const initPrioritySortable = () => {
+  nextTick(() => {
+    destroyPrioritySortable()
+    const table = priorityTableRef.value
+    const tbody = table?.$el?.querySelector?.('.el-table__body-wrapper tbody') as HTMLElement | null
+    if (!tbody || priorityList.value.length < 2) return
+
+    prioritySortable = Sortable.create(tbody, {
+      handle: '.drag-handle',
+      animation: 150,
+      ghostClass: 'equipment-priority-ghost',
+      onEnd(evt: Sortable.SortableEvent) {
+        const { newIndex, oldIndex } = evt
+        if (newIndex == null || oldIndex == null || newIndex === oldIndex) return
+        const row = priorityList.value.splice(oldIndex, 1)[0]
+        priorityList.value.splice(newIndex, 0, row)
+        const ids = priorityList.value.map((a) => a.activity_id).filter(Boolean)
+        void persistEquipmentPriority(ids)
+      }
+    })
+  })
+}
+
+watch(
+  () => props.equipment.serving_activities_details,
+  (d) => {
+    priorityList.value = Array.isArray(d) ? [...d] : []
+    initPrioritySortable()
+  },
+  { deep: true, immediate: true }
+)
+
+onBeforeUnmount(() => {
+  destroyPrioritySortable()
+})
+
 const maintenanceOptions = [
   { label: '1天后', value: '1天后' },
   { label: '2天后', value: '2天后' },
@@ -204,6 +284,7 @@ const maintenanceOptions = [
   { label: '7天后', value: '7天后' }
 ]
 
+// 流程映射字典（与 PersonnelAccordionItem 保持一致）
 const processMap: Record<string, string> = {
   'P001': '主生产线',
   'P002': '副生产线',
@@ -217,15 +298,9 @@ const processMap: Record<string, string> = {
   'W002': '分仓库'
 }
 
-const formatProcessName = (processId: string) => {
-  if (!processId) return '未知流程'
-  if (processMap[processId]) return `${processId} - ${processMap[processId]}`
-  const prefix = processId.charAt(0).toUpperCase()
-  const typeMap: Record<string, string> = {
-    'P': '生产流程', 'Q': '质检流程',
-    'S': '销售流程', 'W': '仓储流程', 'T': '运输流程'
-  }
-  return `${processId} - ${typeMap[prefix] || '未知流程'}`
+const formatProcessName = (id: string) => {
+  if (!id || id === 'ALL') return '全部'
+  return processMap[id] ? `${id} - ${processMap[id]}` : id
 }
 
 const getActivityStatusLabel = (status: string) => {
@@ -271,11 +346,11 @@ const submitMaintenance = async () => {
         upcoming_maintenance: selectedMaintenanceDays.value
       })
     })
-    
+
     if (!response.ok) {
       throw new Error('更新失败')
     }
-    
+
     ElMessage.success('设备检修计划更新成功')
     isMaintenanceModalVisible.value = false
     emit('update')
@@ -320,5 +395,9 @@ const handleDeleteEquipment = async () => {
   60% {
     box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35);
   }
+}
+
+:deep(.equipment-priority-ghost) {
+  background: #fffbeb !important;
 }
 </style>

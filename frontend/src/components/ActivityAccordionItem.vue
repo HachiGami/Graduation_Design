@@ -779,7 +779,6 @@ const materialUnitMap = computed(() => {
   return map
 })
 const assignedPersonnelIdSet = computed(() => new Set(activityResourceState.value.assigned_personnel.map(p => p.id)))
-const assignedEquipmentIdSet = computed(() => new Set(activityResourceState.value.assigned_equipment.map(e => e.id)))
 const personnelSlots = computed(() => {
   const roleQueue = new Map<string, { id: string; name: string; role: string }[]>()
   activityResourceState.value.assigned_personnel.forEach((item) => {
@@ -1127,12 +1126,8 @@ const getFilteredPersonsByRole = (role: string) => {
 
 const getFilteredEquipmentBySpec = (specification: string) => {
   if (!specification) return []
-  return availableEquipments.value.filter((e) =>
-    e.specification === specification &&
-    ['available', 'idle', '空闲'].includes((e.status || '').toLowerCase()) &&
-    !occupiedIdSet.value.has(e.id) &&
-    !assignedEquipmentIdSet.value.has(e.id)
-  )
+  // 设备支持多活动复用：仅按规格匹配，不按全局占用或本活动已选过滤
+  return availableEquipments.value.filter((e) => e.specification === specification)
 }
 
 const addPersonnelRequirement = async () => {
