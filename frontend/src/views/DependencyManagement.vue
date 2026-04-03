@@ -155,7 +155,7 @@
         <div class="bg-slate-50 rounded-xl p-4 border border-slate-200 flex justify-between items-center shadow-sm">
           <div>
             <div class="text-[10px] font-bold text-slate-400 uppercase mb-1 tracking-wider">所属流程</div>
-            <div class="text-sm font-black text-slate-800">{{ activityForm.process_id }}</div>
+            <div class="text-sm font-black text-slate-800">{{ getProcessLabel(activityForm.process_id) }}</div>
           </div>
           <div class="h-8 w-px bg-slate-200"></div>
           <div>
@@ -541,6 +541,14 @@ const processNameMap: Record<string, string> = {
 const getProcessName = (processId: string) => processNameMap[processId] || '未知流程'
 
 const formatProcessLabel = (processId: string, processName: string) => `${processId} - ${processName}`
+
+/** 活动详情等场景：流程 ID →「ID - 名称」展示 */
+const getProcessLabel = (processId: string | undefined) => {
+  if (!processId) return '未知流程'
+  const process = processOptions.value.find(p => p.id === processId)
+  if (process) return formatProcessLabel(process.id, process.name)
+  return formatProcessLabel(processId, getProcessName(processId))
+}
 
 const inferDomainFromProcessId = (processId: string) => {
   if (processId.startsWith('P')) return 'production'
