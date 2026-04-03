@@ -133,7 +133,7 @@
             <div class="critical-path">
               <h4>关键路径</h4>
               <div class="path-sequence">
-                <el-tag v-for="(actId, idx) in criticalPath" :key="actId" type="danger" size="small" @click="handleCriticalPathClick(actId)">
+                <el-tag v-for="actId of criticalPath" :key="actId" type="danger" size="small" @click="handleCriticalPathClick(actId)">
                   {{ getActivityName(actId) }}
                 </el-tag>
                 <el-empty v-if="criticalPath.length === 0" description="无关键路径" :image-size="60" />
@@ -236,9 +236,9 @@
             <div class="critical-path">
               <h4>关键路径</h4>
               <div class="path-sequence">
-                <el-tag v-for="(actId, idx) in criticalPath" :key="actId" type="danger" size="small" @click="handleCriticalPathClick(actId)">
+                <el-tag v-for="(actId, index) in criticalPath" :key="actId" type="danger" size="small" @click="handleCriticalPathClick(actId)">
                   {{ getActivityName(actId) }}
-                  <span v-if="idx < criticalPath.length - 1"> → </span>
+                  <span v-if="Number(index) < criticalPath.length - 1"> → </span>
                 </el-tag>
                 <el-empty v-if="criticalPath.length === 0" description="无关键路径" :image-size="60" />
               </div>
@@ -298,7 +298,7 @@ import { ElMessage } from 'element-plus'
 import type { GraphData } from '@/types'
 import { analyzeGraph, type AnalysisScope, type HealthIssue, type ProcessMetrics } from '@/utils/graphAnalyzer'
 import { calculateCPM, type CPMActivity } from '@/utils/cpmCalculator'
-import { checkResources, summarizeResourceRisksByProcess, type ResourceShortage, type ResourceRisk } from '@/utils/resourceChecker'
+import { checkResources, summarizeResourceRisksByProcess, type ResourceShortage } from '@/utils/resourceChecker'
 import { getDynamicRisks, summarizeDynamicRisksByProcess, type DynamicRiskEvent } from '@/api/analytics'
 import { getAssets } from '@/api/asset'
 
@@ -491,7 +491,6 @@ const healthRanking = computed(() => {
 
 const durationRanking = computed(() => {
   return processSummary.value.map((p: ProcessMetrics) => {
-    const scope: AnalysisScope = { type: 'process', processId: p.processId }
     const activities = props.graphData.nodes.filter(n => isActivityNode(n) && n.process_id === p.processId)
     const deps = props.graphData.edges.filter(e => {
       const source = props.graphData.nodes.find(n => n.id === e.source)
@@ -506,7 +505,7 @@ const durationRanking = computed(() => {
       totalDuration: cpm.totalDuration,
       criticalPathLength: cpm.criticalPath.length
     }
-  }).sort((a, b) => b.totalDuration - a.totalDuration).slice(0, 10)
+  }).sort((a: { totalDuration: number }, b: { totalDuration: number }) => b.totalDuration - a.totalDuration).slice(0, 10)
 })
 
 const riskRanking = computed(() => {
@@ -696,7 +695,7 @@ watch(activeTab, (newTab, oldTab) => {
     const processEdgeIds: string[] = []
     
     props.graphData.nodes.forEach(n => {
-      if ((n.type === 'activity' || n.category === 'Activity') && n.process_id === props.currentProcessId) {
+      if (isActivityNode(n) && n.process_id === props.currentProcessId) {
         processNodeIds.push(n.id)
       }
     })
