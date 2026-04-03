@@ -1,4 +1,6 @@
 import type { GraphNode, GraphEdge } from '@/types'
+import { getNodeDuration } from '@/utils/sopDuration'
+import { findCriticalPathDP } from '@/utils/criticalPathDP'
 
 export interface CPMActivity {
   id: string
@@ -59,7 +61,7 @@ export function calculateCPM(
     activityMap.set(a.id, {
       id: a.id,
       name: a.name,
-      duration: a.estimated_duration || 0,
+      duration: getNodeDuration(a),
       es: 0,
       ef: 0,
       ls: 0,
@@ -74,16 +76,19 @@ export function calculateCPM(
   
   forwardPass(topoResult.sorted, activityMap, adjList)
   
-  const totalDuration = Math.max(...Array.from(activityMap.values()).map(a => a.ef))
-  
-  backwardPass(topoResult.sorted, activityMap, predecessors, totalDuration)
+  const totalDurationByPass = Math.max(...Array.from(activityMap.values()).map(a => a.ef))
+
+  backwardPass(topoResult.sorted, activityMap, predecessors, totalDurationByPass)
   
   calculateFloats(activityMap)
   
   const criticalActivities = Array.from(activityMap.values()).filter(a => a.isCritical)
-  
-  const criticalPath = extractCriticalPath(criticalActivities, dependencies)
-  
+
+  const dp = findCriticalPathDP(activities, dependencies, null, null)
+  const criticalPath = dp.hasCycle ? [] : dp.pathIds
+  const totalDuration =
+    !dp.hasCycle && criticalPath.length > 0 ? dp.totalDuration : totalDurationByPass
+
   const topBottlenecks = Array.from(activityMap.values())
     .sort((a, b) => b.duration - a.duration)
     .slice(0, 5)
@@ -252,52 +257,3 @@ function calculateFloats(activityMap: Map<string, CPMActivity>): void {
     activity.isCritical = activity.tf === 0
   })
 }
-
-/**
- * 提取关键路径序列
- */
-function extractCriticalPath(
-  criticalActivities: CPMActivity[],
-  dependencies: GraphEdge[]
-): string[] {
-  if (criticalActivities.length === 0) return []
-  
-  const criticalIds = new Set(criticalActivities.map(a => a.id))
-  const criticalEdges = dependencies.filter(
-    dep => criticalIds.has(dep.source) && criticalIds.has(dep.target)
-  )
-  
-  const adjList = new Map<string, string[]>()
-  const inDegree = new Map<string, number>()
-  
-  criticalActivities.forEach(a => {
-    adjList.set(a.id, [])
-    inDegree.set(a.id, 0)
-  })
-  
-  criticalEdges.forEach(edge => {
-    adjList.get(edge.source)!.push(edge.target)
-    inDegree.set(edge.target, inDegree.get(edge.target)! + 1)
-  })
-  
-  const startNodes = Array.from(inDegree.entries())
-    .filter(([_, degree]) => degree === 0)
-    .map(([id, _]) => id)
-  
-  if (startNodes.length === 0) {
-    return criticalActivities.map(a => a.id)
-  }
-  
-  const path: string[] = []
-  let current = startNodes[0]
-  
-  while (current) {
-    path.push(current)
-    const neighbors = adjList.get(current) || []
-    current = neighbors[0]
-  }
-  
-  return path
-}
-
-

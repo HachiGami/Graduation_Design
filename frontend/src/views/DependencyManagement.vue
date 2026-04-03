@@ -529,8 +529,8 @@ import DashboardPanel from '@/components/DashboardPanel.vue'
 import { analyzeGraph, type AnalysisScope } from '@/utils/graphAnalyzer'
 import { checkResources } from '@/utils/resourceChecker'
 import { getRisks, type RiskItem } from '@/api/analytics'
-import { resolveActivityDurationMinutes, sumSopStepDurations } from '@/utils/sopDuration'
-import { shortestDirectedPath } from '@/utils/graphPath'
+import { getNodeDuration, sumSopStepDurations } from '@/utils/sopDuration'
+import { findCriticalPathDP } from '@/utils/criticalPathDP'
 
 type PathAnalysisDashboardPayload = {
   sourceId: string
@@ -769,21 +769,31 @@ const resetPathSelection = () => {
 }
 
 const runPathAnalysisHighlight = (sourceId: string, targetId: string) => {
-  const edges = graphData.value.edges || []
-  const res = shortestDirectedPath(
-    edges.map((e: any) => ({ source: e.source, target: e.target })),
-    sourceId,
-    targetId
+  const allNodes = graphData.value.nodes || []
+  const activityNodes = allNodes.filter(
+    (n: any) => n?.type === 'activity' || n?.category === 'Activity'
   )
-  if (!res) {
-    ElMessage.error('该起点和终点之间不存在直接连通的生产链路！')
+  const activityIdSet = new Set(activityNodes.map((n: any) => n.id))
+  const activityEdges = (graphData.value.edges || []).filter(
+    (e: any) => activityIdSet.has(e.source) && activityIdSet.has(e.target)
+  )
+
+  const dp = findCriticalPathDP(activityNodes, activityEdges, sourceId, targetId)
+  if (dp.hasCycle) {
+    ElMessage.error('依赖图中存在环，无法计算关键路径')
     resetPathSelection()
     return
   }
-  const nodeMap = new Map<string, any>((graphData.value.nodes || []).map((n: any) => [n.id, n]))
-  const orderedActivities = res.nodeIds.map((id, idx) => {
+  if (dp.pathIds.length === 0) {
+    ElMessage.error('起点与终点之间不连通')
+    resetPathSelection()
+    return
+  }
+
+  const nodeMap = new Map<string, any>(activityNodes.map((n: any) => [n.id, n]))
+  const orderedActivities = dp.pathIds.map((id, idx) => {
     const n = nodeMap.get(id)
-    const duration = n ? resolveActivityDurationMinutes(n) : 0
+    const duration = n ? getNodeDuration(n) : 0
     return {
       id,
       name: n?.name || id,
@@ -808,22 +818,24 @@ const runPathAnalysisHighlight = (sourceId: string, targetId: string) => {
   }
 
   pathHighlightSet.value = {
-    nodeIds: new Set(res.nodeIds),
-    edgeIds: new Set(res.edgeIds)
+    nodeIds: new Set(dp.pathIds),
+    edgeIds: new Set(dp.edgeIds)
   }
   currentCriticalPath.value = {
     sourceId,
     targetId,
     sourceName: orderedActivities[0]?.name || sourceId,
     targetName: orderedActivities[orderedActivities.length - 1]?.name || targetId,
-    steps: res.nodeIds.length,
+    steps: dp.pathIds.length,
     totalSopMinutes,
     orderedActivities
   }
   pathStartNode.value = null
   pathEndNode.value = null
   updateHighlightUnion()
-  ElMessage.success(`已高亮最短路径（${res.nodeIds.length} 个活动）`)
+  ElMessage.success(
+    `已高亮耗时最长路径（${dp.pathIds.length} 个活动，合计 ${Math.round(totalSopMinutes)} 分钟）`
+  )
 }
 
 const handlePathNodePick = (payload: { id: string; rawData: any }) => {
@@ -1412,7 +1424,11 @@ const handleDependencySubmit = async () => {
 // 活动操作
 const handleActivitySubmit = async () => {
   try {
-    const { estimated_duration: _omit, ...payload } = activityForm.value
+    const totalDuration = sumSopStepDurations(activityForm.value.sop_steps)
+    const payload = {
+      ...activityForm.value,
+      estimated_duration: totalDuration
+    }
     if (currentActivity.value?.id) {
       await updateActivity(currentActivity.value.id, payload)
       ElMessage.success('更新成功')

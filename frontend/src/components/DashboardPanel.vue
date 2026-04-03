@@ -836,7 +836,11 @@ function performAnalysis() {
         const target = props.graphData.nodes.find(n => n.id === e.target)
         return source?.process_id === scope.processId && target?.process_id === scope.processId
       })
-    : props.graphData.edges
+    : props.graphData.edges.filter(e => {
+        const source = props.graphData.nodes.find(n => n.id === e.source)
+        const target = props.graphData.nodes.find(n => n.id === e.target)
+        return isActivityNode(source) && isActivityNode(target)
+      })
   
   cpmResult.value = calculateCPM(activities, dependencies)
   

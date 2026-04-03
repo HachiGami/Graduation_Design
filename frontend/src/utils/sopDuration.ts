@@ -9,15 +9,28 @@ export function sumSopStepDurations(steps: unknown): number {
   }, 0)
 }
 
-/** 与图谱/CPM 展示一致：优先 SOP 步骤合计，否则 duration_minutes，再否则 estimated_duration（图数据常不带 sop_steps） */
-export function resolveActivityDurationMinutes(node: unknown): number {
-  if (!node || typeof node !== 'object') return 0
-  const n = node as Record<string, unknown>
+/**
+ * 关键路径/DP 使用的单节点耗时（分钟），与图谱 node.data 对齐。
+ * 优先：SOP 步骤累加（若有正数和）；否则 duration、working_hours_duration；
+ * 再否则 duration_minutes、estimated_duration。
+ */
+export function getNodeDuration(nodeData: unknown): number {
+  if (!nodeData || typeof nodeData !== 'object') return 0
+  const n = nodeData as Record<string, unknown>
   const sopSum = sumSopStepDurations(n.sop_steps)
   if (sopSum > 0) return sopSum
+  const d = Number(n.duration)
+  if (Number.isFinite(d) && d > 0) return d
+  const wh = Number(n.working_hours_duration)
+  if (Number.isFinite(wh) && wh > 0) return wh
   const dm = Number(n.duration_minutes)
   if (Number.isFinite(dm) && dm > 0) return dm
   const ed = Number(n.estimated_duration)
   if (Number.isFinite(ed) && ed > 0) return ed
   return 0
+}
+
+/** 与 getNodeDuration 相同，供图谱/组件历史别名使用 */
+export function resolveActivityDurationMinutes(node: unknown): number {
+  return getNodeDuration(node)
 }

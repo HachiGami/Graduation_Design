@@ -773,6 +773,7 @@ import {
 import { getDependencies } from '@/api/dependency'
 import { getPersonnelList } from '@/api/personnel'
 import { getResources } from '@/api/resource'
+import { sumSopStepDurations } from '@/utils/sopDuration'
 import { ElMessageBox } from 'element-plus'
 import type { ActivityResourcesData, Personnel, Resource } from '@/types'
 
@@ -1102,9 +1103,11 @@ const removeSopStep = (index: number) => {
 const saveSopEdit = async () => {
   if (!activityId.value) return
   try {
+    const totalDuration = sumSopStepDurations(sopEditForm.value.sop_steps)
     const payload = {
       description: sopEditForm.value.description,
-      sop_steps: sopEditForm.value.sop_steps
+      sop_steps: sopEditForm.value.sop_steps,
+      estimated_duration: totalDuration
     }
     await updateActivity(activityId.value, payload)
     ElMessage.success('SOP 已更新')

@@ -59,6 +59,13 @@ def _normalize_sop_steps(raw_steps):
     return normalized
 
 
+def _sync_estimated_duration_from_sop_steps(data: dict) -> None:
+    """将 sop_steps 规范化后，用步骤 duration 之和覆盖 estimated_duration（分钟）。"""
+    normalized = _normalize_sop_steps(data.get("sop_steps"))
+    data["sop_steps"] = normalized
+    data["estimated_duration"] = sum(int(s.get("duration", 0)) for s in normalized)
+
+
 def _normalize_activity_for_response(activity: dict) -> dict:
     now = datetime.utcnow()
     activity.setdefault("name", "未命名活动")
@@ -152,6 +159,7 @@ async def create_activity(activity: ActivityCreate):
     driver = get_neo4j_driver()
     
     activity_dict = activity.model_dump()
+    _sync_estimated_duration_from_sop_steps(activity_dict)
     derived_domain, derived_type = _derive_domain_and_type(activity.process_id)
     if derived_domain:
         activity_dict["domain"] = derived_domain
@@ -556,6 +564,9 @@ async def update_activity(activity_id: str, activity: ActivityUpdate):
     if derived_type:
         update_data["activity_type"] = derived_type
     update_data["updated_at"] = datetime.utcnow()
+
+    if "sop_steps" in update_data:
+        _sync_estimated_duration_from_sop_steps(update_data)
     
     result = await db.activities.update_one(
         {"_id": ObjectId(activity_id)},
