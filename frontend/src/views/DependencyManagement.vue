@@ -215,6 +215,12 @@
           </div>
           <div v-else class="text-xs text-center py-4 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">无SOP配置</div>
         </div>
+        <!-- 底部跳转按钮 -->
+        <div class="mt-6">
+          <button @click="() => { /* TODO: 添加跳转到活动列表的逻辑 */ }" class="w-full flex items-center justify-center py-3 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-sm hover:bg-indigo-100 hover:shadow-sm transition-all border border-indigo-100">
+            前往【生产活动管理】面板查看完整档案 <el-icon class="ml-2"><TopRight /></el-icon>
+          </button>
+        </div>
       </div>
 
       <!-- 编辑/添加模式 -->
@@ -282,6 +288,12 @@
             <div class="text-[11px] font-bold text-slate-400 mb-1">供应商</div><div class="text-sm font-bold text-slate-700">{{ resourceForm.supplier || '未知' }}</div>
           </div>
         </div>
+        <!-- 底部跳转按钮 -->
+        <div class="mt-6">
+          <button @click="() => { /* TODO: 添加跳转到设备资产的逻辑 */ }" class="w-full flex items-center justify-center py-3 bg-amber-50 text-amber-600 rounded-xl font-bold text-sm hover:bg-amber-100 hover:shadow-sm transition-all border border-amber-100">
+            前往【生产设备资产】面板查看完整档案 <el-icon class="ml-2"><TopRight /></el-icon>
+          </button>
+        </div>
       </div>
 
       <div v-else-if="currentResource?.type === '原料'" class="flex flex-col gap-4 animate-in slide-in-from-right-4 duration-300">
@@ -321,6 +333,12 @@
               {{ currentResourceEdgeRate }} <span class="text-[10px] font-bold text-blue-400 uppercase ml-0.5">/ Hour</span>
             </div>
           </div>
+        </div>
+        <!-- 底部跳转按钮 -->
+        <div class="mt-6">
+          <button @click="() => { /* TODO: 添加跳转到原料调度的逻辑 */ }" class="w-full flex items-center justify-center py-3 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-sm hover:bg-emerald-100 hover:shadow-sm transition-all border border-emerald-100">
+            前往【原料库存调度】面板查看完整档案 <el-icon class="ml-2"><TopRight /></el-icon>
+          </button>
         </div>
       </div>
       </template>
@@ -414,6 +432,12 @@
             <div class="text-[11px] font-bold text-slate-400 mb-1">籍贯</div><div class="text-sm font-bold text-slate-700">{{ personnelForm.native_place || '未知' }}</div>
           </div>
         </div>
+        <!-- 底部跳转按钮 -->
+        <div class="mt-6">
+          <button @click="() => { /* TODO: 添加跳转到员工排班的逻辑 */ }" class="w-full flex items-center justify-center py-3 bg-blue-50 text-blue-600 rounded-xl font-bold text-sm hover:bg-blue-100 hover:shadow-sm transition-all border border-blue-100">
+            前往【员工排班与分配】面板查看完整档案 <el-icon class="ml-2"><TopRight /></el-icon>
+          </button>
+        </div>
       </div>
 
       <!-- 编辑/添加模式 -->
@@ -468,6 +492,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { TopRight } from '@element-plus/icons-vue'
 import { DataLine, Odometer, Clock, Warning, VideoPlay, User, Monitor, Box, Select } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createDependency, updateDependency, getGraphData } from '@/api/dependency'
