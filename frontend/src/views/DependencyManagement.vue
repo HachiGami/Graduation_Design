@@ -179,8 +179,12 @@
           <div class="border border-slate-200 bg-white p-3.5 rounded-xl shadow-sm">
             <div class="text-[11px] font-bold text-slate-400 mb-1">运行时间段</div>
             <div class="text-xs font-bold text-slate-700 mt-1">
-              <template v-if="Array.isArray(activityForm.working_hours)">{{ activityForm.working_hours.join(', ') }}</template>
-              <template v-else>{{ activityForm.working_hours || '未设置' }}</template>
+              <template v-if="Array.isArray(activityForm.working_hours)">
+                {{ activityForm.working_hours.map(h => (h.start_time && h.end_time) ? `${h.start_time}-${h.end_time}` : '').filter(Boolean).join(', ') }}
+              </template>
+              <template v-else>
+                {{ activityForm.working_hours || '未设置' }}
+              </template>
             </div>
           </div>
           <div class="col-span-2 border border-slate-200 bg-white p-3.5 rounded-xl shadow-sm">
@@ -235,14 +239,14 @@
         </el-form-item>
       </el-form>
 
-      <template #footer>
+      <template v-if="!currentActivity?.id || isEditActivity" #footer>
         <div style="display: flex; justify-content: space-between;">
           <div>
-            <el-button v-if="currentActivity?.id" type="danger" @click="handleDeleteActivity">删除</el-button>
+            <el-button v-if="currentActivity?.id && isEditActivity" type="danger" @click="handleDeleteActivity">删除</el-button>
           </div>
           <div>
-            <el-button @click="closeActivityDialog">{{ currentActivity?.id && !isEditActivity ? '关闭' : '取消' }}</el-button>
-            <el-button v-if="!currentActivity?.id || isEditActivity" type="primary" @click="handleActivitySubmit">确定</el-button>
+            <el-button @click="closeActivityDialog">取消</el-button>
+            <el-button type="primary" @click="handleActivitySubmit">确定</el-button>
           </div>
         </div>
       </template>
@@ -254,8 +258,9 @@
       :title="isEditResource ? '编辑资源' : (currentResource?.id ? '资源详情' : '添加资源')"
       width="600px"
     >
-      <!-- 详情展示模式 -->
-      <div v-if="currentResource?.id && !isEditResource && currentResource?.type === '设备'" class="flex flex-col gap-4 animate-in slide-in-from-right-4 duration-300">
+      <!-- 详情展示模式（设备 / 原料）；与下方编辑表单互斥，避免出现双轨 UI -->
+      <template v-if="currentResource?.id && !isEditResource">
+      <div v-if="currentResource?.type === '设备'" class="flex flex-col gap-4 animate-in slide-in-from-right-4 duration-300">
         <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-5 rounded-2xl shadow-lg flex items-center mb-2">
           <div class="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center mr-4 border border-white/20">
             <el-icon :size="24" class="text-amber-400"><Monitor /></el-icon>
@@ -279,7 +284,7 @@
         </div>
       </div>
 
-      <div v-if="currentResource?.id && !isEditResource && currentResource?.type === '原料'" class="flex flex-col gap-4 animate-in slide-in-from-right-4 duration-300">
+      <div v-else-if="currentResource?.type === '原料'" class="flex flex-col gap-4 animate-in slide-in-from-right-4 duration-300">
         <div class="bg-white p-5 rounded-2xl border border-emerald-200 shadow-sm flex items-center justify-between">
           <div class="flex items-center">
             <div class="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center mr-4 border border-emerald-100">
@@ -318,6 +323,7 @@
           </div>
         </div>
       </div>
+      </template>
 
       <!-- 编辑/添加模式 -->
       <el-form v-else :model="resourceForm" label-width="120px">
@@ -349,14 +355,14 @@
         </el-form-item>
       </el-form>
 
-      <template #footer>
+      <template v-if="!currentResource?.id || isEditResource" #footer>
         <div style="display: flex; justify-content: space-between;">
           <div>
-            <el-button v-if="currentResource?.id" type="danger" @click="handleDeleteResource">删除</el-button>
+            <el-button v-if="currentResource?.id && isEditResource" type="danger" @click="handleDeleteResource">删除</el-button>
           </div>
           <div>
-            <el-button @click="closeResourceDialog">{{ currentResource?.id && !isEditResource ? '关闭' : '取消' }}</el-button>
-            <el-button v-if="!currentResource?.id || isEditResource" type="primary" @click="handleResourceSubmit">确定</el-button>
+            <el-button @click="closeResourceDialog">取消</el-button>
+            <el-button type="primary" @click="handleResourceSubmit">确定</el-button>
           </div>
         </div>
       </template>
@@ -444,14 +450,14 @@
         </el-form-item>
       </el-form>
 
-      <template #footer>
+      <template v-if="!currentPersonnel?.id || isEditPersonnel" #footer>
         <div style="display: flex; justify-content: space-between;">
           <div>
-            <el-button v-if="currentPersonnel?.id" type="danger" @click="handleDeletePersonnel">删除</el-button>
+            <el-button v-if="currentPersonnel?.id && isEditPersonnel" type="danger" @click="handleDeletePersonnel">删除</el-button>
           </div>
           <div>
-            <el-button @click="closePersonnelDialog">{{ currentPersonnel?.id && !isEditPersonnel ? '关闭' : '取消' }}</el-button>
-            <el-button v-if="!currentPersonnel?.id || isEditPersonnel" type="primary" @click="handlePersonnelSubmit">确定</el-button>
+            <el-button @click="closePersonnelDialog">取消</el-button>
+            <el-button type="primary" @click="handlePersonnelSubmit">确定</el-button>
           </div>
         </div>
       </template>
@@ -996,13 +1002,48 @@ const handleNodeClick = async (node: any) => {
         resource.id = (resource as any)._id
       }
 
-      const relatedEdge = graphData.value.edges?.find((e: any) => e.source === node.id || e.target === node.id)
-      if (relatedEdge) {
-        const edgeData = relatedEdge as any
-        currentResourceEdgeRate.value = edgeData.rate || edgeData.quantity || edgeData.value || 0
-      } else {
-        currentResourceEdgeRate.value = 0
+      // ================== 强化：消耗速率地毯式提取逻辑 ==================
+      const allEdges = [
+        ...(graphData.value.edges || []),
+        ...((graphData.value as GraphData & { resource_edges?: any[] }).resource_edges || [])
+      ]
+
+      const targetIds = [node.id, node.rawData?.original_id, node.rawData?._id, finalResourceId].filter(Boolean)
+      const relatedEdges = allEdges.filter((e: any) =>
+        targetIds.includes(e.source) || targetIds.includes(e.target)
+      )
+
+      const relUpper = (e: any) => String(e.relation || e.type || '').toUpperCase()
+      const isMaterial =
+        resource.type === '原料' ||
+        String(resource.type || '').toLowerCase() === 'material'
+      const consumesEdges = relatedEdges.filter((e: any) => relUpper(e) === 'CONSUMES')
+      const edgesToScan = isMaterial
+        ? (consumesEdges.length > 0 ? consumesEdges : [])
+        : relatedEdges
+
+      let foundRate = 0
+
+      for (const edge of edgesToScan) {
+        const rateVal =
+          (edge as any).rate ??
+          (edge as any).quantity ??
+          (edge as any).value ??
+          (edge as any).rawData?.rate ??
+          (edge as any).rawData?.properties?.rate ??
+          (edge as any).data?.rate ??
+          (edge as any).data?.properties?.rate
+
+        const numRate = Number(rateVal)
+        if (!isNaN(numRate) && numRate > 0) {
+          if (numRate !== 1 || foundRate === 0) {
+            foundRate = numRate
+          }
+        }
       }
+
+      currentResourceEdgeRate.value = foundRate
+      // =================================================================
 
       currentResource.value = resource
       resourceForm.value = { ...resource }

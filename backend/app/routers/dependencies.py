@@ -355,6 +355,7 @@ async def get_graph_data(
                     "source": activity_id,
                     "target": resource_instance_id,
                     "relation": relation_type,
+                    "rate": rel.get("rate"),
                     "quantity": rel.get("quantity", 1),
                     "unit": rel.get("unit", "unit"),
                     "stage": rel.get("stage")
