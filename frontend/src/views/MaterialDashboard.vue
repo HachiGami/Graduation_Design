@@ -112,18 +112,76 @@
     </el-dialog>
 
     <!-- 添加原料弹窗 -->
-    <el-dialog v-model="addMaterialDialogVisible" title="添加原料" width="520px">
-      <el-form ref="addMaterialFormRef" :model="addMaterialForm" :rules="addMaterialRules" label-width="100px" size="default">
-        <el-form-item label="原料名称" prop="name" required>
-          <el-input v-model="addMaterialForm.name" placeholder="如：全脂生牛乳" />
-        </el-form-item>
-        <el-form-item label="单位" prop="unit" required>
-          <el-input v-model="addMaterialForm.unit" placeholder="如：吨、升、kg" />
-        </el-form-item>
+    <el-dialog
+      v-model="addMaterialDialogVisible"
+      width="450px"
+      :show-close="false"
+      :align-center="true"
+      class="add-entity-dialog add-material-dialog rounded-2xl overflow-hidden"
+      header-class="!p-0 !m-0 !border-0"
+      body-class="!p-0"
+      footer-class="!p-0"
+    >
+      <template #header>
+        <div class="flex items-center justify-between border-b border-emerald-100 bg-emerald-50/50 px-6 py-4">
+          <div class="flex items-center space-x-3">
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+              <el-icon :size="18"><Goods /></el-icon>
+            </div>
+            <h3 class="text-lg font-bold tracking-tight text-slate-800">添加原料</h3>
+          </div>
+          <el-button link class="text-slate-400 hover:text-slate-600" @click="addMaterialDialogVisible = false">
+            <el-icon :size="20"><Close /></el-icon>
+          </el-button>
+        </div>
+      </template>
+
+      <el-form
+        ref="addMaterialFormRef"
+        :model="addMaterialForm"
+        :rules="addMaterialRules"
+        label-width="0"
+        class="add-material-inline-form"
+        hide-required-asterisk
+      >
+        <div class="grid grid-cols-1 gap-5 bg-white p-6">
+          <el-form-item prop="name" class="!mb-0">
+            <div class="flex w-full flex-col space-y-1.5">
+              <label class="text-[13px] font-bold text-slate-700">
+                <span class="mr-1 text-red-500">*</span>原料名称
+              </label>
+              <el-input v-model="addMaterialForm.name" placeholder="如：全脂生牛乳" class="custom-input-emerald w-full" />
+            </div>
+          </el-form-item>
+          <el-form-item prop="unit" class="!mb-0">
+            <div class="flex w-full flex-col space-y-1.5">
+              <label class="text-[13px] font-bold text-slate-700">
+                <span class="mr-1 text-red-500">*</span>单位
+              </label>
+              <el-input v-model="addMaterialForm.unit" placeholder="如：吨、升、kg" class="custom-input-emerald w-full" />
+            </div>
+          </el-form-item>
+        </div>
       </el-form>
+
       <template #footer>
-        <el-button @click="addMaterialDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitAddMaterial" :loading="addMaterialSubmitting">确定添加</el-button>
+        <div class="flex justify-end space-x-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button
+            type="button"
+            class="rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
+            @click="addMaterialDialogVisible = false"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="rounded-xl bg-emerald-500 px-5 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-600"
+            :disabled="addMaterialSubmitting"
+            @click="submitAddMaterial"
+          >
+            {{ addMaterialSubmitting ? '提交中…' : '确定添加' }}
+          </button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -132,7 +190,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Search } from '@element-plus/icons-vue';
+import { Search, Goods, Close } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
 import MaterialAccordionItem from '../components/MaterialAccordionItem.vue';
@@ -405,3 +463,42 @@ const submitAddMaterial = async () => {
   }
 };
 </script>
+
+<style scoped>
+:deep(.add-entity-dialog.el-dialog) {
+  border-radius: 16px;
+  padding: 0;
+  overflow: hidden;
+}
+
+:deep(.add-entity-dialog .el-dialog__header) {
+  padding: 0;
+  margin: 0;
+}
+
+:deep(.add-material-inline-form .el-form-item__content) {
+  margin-left: 0 !important;
+  line-height: normal;
+}
+
+:deep(.custom-input-emerald .el-input__wrapper),
+:deep(.custom-input-emerald .el-textarea__inner) {
+  background-color: #f8fafc !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 0 0 1px #e2e8f0 inset !important;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  transition: all 0.2s;
+}
+
+:deep(.custom-input-emerald .el-input__wrapper.is-focus),
+:deep(.custom-input-emerald .el-textarea__inner:focus) {
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 1px #10b981 inset, 0 0 0 4px #d1fae5 !important;
+}
+
+:deep(.custom-input-emerald .el-select .el-input__wrapper.is-focus) {
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 1px #10b981 inset, 0 0 0 4px #d1fae5 !important;
+}
+</style>

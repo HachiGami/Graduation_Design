@@ -75,27 +75,102 @@
     </div>
 
     <!-- 添加设备弹窗 -->
-    <el-dialog v-model="addEquipmentDialogVisible" title="添加设备" width="520px">
-      <el-form ref="addEquipmentFormRef" :model="addEquipmentForm" :rules="addEquipmentRules" label-width="100px" size="default">
-        <el-form-item label="设备名称" prop="name" required>
-          <el-input v-model="addEquipmentForm.name" placeholder="如：灌装机-03" />
-        </el-form-item>
-        <el-form-item label="设备种类" prop="specification" required>
-          <el-input v-model="addEquipmentForm.specification" placeholder="如：灌装设备" />
-        </el-form-item>
-        <el-form-item label="生产厂家">
-          <el-input v-model="addEquipmentForm.manufacturer" placeholder="生产厂家" />
-        </el-form-item>
-        <el-form-item label="生产时间">
-          <el-date-picker v-model="addEquipmentForm.production_date" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" style="width: 100%" />
-        </el-form-item>
-        <el-form-item label="单位" required>
-          <el-input v-model="addEquipmentForm.unit" placeholder="如：台" />
-        </el-form-item>
+    <el-dialog
+      v-model="addEquipmentDialogVisible"
+      width="500px"
+      :show-close="false"
+      :align-center="true"
+      class="add-entity-dialog add-equipment-dialog rounded-2xl overflow-hidden"
+      header-class="!p-0 !m-0 !border-0"
+      body-class="!p-0"
+      footer-class="!p-0"
+    >
+      <template #header>
+        <div class="flex items-center justify-between border-b border-amber-100 bg-amber-50/50 px-6 py-4">
+          <div class="flex items-center space-x-3">
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+              <el-icon :size="18"><Box /></el-icon>
+            </div>
+            <h3 class="text-lg font-bold tracking-tight text-slate-800">添加设备</h3>
+          </div>
+          <el-button link class="text-slate-400 hover:text-slate-600" @click="addEquipmentDialogVisible = false">
+            <el-icon :size="20"><Close /></el-icon>
+          </el-button>
+        </div>
+      </template>
+
+      <el-form
+        ref="addEquipmentFormRef"
+        :model="addEquipmentForm"
+        :rules="addEquipmentRules"
+        label-width="0"
+        class="add-equipment-inline-form"
+        hide-required-asterisk
+      >
+        <div class="grid grid-cols-2 gap-5 bg-white p-6">
+          <el-form-item prop="name" class="col-span-2 !mb-0">
+            <div class="flex w-full flex-col space-y-1.5">
+              <label class="text-[13px] font-bold text-slate-700">
+                <span class="mr-1 text-red-500">*</span>设备名称
+              </label>
+              <el-input v-model="addEquipmentForm.name" placeholder="如：灌装机-03" class="custom-input-amber w-full" />
+            </div>
+          </el-form-item>
+
+          <el-form-item prop="specification" class="!mb-0">
+            <div class="flex w-full flex-col space-y-1.5">
+              <label class="text-[13px] font-bold text-slate-700">
+                <span class="mr-1 text-red-500">*</span>设备种类
+              </label>
+              <el-input v-model="addEquipmentForm.specification" placeholder="如：灌装设备" class="custom-input-amber w-full" />
+            </div>
+          </el-form-item>
+
+          <el-form-item class="!mb-0">
+            <div class="flex w-full flex-col space-y-1.5">
+              <label class="text-[13px] font-bold text-slate-700">
+                <span class="mr-1 text-red-500">*</span>单位
+              </label>
+              <el-input v-model="addEquipmentForm.unit" placeholder="如：台" class="custom-input-amber w-full" />
+            </div>
+          </el-form-item>
+
+          <div class="col-span-2 flex flex-col space-y-1.5">
+            <label class="text-[13px] font-bold text-slate-700">生产厂家</label>
+            <el-input v-model="addEquipmentForm.manufacturer" placeholder="生产厂家" class="custom-input-amber w-full" />
+          </div>
+
+          <div class="col-span-2 flex flex-col space-y-1.5">
+            <label class="text-[13px] font-bold text-slate-700">生产时间</label>
+            <el-date-picker
+              v-model="addEquipmentForm.production_date"
+              type="date"
+              placeholder="选择日期"
+              value-format="YYYY-MM-DD"
+              class="custom-input-amber equipment-date-picker w-full"
+            />
+          </div>
+        </div>
       </el-form>
+
       <template #footer>
-        <el-button @click="addEquipmentDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitAddEquipment" :loading="addEquipmentSubmitting">确定添加</el-button>
+        <div class="flex justify-end space-x-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button
+            type="button"
+            class="rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
+            @click="addEquipmentDialogVisible = false"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="rounded-xl bg-amber-500 px-5 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-amber-600"
+            :disabled="addEquipmentSubmitting"
+            @click="submitAddEquipment"
+          >
+            {{ addEquipmentSubmitting ? '提交中…' : '确定添加' }}
+          </button>
+        </div>
       </template>
     </el-dialog>
 
@@ -159,7 +234,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Search, Tools, Plus } from '@element-plus/icons-vue'
+import { Search, Tools, Plus, Box, Close } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import EquipmentAccordionItem from '../components/EquipmentAccordionItem.vue'
@@ -465,4 +540,52 @@ const totalAffectedActivities = computed(() => {
 </script>
 
 <style scoped>
+:deep(.add-entity-dialog.el-dialog) {
+  border-radius: 16px;
+  padding: 0;
+  overflow: hidden;
+}
+
+:deep(.add-entity-dialog .el-dialog__header) {
+  padding: 0;
+  margin: 0;
+}
+
+:deep(.add-equipment-inline-form .el-form-item__content) {
+  margin-left: 0 !important;
+  line-height: normal;
+}
+
+:deep(.custom-input-amber .el-input__wrapper),
+:deep(.custom-input-amber .el-textarea__inner) {
+  background-color: #f8fafc !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 0 0 1px #e2e8f0 inset !important;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  transition: all 0.2s;
+}
+
+:deep(.custom-input-amber .el-input__wrapper.is-focus),
+:deep(.custom-input-amber .el-textarea__inner:focus) {
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 1px #f59e0b inset, 0 0 0 4px #fef3c7 !important;
+}
+
+:deep(.custom-input-amber .el-select .el-input__wrapper.is-focus) {
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 1px #f59e0b inset, 0 0 0 4px #fef3c7 !important;
+}
+
+:deep(.equipment-date-picker.el-date-editor .el-input__wrapper) {
+  background-color: #f8fafc !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 0 0 1px #e2e8f0 inset !important;
+  transition: all 0.2s;
+}
+
+:deep(.equipment-date-picker.el-date-editor .el-input__wrapper.is-focus) {
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 1px #f59e0b inset, 0 0 0 4px #fef3c7 !important;
+}
 </style>
