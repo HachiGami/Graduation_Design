@@ -126,28 +126,65 @@
           </el-table>
         </div>
         <div v-else>
-          <div v-if="cpmError" class="error-hint">
-            <el-alert type="warning" :title="cpmError" :closable="false" />
-          </div>
-          <div v-else>
-            <div class="critical-path">
-              <h4>关键路径</h4>
-              <div class="path-sequence">
-                <el-tag v-for="actId of criticalPath" :key="actId" type="danger" size="small" @click="handleCriticalPathClick(actId)">
-                  {{ getActivityName(actId) }}
-                </el-tag>
-                <el-empty v-if="criticalPath.length === 0" description="无关键路径" :image-size="60" />
+          <div v-if="pathAnalysis" class="path-analysis-panel mb-4">
+            <div class="flex items-center justify-between mb-2 px-0.5">
+              <h4 class="text-sm font-bold text-slate-800 m-0 flex items-center gap-2">
+                两点路径分析
+                <el-tag type="success" size="small">最短链路</el-tag>
+              </h4>
+            </div>
+            <div class="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 mb-3 text-xs text-slate-600 space-y-1.5 shadow-sm">
+              <div><span class="font-bold text-slate-700">起点</span> {{ pathAnalysis.sourceName }}</div>
+              <div><span class="font-bold text-slate-700">终点</span> {{ pathAnalysis.targetName }}</div>
+              <div>
+                <span class="font-bold text-slate-700">活动数</span> {{ pathAnalysis.steps }}
+                <span class="mx-2 text-slate-300">|</span>
+                <span class="font-bold text-slate-700">SOP 合计</span> {{ formatDurationMinutes(pathAnalysis.totalSopMinutes) }}
               </div>
             </div>
-            <div class="bottlenecks">
-              <h4>瓶颈活动</h4>
-              <div v-for="activity in topBottlenecks" :key="activity.id" class="bottleneck-item" @click="handleBottleneckClick(activity)">
-                <span class="bottleneck-name">{{ activity.name }}</span>
-                <el-tag size="small">{{ formatDurationMinutes(activity.duration) }}</el-tag>
-              </div>
-              <el-empty v-if="topBottlenecks.length === 0" description="无瓶颈活动" :image-size="60" />
-            </div>
+            <el-table
+              :data="pathAnalysis.orderedActivities"
+              size="small"
+              style="width: 100%"
+            >
+              <el-table-column prop="stepIndex" label="#" width="44" />
+              <el-table-column prop="name" label="活动" min-width="120" show-overflow-tooltip />
+              <el-table-column label="流程" min-width="100" show-overflow-tooltip>
+                <template #default="{ row }">
+                  {{ row.process_id ? getProcessName(row.process_id) : '—' }}
+                </template>
+              </el-table-column>
+              <el-table-column label="SOP(分)" width="86">
+                <template #default="{ row }">
+                  {{ formatDurationMinutes(row.duration) }}
+                </template>
+              </el-table-column>
+            </el-table>
           </div>
+          <template v-else>
+            <div v-if="cpmError" class="error-hint">
+              <el-alert type="warning" :title="cpmError" :closable="false" />
+            </div>
+            <div v-else>
+              <div class="critical-path">
+                <h4>关键路径</h4>
+                <div class="path-sequence">
+                  <el-tag v-for="actId of criticalPath" :key="actId" type="danger" size="small" @click="handleCriticalPathClick(actId)">
+                    {{ getActivityName(actId) }}
+                  </el-tag>
+                  <el-empty v-if="criticalPath.length === 0" description="无关键路径" :image-size="60" />
+                </div>
+              </div>
+              <div class="bottlenecks">
+                <h4>瓶颈活动</h4>
+                <div v-for="activity in topBottlenecks" :key="activity.id" class="bottleneck-item" @click="handleBottleneckClick(activity)">
+                  <span class="bottleneck-name">{{ activity.name }}</span>
+                  <el-tag size="small">{{ formatDurationMinutes(activity.duration) }}</el-tag>
+                </div>
+                <el-empty v-if="topBottlenecks.length === 0" description="无瓶颈活动" :image-size="60" />
+              </div>
+            </div>
+          </template>
         </div>
       </div>
 
@@ -229,29 +266,66 @@
           </el-table>
         </div>
         <div v-else>
-          <div v-if="cpmError" class="error-hint">
-            <el-alert type="warning" :title="cpmError" :closable="false" />
-          </div>
-          <div v-else>
-            <div class="critical-path">
-              <h4>关键路径</h4>
-              <div class="path-sequence">
-                <el-tag v-for="(actId, index) in criticalPath" :key="actId" type="danger" size="small" @click="handleCriticalPathClick(actId)">
-                  {{ getActivityName(actId) }}
-                  <span v-if="Number(index) < criticalPath.length - 1"> → </span>
-                </el-tag>
-                <el-empty v-if="criticalPath.length === 0" description="无关键路径" :image-size="60" />
+          <div v-if="pathAnalysis" class="path-analysis-panel mb-4">
+            <div class="flex items-center justify-between mb-2 px-0.5">
+              <h4 class="text-sm font-bold text-slate-800 m-0 flex items-center gap-2">
+                两点路径分析
+                <el-tag type="success" size="small">最短链路</el-tag>
+              </h4>
+            </div>
+            <div class="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 mb-3 text-xs text-slate-600 space-y-1.5 shadow-sm">
+              <div><span class="font-bold text-slate-700">起点</span> {{ pathAnalysis.sourceName }}</div>
+              <div><span class="font-bold text-slate-700">终点</span> {{ pathAnalysis.targetName }}</div>
+              <div>
+                <span class="font-bold text-slate-700">活动数</span> {{ pathAnalysis.steps }}
+                <span class="mx-2 text-slate-300">|</span>
+                <span class="font-bold text-slate-700">SOP 合计</span> {{ formatDurationMinutes(pathAnalysis.totalSopMinutes) }}
               </div>
             </div>
-            <div class="bottlenecks">
-              <h4>瓶颈活动 Top5</h4>
-              <div v-for="activity in topBottlenecks" :key="activity.id" class="bottleneck-item" @click="handleBottleneckClick(activity)">
-                <span>{{ activity.name }}</span>
-                <el-tag size="small">{{ formatDurationMinutes(activity.duration) }}</el-tag>
-              </div>
-              <el-empty v-if="topBottlenecks.length === 0" description="无瓶颈活动" :image-size="60" />
-            </div>
+            <el-table
+              :data="pathAnalysis.orderedActivities"
+              size="small"
+              style="width: 100%"
+            >
+              <el-table-column prop="stepIndex" label="#" width="44" />
+              <el-table-column prop="name" label="活动" min-width="120" show-overflow-tooltip />
+              <el-table-column label="流程" min-width="100" show-overflow-tooltip>
+                <template #default="{ row }">
+                  {{ row.process_id ? getProcessName(row.process_id) : '—' }}
+                </template>
+              </el-table-column>
+              <el-table-column label="SOP(分)" width="86">
+                <template #default="{ row }">
+                  {{ formatDurationMinutes(row.duration) }}
+                </template>
+              </el-table-column>
+            </el-table>
           </div>
+          <template v-else>
+            <div v-if="cpmError" class="error-hint">
+              <el-alert type="warning" :title="cpmError" :closable="false" />
+            </div>
+            <div v-else>
+              <div class="critical-path">
+                <h4>关键路径</h4>
+                <div class="path-sequence">
+                  <el-tag v-for="(actId, index) in criticalPath" :key="actId" type="danger" size="small" @click="handleCriticalPathClick(actId)">
+                    {{ getActivityName(actId) }}
+                    <span v-if="Number(index) < criticalPath.length - 1"> → </span>
+                  </el-tag>
+                  <el-empty v-if="criticalPath.length === 0" description="无关键路径" :image-size="60" />
+                </div>
+              </div>
+              <div class="bottlenecks">
+                <h4>瓶颈活动 Top5</h4>
+                <div v-for="activity in topBottlenecks" :key="activity.id" class="bottleneck-item" @click="handleBottleneckClick(activity)">
+                  <span>{{ activity.name }}</span>
+                  <el-tag size="small">{{ formatDurationMinutes(activity.duration) }}</el-tag>
+                </div>
+                <el-empty v-if="topBottlenecks.length === 0" description="无瓶颈活动" :image-size="60" />
+              </div>
+            </div>
+          </template>
         </div>
       </el-collapse-item>
 
@@ -318,11 +392,27 @@ const props = withDefaults(defineProps<{
     process_id?: string | null
     runnable_days?: number | null
   }>
+  pathAnalysis?: {
+    sourceId: string
+    targetId: string
+    sourceName: string
+    targetName: string
+    steps: number
+    totalSopMinutes: number
+    orderedActivities: Array<{
+      id: string
+      name: string
+      process_id?: string
+      duration: number
+      stepIndex: number
+    }>
+  } | null
 }>(), {
   mode: 'full',
   minRunnableDays: '',
   riskCount: 0,
-  riskList: () => []
+  riskList: () => [],
+  pathAnalysis: null
 })
 
 const emit = defineEmits<{
@@ -671,7 +761,20 @@ watch(
   { deep: true, immediate: true }
 )
 
+watch(
+  () => props.pathAnalysis,
+  (v) => {
+    if (v && props.mode === 'sidebar') {
+      activeTab.value = 'cpm'
+      if (props.currentProcessId) {
+        currentScope.value = 'process'
+      }
+    }
+  }
+)
+
 watch(activeTab, (newTab, oldTab) => {
+  if (props.pathAnalysis) return
   if (currentScope.value !== 'process' || !props.currentProcessId) return
   
   if (newTab === 'cpm') {

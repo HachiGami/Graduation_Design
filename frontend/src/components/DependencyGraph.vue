@@ -23,7 +23,9 @@
         <span class="legend-item"><span class="legend-circle pending"></span>待机</span>
         <span class="legend-item"><span class="legend-circle in-progress"></span>进行中</span>
       </div>
-      <el-text type="info" size="small" style="margin-left: 10px;">左键查看详情 | 右键展开资源/人员</el-text>
+      <el-text type="info" size="small" style="margin-left: 10px;">
+        {{ pathSelectionMode ? '路径分析：左键选点 | 右键画布退出' : '左键查看详情 | 右键展开资源/人员' }}
+      </el-text>
     </div>
     <div class="graph-wrapper">
       <div ref="chartRef" class="dependency-graph"></div>
@@ -107,6 +109,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
 import { RefreshLeft, FullScreen } from '@element-plus/icons-vue'
 import cytoscape from 'cytoscape'
 import fcose from 'cytoscape-fcose'
@@ -189,14 +192,24 @@ function buildDummyLayoutEdges(
   return dummies
 }
 
-const props = defineProps<{
-  data: GraphData
-  highlightActive?: boolean
-  highlightSet?: {nodeIds: Set<string>, edgeIds: Set<string>}
-}>()
+const props = withDefaults(
+  defineProps<{
+    data: GraphData
+    highlightActive?: boolean
+    highlightSet?: { nodeIds: Set<string>; edgeIds: Set<string> }
+    pathSelectionMode?: boolean
+    pathStartActivityId?: string | null
+  }>(),
+  {
+    pathSelectionMode: false,
+    pathStartActivityId: null
+  }
+)
 
 const emit = defineEmits<{
   nodeClick: [node: any]
+  pathNodePick: [payload: { id: string; rawData: any }]
+  pathSelectionCancel: []
   editActivity: [activity: any]
   editPersonnel: [personnel: any]
   editResource: [resource: any]
@@ -308,6 +321,15 @@ const handleEditPersonnel = () => {
 const handleEditResource = () => {
   resourceDrawerVisible.value = false
   emit('editResource', selectedResource.value)
+}
+
+const syncPathPickStartClass = () => {
+  if (!cy) return
+  cy.nodes('.path-pick-start').removeClass('path-pick-start')
+  if (props.pathSelectionMode && props.pathStartActivityId) {
+    const n = cy.$id(props.pathStartActivityId)
+    if (n.length > 0) n.addClass('path-pick-start')
+  }
 }
 
 const initCytoscape = async () => {
@@ -476,6 +498,13 @@ const initCytoscape = async () => {
         }
       },
       {
+        selector: 'node.path-pick-start',
+        style: {
+          'border-color': '#10b981',
+          'border-width': 5
+        }
+      },
+      {
         selector: 'node.dimmed',
         style: {
           'opacity': 0.3
@@ -552,6 +581,16 @@ const initCytoscape = async () => {
     const nodeType = node.data('nodeType')
     const rawData = node.data('rawData')
 
+    if (props.pathSelectionMode) {
+      if (nodeType === 'activity' && rawData) {
+        const id = rawData.id ?? node.id()
+        emit('pathNodePick', { id, rawData })
+        return
+      }
+      ElMessage.warning('路径分析请选择活动节点')
+      return
+    }
+
     // 左键详情统一交由父组件弹窗处理，避免与内部抽屉双轨并存
     if (nodeType === 'activity' && rawData) {
       emit('nodeClick', { ...rawData, category: 'Activity' })
@@ -567,12 +606,24 @@ const initCytoscape = async () => {
   })
 
   cy.on('cxttap', 'node.activity-node', (evt: any) => {
+    if (props.pathSelectionMode) {
+      evt.preventDefault()
+      emit('pathSelectionCancel')
+      return
+    }
     const node = evt.target
     const nodeId = node.id()
     if (expandedActivities.value.has(nodeId)) {
       collapseActivity(nodeId)
     } else {
       expandActivity(nodeId)
+    }
+  })
+
+  cy.on('cxttap', (evt: any) => {
+    if (!props.pathSelectionMode) return
+    if (evt.target === cy) {
+      emit('pathSelectionCancel')
     }
   })
 
@@ -585,6 +636,8 @@ const initCytoscape = async () => {
     const node = evt.target
     node.removeClass('hover')
   })
+
+  syncPathPickStartClass()
 }
 
 /** 图谱展开：原料与设备均按「活动维度」克隆实例，避免多活动共用同一可视节点导致连线牵拉重叠 */
@@ -905,7 +958,12 @@ const applyCurrentHighlight = () => {
 watch([() => props.highlightActive, () => props.highlightSet], () => {
   if (!cy) return
   applyCurrentHighlight()
+  syncPathPickStartClass()
 }, { immediate: true })
+
+watch([() => props.pathSelectionMode, () => props.pathStartActivityId], () => {
+  syncPathPickStartClass()
+})
 
 watch(() => props.data, async () => {
   if (cy) {

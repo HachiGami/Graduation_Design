@@ -5,7 +5,7 @@
           <el-select
             v-model="currentProcessId"
             placeholder="选择流程ID"
-            class="!w-[260px]"
+            class="!w-48 shrink-0"
             clearable
           >
             <el-option
@@ -25,6 +25,21 @@
           <el-button class="!bg-white !text-slate-600 !border-slate-300 hover:!text-slate-800 hover:!border-slate-400" @click="clearFlowHighlight">
             清除高亮
           </el-button>
+          <!-- 路径分析按钮 (带状态切换) -->
+          <button
+            type="button"
+            @click="togglePathSelectionMode"
+            :class="[
+              'ml-3 flex items-center px-4 py-2 font-bold border rounded-lg transition-all shadow-sm',
+              isPathSelecting
+                ? 'bg-indigo-600 text-white border-indigo-700 animate-pulse'
+                : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100'
+            ]"
+            :title="isPathSelecting ? '右键点击图谱可退出选择' : '点击后，在图中依次左键选择起点和终点'"
+          >
+            <el-icon class="mr-1.5"><Guide /></el-icon>
+            {{ isPathSelecting ? (pathStartNode ? '请点击终点...' : '请点击起点...') : '路径分析' }}
+          </button>
         </div>
 
         <div class="flex items-center space-x-3">
@@ -67,7 +82,11 @@
               :data="graphData"
               :highlight-active="highlightActive"
               :highlight-set="highlightSet"
+              :path-selection-mode="isPathSelecting"
+              :path-start-activity-id="pathStartNode?.id ?? null"
               @node-click="handleNodeClick"
+              @path-node-pick="handlePathNodePick"
+              @path-selection-cancel="handlePathSelectionCancel"
               @edit-activity="handleEditActivityFromGraph"
               @edit-personnel="handleEditPersonnelFromGraph"
               @edit-resource="handleEditResourceFromGraph"
@@ -84,6 +103,7 @@
             :min-runnable-days="minRunnableDays"
             :risk-count="riskList.length"
             :risk-list="riskList"
+            :path-analysis="currentCriticalPath"
             @highlight-request="handleDashboardHighlight"
             @process-select="handleProcessSelect"
           />
@@ -493,7 +513,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { TopRight } from '@element-plus/icons-vue'
-import { DataLine, Odometer, Clock, Warning, VideoPlay, User, Monitor, Box, Select } from '@element-plus/icons-vue'
+import { DataLine, Odometer, Clock, Warning, VideoPlay, User, Monitor, Box, Select, Guide } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createDependency, updateDependency, getGraphData } from '@/api/dependency'
 import { getActivities, getActivity, createActivity, updateActivity, deleteActivity } from '@/api/activity'
@@ -506,6 +526,23 @@ import { analyzeGraph, type AnalysisScope } from '@/utils/graphAnalyzer'
 import { checkResources } from '@/utils/resourceChecker'
 import { getRisks, type RiskItem } from '@/api/analytics'
 import { sumSopStepDurations } from '@/utils/sopDuration'
+import { shortestDirectedPath } from '@/utils/graphPath'
+
+type PathAnalysisDashboardPayload = {
+  sourceId: string
+  targetId: string
+  sourceName: string
+  targetName: string
+  steps: number
+  totalSopMinutes: number
+  orderedActivities: Array<{
+    id: string
+    name: string
+    process_id?: string
+    duration: number
+    stepIndex: number
+  }>
+}
 
 void VideoPlay
 void User
@@ -692,20 +729,140 @@ const highlightSet = ref<{nodeIds: Set<string>, edgeIds: Set<string>}>({
   edgeIds: new Set()
 })
 
+// 两点路径分析专用高亮（优先级最高）
+const pathHighlightSet = ref<{ nodeIds: Set<string>; edgeIds: Set<string> }>({
+  nodeIds: new Set(),
+  edgeIds: new Set()
+})
+
+// 路径分析状态机
+const isPathSelecting = ref(false)
+const pathStartNode = ref<any>(null)
+const pathEndNode = ref<any>(null)
+const currentCriticalPath = ref<PathAnalysisDashboardPayload | null>(null)
+
+const togglePathSelectionMode = () => {
+  isPathSelecting.value = !isPathSelecting.value
+  if (!isPathSelecting.value) {
+    resetPathSelection()
+  } else {
+    pathStartNode.value = null
+    pathEndNode.value = null
+    currentCriticalPath.value = null
+    pathHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+    updateHighlightUnion()
+    ElMessage.info('已进入路径分析模式：请左键点击一个节点作为【起点】')
+  }
+}
+
+const resetPathSelection = () => {
+  isPathSelecting.value = false
+  pathStartNode.value = null
+  pathEndNode.value = null
+  currentCriticalPath.value = null
+  pathHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+  updateHighlightUnion()
+}
+
+const runPathAnalysisHighlight = (sourceId: string, targetId: string) => {
+  const edges = graphData.value.edges || []
+  const res = shortestDirectedPath(
+    edges.map((e: any) => ({ source: e.source, target: e.target })),
+    sourceId,
+    targetId
+  )
+  if (!res) {
+    ElMessage.error('该起点和终点之间不存在直接连通的生产链路！')
+    resetPathSelection()
+    return
+  }
+  const nodeMap = new Map<string, any>((graphData.value.nodes || []).map((n: any) => [n.id, n]))
+  const orderedActivities = res.nodeIds.map((id, idx) => {
+    const n = nodeMap.get(id)
+    const duration = n ? sumSopStepDurations(n.sop_steps) : 0
+    return {
+      id,
+      name: n?.name || id,
+      process_id: n?.process_id,
+      duration,
+      stepIndex: idx + 1
+    }
+  })
+  const totalSopMinutes = orderedActivities.reduce((s, a) => s + a.duration, 0)
+
+  const anchorNode =
+    nodeMap.get(sourceId) ||
+    orderedActivities.map(a => nodeMap.get(a.id)).find((n: any) => n?.process_id)
+  const anchorPid = anchorNode?.process_id
+  const anchorDomain = anchorNode?.domain
+  if (anchorPid) {
+    if (anchorDomain) currentDomain.value = anchorDomain
+    if (currentProcessId.value !== anchorPid) {
+      currentProcessId.value = anchorPid
+      updateUrl()
+    }
+  }
+
+  pathHighlightSet.value = {
+    nodeIds: new Set(res.nodeIds),
+    edgeIds: new Set(res.edgeIds)
+  }
+  currentCriticalPath.value = {
+    sourceId,
+    targetId,
+    sourceName: orderedActivities[0]?.name || sourceId,
+    targetName: orderedActivities[orderedActivities.length - 1]?.name || targetId,
+    steps: res.nodeIds.length,
+    totalSopMinutes,
+    orderedActivities
+  }
+  pathStartNode.value = null
+  pathEndNode.value = null
+  updateHighlightUnion()
+  ElMessage.success(`已高亮最短路径（${res.nodeIds.length} 个活动）`)
+}
+
+const handlePathNodePick = (payload: { id: string; rawData: any }) => {
+  const { id, rawData } = payload
+  if (!pathStartNode.value) {
+    pathStartNode.value = rawData
+    ElMessage.success(`已设置起点: ${rawData.name || id}，请继续点击终点`)
+    return
+  }
+  if (id === pathStartNode.value.id) {
+    ElMessage.warning('请选择另一个活动作为终点')
+    return
+  }
+  pathEndNode.value = rawData
+  ElMessage.success(`已设置终点: ${rawData.name || id}，正在计算路径...`)
+  isPathSelecting.value = false
+  runPathAnalysisHighlight(pathStartNode.value.id, id)
+}
+
+const handlePathSelectionCancel = () => {
+  if (!isPathSelecting.value) return
+  resetPathSelection()
+  ElMessage.warning('已取消路径分析')
+}
+
 // 计算并集并更新最终高亮集合
-// 策略：仪表盘高亮优先，如果仪表盘有高亮则覆盖流程高亮
+// 策略：路径分析 > 仪表盘 > 流程
 const updateHighlightUnion = () => {
-  const hasDashboardHighlight = dashboardHighlightSet.value.nodeIds.size > 0 || dashboardHighlightSet.value.edgeIds.size > 0
-  
+  const hasPathHighlight =
+    pathHighlightSet.value.nodeIds.size > 0 || pathHighlightSet.value.edgeIds.size > 0
+  const hasDashboardHighlight =
+    dashboardHighlightSet.value.nodeIds.size > 0 || dashboardHighlightSet.value.edgeIds.size > 0
+
   let nodeIds: Set<string>
   let edgeIds: Set<string>
-  
-  if (hasDashboardHighlight) {
-    // 仪表盘有高亮时，完全使用仪表盘的高亮（覆盖流程高亮）
+
+  if (hasPathHighlight) {
+    nodeIds = new Set(pathHighlightSet.value.nodeIds)
+    edgeIds = new Set(pathHighlightSet.value.edgeIds)
+  } else if (hasDashboardHighlight) {
     nodeIds = new Set(dashboardHighlightSet.value.nodeIds)
     edgeIds = new Set(dashboardHighlightSet.value.edgeIds)
   } else {
-    // 仪表盘无高亮时，使用流程高亮
     nodeIds = new Set(flowHighlightSet.value.nodeIds)
     edgeIds = new Set(flowHighlightSet.value.edgeIds)
   }
@@ -781,6 +938,11 @@ const applyProcessHighlight = () => {
   
   // 清除仪表盘高亮（如导航带来的 focusActivity），让流程高亮生效
   dashboardHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+  pathHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+  currentCriticalPath.value = null
+  isPathSelecting.value = false
+  pathStartNode.value = null
+  pathEndNode.value = null
   flowHighlightSet.value = { nodeIds, edgeIds }
   updateHighlightUnion()
   
@@ -794,6 +956,11 @@ const clearFlowHighlight = () => {
   flowHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
   // 同时清除仪表盘高亮，确保完全恢复全局视图
   dashboardHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+  pathHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+  currentCriticalPath.value = null
+  isPathSelecting.value = false
+  pathStartNode.value = null
+  pathEndNode.value = null
   updateHighlightUnion()
   updateUrl()
   ElMessage.success('已恢复全局视图')
@@ -815,6 +982,8 @@ const applyRouteFocusHighlight = () => {
     if (node.process_id) currentProcessId.value = node.process_id
   }
 
+  pathHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+  currentCriticalPath.value = null
   dashboardHighlightSet.value = {
     nodeIds: new Set([focusId]),
     edgeIds: new Set()
@@ -885,6 +1054,8 @@ const handleKpiClick = (type: string) => {
 
 // 处理仪表盘高亮请求
 const handleDashboardHighlight = (payload: { nodeIds: string[], edgeIds: string[] }) => {
+  pathHighlightSet.value = { nodeIds: new Set(), edgeIds: new Set() }
+  currentCriticalPath.value = null
   dashboardHighlightSet.value = {
     nodeIds: new Set(payload.nodeIds),
     edgeIds: new Set(payload.edgeIds)
