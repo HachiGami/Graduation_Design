@@ -100,7 +100,7 @@
                 总耗时：{{ totalSopDuration }} 分钟
               </div>
               <el-button type="primary" class="rounded-md" @click="openSopEditDialog">
-                <el-icon><Plus /></el-icon> 添加步骤
+                <el-icon class="mr-1"><Edit /></el-icon> 编辑 SOP
               </el-button>
             </div>
 
@@ -108,11 +108,6 @@
               <el-table-column type="index" label="步骤序号" width="100" align="center" />
               <el-table-column prop="content" label="步骤名称" />
               <el-table-column prop="duration" label="耗时(分钟)" width="150" align="center" />
-              <el-table-column label="操作" width="120" align="center">
-                <template #default>
-                  <el-button type="primary" link @click="openSopEditDialog">编辑</el-button>
-                </template>
-              </el-table-column>
             </el-table>
           </el-tab-pane>
 
