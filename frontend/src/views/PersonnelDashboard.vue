@@ -71,7 +71,7 @@
                 <span class="h-2 w-2 rounded-full bg-red-500"></span>
               </span>
               七天请假预警
-              <el-badge :value="leaveStats.total" class="ml-2" type="danger" />
+              <el-badge :value="leaveWarningList.length" class="ml-2" type="danger" />
             </el-button>
 
             <div class="h-6 w-px bg-slate-200"></div>
@@ -229,58 +229,81 @@
     </el-dialog>
 
     <!-- 请假预警弹窗 -->
-    <el-dialog v-model="isLeaveModalVisible" title="未来7天请假与排班预警" width="70%" top="5vh">
-      <!-- 风险提示 Banner -->
-      <div class="bg-orange-50 border-l-4 border-orange-400 p-4 mb-6 rounded-r-md flex items-start">
-        <i class="fas fa-exclamation-triangle text-orange-400 mt-1 mr-3"></i>
-        <p class="text-sm text-orange-700">
-          未来 7 天内共有 <strong>{{ leaveStats.total }}</strong> 人次请假，其中 <strong>{{ leaveStats.affectedTasks }}</strong> 项生产活动可能面临人员短缺风险，请及时在面板中重新调配资源！
-        </p>
-      </div>
-
-      <!-- 按日期分组显示 -->
-      <div v-if="Object.keys(groupedLeaves).length > 0" class="max-h-[60vh] overflow-y-auto pr-2">
-        <div v-for="(group, date) in groupedLeaves" :key="date" class="mb-6">
-          <div class="flex items-center mb-3">
-            <el-tag effect="dark" type="primary" size="large" class="font-bold">
-              <i class="far fa-calendar mr-1"></i> {{ formatLeaveDate(date) }}
-            </el-tag>
-            <div class="h-px bg-gray-200 flex-1 ml-4"></div>
+    <el-dialog
+      v-model="isLeaveModalVisible"
+      :show-close="false"
+      width="680px"
+      style="border-radius: 16px; padding: 0; overflow: hidden;"
+      header-class="!hidden"
+      body-class="!p-0"
+      align-center
+    >
+      <div class="flex max-h-[85vh] min-h-0 flex-col">
+        <!-- 弹窗 Header -->
+        <div class="px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
+          <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600">
+              <el-icon :size="18"><Calendar /></el-icon>
+            </div>
+            <h3 class="text-lg font-black text-slate-800 tracking-tight">未来7天请假与排班预警</h3>
           </div>
-          
-          <el-table
-            :data="group"
-            stripe
-            class="!overflow-hidden !rounded-xl"
-            :header-cell-style="{ background: '#f8fafc', color: '#475569', fontWeight: '600' }"
-          >
-            <el-table-column label="员工姓名" width="150">
-              <template #default="{ row }">
-                <span class="font-bold">{{ row.name }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="所属部门/岗位" width="200">
-              <template #default="{ row }">
-                <div class="text-gray-900">{{ row.department }}</div>
-                <div class="text-gray-500 text-xs">{{ row.role }}</div>
-              </template>
-            </el-table-column>
-            <el-table-column label="受影响的占用活动">
-              <template #default="{ row }">
-                <div v-if="row.assigned_tasks && row.assigned_tasks.length > 0" class="flex flex-wrap gap-2">
-                  <el-tag v-for="task in row.assigned_tasks" :key="task" type="danger" size="small" effect="light">
-                    <i class="fas fa-link mr-1"></i> {{ task }}
-                  </el-tag>
+          <button @click="isLeaveModalVisible = false" class="p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 rounded-lg transition-colors">
+            <el-icon :size="20"><Close /></el-icon>
+          </button>
+        </div>
+
+        <!-- 弹窗 Warning Banner -->
+        <div class="bg-orange-50/80 border-b border-orange-100 p-4 shrink-0 flex items-start">
+          <el-icon class="text-orange-500 mt-0.5 mr-3 shrink-0" :size="20"><Warning /></el-icon>
+          <div class="text-sm font-bold text-orange-800 leading-relaxed">
+            未来 7 天内共有 <span class="text-orange-600 text-base mx-1 font-black">{{ leaveWarningList.length }}</span> 人次请假，
+            其中 <span class="text-red-600 text-base mx-1 font-black underline decoration-red-300 underline-offset-2">{{ leaveWarningList.filter(item => item.affectedActivity).length }}</span> 项生产活动可能面临人员短缺风险，请及时调配资源！
+          </div>
+        </div>
+
+        <!-- Timeline 内容区 -->
+        <template v-if="groupedPersonnelWarnings.length > 0">
+          <div class="flex-1 overflow-y-auto p-6 bg-slate-50 max-h-[60vh]">
+            <div class="relative border-l-2 border-slate-200 ml-3 pl-6 space-y-8 pb-4">
+              <div v-for="group in groupedPersonnelWarnings" :key="group.days" class="relative">
+                <div :class="['absolute -left-[35px] top-1 w-6 h-6 border-2 rounded-full flex items-center justify-center z-10 shadow-sm bg-white', group.hasRisk ? 'border-orange-400' : 'border-slate-300']">
+                  <el-icon v-if="group.hasRisk" class="text-orange-500" :size="12"><Clock /></el-icon>
+                  <div v-else class="w-2 h-2 bg-slate-300 rounded-full"></div>
                 </div>
-                <span v-else class="text-green-600 text-sm"><i class="fas fa-check-circle mr-1"></i> 无关联活动，安全</span>
-              </template>
-            </el-table-column>
-          </el-table>
+
+                <div class="text-sm font-black text-slate-800 mb-3 bg-white inline-block px-3 py-1 rounded-lg border border-slate-200 shadow-sm">
+                  {{ group.days }} 天后
+                </div>
+
+                <div class="space-y-3">
+                  <div v-for="person in group.items" :key="person.id" class="group flex items-center justify-between p-3.5 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-blue-300 hover:shadow-md transition-all">
+                    <div class="flex items-center space-x-3">
+                      <div class="w-10 h-10 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
+                        <el-icon :size="18"><User /></el-icon>
+                      </div>
+                      <div>
+                        <div class="text-sm font-black text-slate-800">{{ person.name }}</div>
+                        <div class="text-[11px] font-bold text-slate-400 mt-0.5">{{ person.department || '未知部门' }} · {{ person.role }}</div>
+                      </div>
+                    </div>
+                    <div>
+                      <div v-if="!person.affectedActivity" class="flex items-center px-2.5 py-1 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-md text-xs font-bold">
+                        <el-icon class="mr-1.5" :size="14"><CircleCheck /></el-icon> 无关联活动，安全
+                      </div>
+                      <div v-else class="flex items-center px-2.5 py-1 bg-red-50 text-red-600 border border-red-200 rounded-md text-xs font-bold shadow-sm">
+                        <el-icon class="mr-1.5" :size="14"><WarningFilled /></el-icon> 影响: <span class="ml-1 underline underline-offset-2">{{ person.affectedActivity }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+        <div v-else class="flex-1 bg-slate-50 p-6">
+          <el-empty description="未来 7 天内没有员工请假" />
         </div>
       </div>
-      
-      <el-empty v-else description="未来 7 天内没有员工请假" />
-      
     </el-dialog>
   </div>
 </template>
@@ -291,7 +314,16 @@ import { getPersonnelList, createPersonnel } from '@/api/personnel'
 import type { Personnel } from '@/types'
 import PersonnelAccordionItem from '@/components/PersonnelAccordionItem.vue'
 import { ElMessage } from 'element-plus'
-import { Plus, User, Close } from '@element-plus/icons-vue'
+import {
+  Plus,
+  User,
+  Close,
+  Calendar,
+  Warning,
+  Clock,
+  CircleCheck,
+  WarningFilled
+} from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const loading = ref(false)
@@ -304,48 +336,84 @@ const highlightedPersonnelId = ref('')
 // 请假预警状态与逻辑
 const isLeaveModalVisible = ref(false)
 
-const groupedLeaves = computed(() => {
-  const list = rawPersonnelList.value || []
-  const groups: Record<string, any[]> = {}
-  
-  list.forEach(person => {
-    if (person.upcoming_leaves && person.upcoming_leaves.length > 0) {
-      person.upcoming_leaves.forEach((date: string) => {
-        if (!groups[date]) groups[date] = []
-        groups[date].push(person)
+/** 与 PersonnelAccordionItem 中 leaveOptions（「N天后」）及 ISO 日期字符串兼容 */
+function daysUntilLeaveDate(dateStr: string): number {
+  const s = String(dateStr).trim()
+  if (s === '今天') return 0
+  if (s === '明天') return 1
+  if (s === '后天') return 2
+  const relative = s.match(/^(\d+)天后$/)
+  if (relative) return parseInt(relative[1], 10)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const target = new Date(s)
+  target.setHours(0, 0, 0, 0)
+  if (isNaN(target.getTime())) return 999
+  return Math.round((target.getTime() - today.getTime()) / 86400000)
+}
+
+/** 扁平请假预警列表（与数据接口一致，仅用于展示分组） */
+const leaveWarningList = computed(() => {
+  const items: Array<{
+    id: string
+    name: string
+    department?: string
+    role: string
+    affectedActivity?: string
+    days: number
+  }> = []
+  for (const person of rawPersonnelList.value) {
+    if (!person.upcoming_leaves?.length) continue
+    for (const dateStr of person.upcoming_leaves) {
+      const tasks = person.assigned_tasks
+      const affected =
+        tasks && tasks.length > 0 ? tasks.join('、') : undefined
+      items.push({
+        id: `${person.id || (person as any)._id || person.name}-${dateStr}`,
+        name: person.name,
+        department: person.department,
+        role: person.role || '',
+        affectedActivity: affected,
+        days: daysUntilLeaveDate(dateStr)
       })
     }
-  })
-  
-  // 按日期正序排列
-  return Object.keys(groups).sort().reduce((acc, key) => {
-    acc[key] = groups[key]
-    return acc
-  }, {} as Record<string, any[]>)
+  }
+  return items
 })
 
-// 统计受影响的总人次和被波及的活动数
-const leaveStats = computed(() => {
-  let total = 0
-  let affectedTasks = 0
-  Object.values(groupedLeaves.value).forEach(group => {
-    total += group.length
-    group.forEach(p => {
-      if (p.assigned_tasks && p.assigned_tasks.length > 0) {
-        affectedTasks += p.assigned_tasks.length
-      }
+const groupedPersonnelWarnings = computed(() => {
+  const groups: Record<
+    number,
+    {
+      days: number
+      hasRisk: boolean
+      items: Array<{
+        id: string
+        name: string
+        department?: string
+        role: string
+        affectedActivity?: string
+      }>
+    }
+  > = {}
+  for (const item of leaveWarningList.value) {
+    const d = item.days
+    if (!groups[d]) {
+      groups[d] = { days: d, hasRisk: false, items: [] }
+    }
+    groups[d].items.push({
+      id: item.id,
+      name: item.name,
+      department: item.department,
+      role: item.role,
+      affectedActivity: item.affectedActivity
     })
-  })
-  return { total, affectedTasks }
+    if (item.affectedActivity) {
+      groups[d].hasRisk = true
+    }
+  }
+  return Object.values(groups).sort((a, b) => a.days - b.days)
 })
-
-// 格式化日期的辅助函数
-const formatLeaveDate = (dateStr: string) => {
-  const date = new Date(dateStr)
-  if (isNaN(date.getTime())) return dateStr
-  const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-  return `${date.getMonth() + 1}月${date.getDate()}日 (${days[date.getDay()]})`
-}
 
 // 搜索和筛选状态
 const searchQuery = ref('')

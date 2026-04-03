@@ -259,56 +259,78 @@
     <!-- 七天检修预警弹窗 -->
     <el-dialog
       v-model="isMaintenanceModalVisible"
-      title="七天检修预警"
-      width="70%"
-      center
+      :show-close="false"
+      width="680px"
+      style="border-radius: 16px; padding: 0; overflow: hidden;"
+      header-class="!hidden"
+      body-class="!p-0"
+      align-center
     >
-      <el-alert
-        :title="`未来 7 天内共有 ${totalMaintenanceEquipments} 台设备需要检修，其中 ${totalAffectedActivities} 项生产活动可能面临设备停机风险，请及时在面板中重新调配资源！`"
-        type="warning"
-        show-icon
-        :closable="false"
-        class="warning-banner"
-      />
-
-      <div class="maintenance-groups">
-        <div 
-          v-for="(group, date) in groupedMaintenanceEquipments" 
-          :key="date"
-          class="date-group"
-        >
-          <div class="date-header">
-            <el-tag type="danger" effect="dark" size="large">{{ formatDateLabel(date) }}</el-tag>
-            <el-divider class="date-divider" />
+      <div class="flex max-h-[85vh] min-h-0 flex-col">
+        <!-- 弹窗 Header -->
+        <div class="px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
+          <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center text-red-600">
+              <el-icon :size="18"><WarningFilled /></el-icon>
+            </div>
+            <h3 class="text-lg font-black text-slate-800 tracking-tight">七天检修预警</h3>
           </div>
-          
-          <el-table :data="group" border style="width: 100%">
-            <el-table-column prop="name" label="设备名称">
-              <template #default="scope">
-                <strong>{{ scope.row.name }}</strong>
-              </template>
-            </el-table-column>
-            <el-table-column label="受影响的占用活动">
-              <template #default="scope">
-                <template v-if="scope.row.serving_activities_details && scope.row.serving_activities_details.length > 0">
-                  <el-tag
-                    v-for="detail in scope.row.serving_activities_details"
-                    :key="detail.activity_name"
-                    type="danger"
-                    size="small"
-                    class="activity-tag"
-                  >
-                    {{ detail.activity_name }}
-                  </el-tag>
-                </template>
-                <span v-else class="safe-text">无关联活动，安全</span>
-              </template>
-            </el-table-column>
-          </el-table>
+          <button @click="isMaintenanceModalVisible = false" class="p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 rounded-lg transition-colors">
+            <el-icon :size="20"><Close /></el-icon>
+          </button>
         </div>
-        <el-empty v-if="Object.keys(groupedMaintenanceEquipments).length === 0" description="未来 7 天内无检修计划" />
+
+        <!-- 弹窗 Warning Banner -->
+        <div class="bg-red-50/80 border-b border-red-100 p-4 shrink-0 flex items-start">
+          <el-icon class="text-red-500 mt-0.5 mr-3 shrink-0" style="animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;" :size="20"><WarningFilled /></el-icon>
+          <div class="text-sm font-bold text-red-800 leading-relaxed">
+            未来 7 天内共有 <span class="text-red-600 text-base mx-1 font-black">{{ maintenanceWarningList.length }}</span> 台设备需要检修，
+            其中 <span class="text-red-600 text-base mx-1 font-black bg-red-200 px-1 rounded">{{ maintenanceWarningList.filter(item => item.affectedActivity).length }}</span> 项生产活动面临设备停机风险，请及时调配资源！
+          </div>
+        </div>
+
+        <template v-if="groupedEquipmentWarnings.length > 0">
+          <div class="flex-1 overflow-y-auto p-6 bg-slate-50 max-h-[60vh]">
+            <div class="relative border-l-2 border-slate-200 ml-3 pl-6 space-y-8 pb-4">
+              <div v-for="group in groupedEquipmentWarnings" :key="group.days" class="relative">
+                <div :class="['absolute -left-[35px] top-1 w-6 h-6 border-2 rounded-full flex items-center justify-center z-10 shadow-sm', group.hasRisk ? 'bg-red-50 border-red-500' : 'bg-white border-slate-300']">
+                  <el-icon v-if="group.hasRisk" class="text-red-600" :size="12"><Clock /></el-icon>
+                  <div v-else class="w-2 h-2 bg-slate-300 rounded-full"></div>
+                </div>
+
+                <div :class="['text-sm font-black mb-3 inline-block px-3 py-1 rounded-lg border shadow-sm flex items-center w-max', group.hasRisk ? 'text-red-600 bg-red-50 border-red-200' : 'text-slate-800 bg-white border-slate-200']">
+                  {{ group.days }} 天后 <span v-if="group.hasRisk" class="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                </div>
+
+                <div class="space-y-3">
+                  <div v-for="equip in group.items" :key="equip.id" :class="['group flex items-center justify-between p-3.5 bg-white border rounded-xl shadow-sm transition-all', equip.affectedActivity ? 'border-red-200 bg-red-50/30' : 'border-slate-200 hover:border-amber-300 hover:shadow-md']">
+                    <div class="flex items-center space-x-3">
+                      <div :class="['w-10 h-10 rounded-xl flex items-center justify-center transition-colors', equip.affectedActivity ? 'bg-red-100 text-red-600 border border-red-200' : 'bg-slate-50 border border-slate-100 text-slate-500 group-hover:bg-amber-50 group-hover:text-amber-500']">
+                        <el-icon :size="18"><Tools /></el-icon>
+                      </div>
+                      <div>
+                        <div class="text-sm font-black text-slate-800">{{ equip.name }}</div>
+                        <div class="text-[11px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider">需执行周期检修</div>
+                      </div>
+                    </div>
+                    <div>
+                      <div v-if="!equip.affectedActivity" class="flex items-center px-2.5 py-1 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-md text-xs font-bold">
+                        <el-icon class="mr-1.5" :size="14"><CircleCheck /></el-icon> 无关联活动，安全
+                      </div>
+                      <div v-else class="flex items-center px-2.5 py-1 bg-red-50 text-red-600 border border-red-200 rounded-md text-xs font-bold shadow-sm">
+                        <el-icon class="mr-1.5" :size="14"><WarningFilled /></el-icon> 影响: <span class="ml-1 underline underline-offset-2">{{ equip.affectedActivity }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+        <div v-else class="flex-1 bg-slate-50 p-6">
+          <el-empty description="未来 7 天内无检修计划" />
+        </div>
       </div>
-      <template #footer />
     </el-dialog>
   </div>
 </template>
@@ -316,7 +338,17 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Search, Tools, Plus, Box, Close, Edit } from '@element-plus/icons-vue'
+import {
+  Search,
+  Tools,
+  Plus,
+  Box,
+  Close,
+  Edit,
+  WarningFilled,
+  Clock,
+  CircleCheck
+} from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import EquipmentAccordionItem from '../components/EquipmentAccordionItem.vue'
@@ -367,19 +399,6 @@ const formatProcessName = (processId: string) => {
   };
   
   return `${processId} - ${typeMap[prefix] || '未知流程'}`;
-}
-
-const formatDateLabel = (dateStr: string) => {
-  try {
-    const date = new Date(dateStr)
-    if (isNaN(date.getTime())) {
-      return dateStr
-    }
-    const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-    return `${date.getMonth() + 1}月${date.getDate()}日 (${days[date.getDay()]})`
-  } catch {
-    return dateStr
-  }
 }
 
 const addEquipmentDialogVisible = ref(false)
@@ -629,57 +648,71 @@ const maintenanceEquipments = computed(() => {
   return equipments.value.filter(eq => eq.upcoming_maintenance && eq.upcoming_maintenance.length > 0)
 })
 
-const groupedMaintenanceEquipments = computed(() => {
-  const groups: Record<string, any[]> = {}
-  
-  maintenanceEquipments.value.forEach(eq => {
-    eq.upcoming_maintenance.forEach((date: string) => {
-      if (!groups[date]) {
-        groups[date] = []
-      }
-      // 避免同一个设备在同一个日期重复添加
-      if (!groups[date].find(item => item._id === eq._id)) {
-        groups[date].push(eq)
-      }
+function getMaintenanceDayOffset(str: string): number {
+  if (str === '今天') return 0
+  if (str === '明天') return 1
+  if (str === '后天') return 2
+  const match = str.match(/(\d+)天后/)
+  if (match) return parseInt(match[1], 10)
+  const t = new Date(str).getTime()
+  if (!isNaN(t)) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const d = new Date(str)
+    d.setHours(0, 0, 0, 0)
+    return Math.round((d.getTime() - today.getTime()) / 86400000)
+  }
+  return 999
+}
+
+const maintenanceWarningList = computed(() => {
+  const items: Array<{
+    id: string
+    name: string
+    affectedActivity?: string
+    days: number
+  }> = []
+  maintenanceEquipments.value.forEach((eq) => {
+    eq.upcoming_maintenance?.forEach((date: string) => {
+      const details = eq.serving_activities_details || []
+      const affected = details.length
+        ? details.map((d: { activity_name?: string }) => d.activity_name).filter(Boolean).join('、')
+        : ''
+      items.push({
+        id: `${eq._id || eq.id}-${date}`,
+        name: eq.name,
+        affectedActivity: affected || undefined,
+        days: getMaintenanceDayOffset(date)
+      })
     })
   })
-
-  // 按日期排序
-  const sortedGroups: Record<string, any[]> = {}
-  Object.keys(groups).sort((a, b) => {
-    // 尝试解析相对时间，如 "明天", "1天后"
-    const getDays = (str: string) => {
-      if (str === '今天') return 0
-      if (str === '明天') return 1
-      if (str === '后天') return 2
-      const match = str.match(/(\d+)天后/)
-      if (match) return parseInt(match[1], 10)
-      
-      const time = new Date(str).getTime()
-      return isNaN(time) ? 999 : time
-    }
-    return getDays(a) - getDays(b)
-  }).forEach(key => {
-    sortedGroups[key] = groups[key]
-  })
-
-  return sortedGroups
+  return items
 })
 
-const totalMaintenanceEquipments = computed(() => {
-  const uniqueIds = new Set()
-  maintenanceEquipments.value.forEach(eq => uniqueIds.add(eq._id))
-  return uniqueIds.size
-})
-
-const totalAffectedActivities = computed(() => {
-  let count = 0
-  maintenanceEquipments.value.forEach(eq => {
-    if (eq.serving_activities_details && eq.serving_activities_details.length > 0) {
-      count += eq.serving_activities_details.length
+const groupedEquipmentWarnings = computed(() => {
+  const groups: Record<
+    number,
+    {
+      days: number
+      hasRisk: boolean
+      items: Array<{ id: string; name: string; affectedActivity?: string }>
     }
-  })
-  return count
+  > = {}
+  for (const item of maintenanceWarningList.value) {
+    const d = item.days
+    if (!groups[d]) {
+      groups[d] = { days: d, hasRisk: false, items: [] }
+    }
+    groups[d].items.push({
+      id: item.id,
+      name: item.name,
+      affectedActivity: item.affectedActivity
+    })
+    if (item.affectedActivity) {
+      groups[d].hasRisk = true
+    }
+  }
+  return Object.values(groups).sort((a, b) => a.days - b.days)
 })
 
 </script>
