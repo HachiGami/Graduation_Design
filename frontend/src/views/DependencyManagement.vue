@@ -1,11 +1,11 @@
 <template>
   <div class="flex flex-col h-screen bg-slate-50 overflow-hidden p-4 gap-4 max-w-[1800px] mx-auto">
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex justify-between items-center shrink-0">
-        <div class="flex items-center space-x-3">
+        <div class="flex items-center">
           <el-select
             v-model="currentProcessId"
             placeholder="选择流程ID"
-            class="!w-48 shrink-0"
+            class="!w-40 shrink-0"
             clearable
           >
             <el-option
@@ -15,22 +15,26 @@
               :value="process.id"
             />
           </el-select>
-          <el-button
-            type="primary"
-            class="!bg-blue-600 !border-blue-600 !text-white hover:!bg-blue-700 hover:!border-blue-700"
+          <button
+            type="button"
+            class="ml-3 flex items-center px-4 py-2 font-bold border rounded-lg transition-all shadow-sm bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 shrink-0"
             @click="applySelectedProcessHighlight"
           >
-            定位并高亮
-          </el-button>
-          <el-button class="!bg-white !text-slate-600 !border-slate-300 hover:!text-slate-800 hover:!border-slate-400" @click="clearFlowHighlight">
-            清除高亮
-          </el-button>
+            <el-icon class="mr-1.5"><Aim /></el-icon> 定位并高亮
+          </button>
+          <button
+            type="button"
+            class="ml-3 flex items-center px-4 py-2 font-bold border rounded-lg transition-all shadow-sm bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 shrink-0"
+            @click="clearFlowHighlight"
+          >
+            <el-icon class="mr-1.5"><RefreshRight /></el-icon> 清除高亮
+          </button>
           <!-- 路径分析按钮 (带状态切换) -->
           <button
             type="button"
             @click="togglePathSelectionMode"
             :class="[
-              'ml-3 flex items-center px-4 py-2 font-bold border rounded-lg transition-all shadow-sm',
+              'ml-3 flex shrink-0 items-center px-4 py-2 font-bold border rounded-lg transition-all shadow-sm',
               isPathSelecting
                 ? 'bg-indigo-600 text-white border-indigo-700 animate-pulse'
                 : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100'
@@ -513,7 +517,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { TopRight } from '@element-plus/icons-vue'
-import { DataLine, Odometer, Clock, Warning, VideoPlay, User, Monitor, Box, Select, Guide } from '@element-plus/icons-vue'
+import { Aim, RefreshRight, DataLine, Odometer, Clock, Warning, VideoPlay, User, Monitor, Box, Select, Guide } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createDependency, updateDependency, getGraphData } from '@/api/dependency'
 import { getActivities, getActivity, createActivity, updateActivity, deleteActivity } from '@/api/activity'
