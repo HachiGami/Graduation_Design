@@ -530,56 +530,116 @@
     </el-collapse-item>
   </el-collapse>
 
-  <el-dialog v-model="editDialogVisible" title="修改活动" width="620px">
-    <el-form :model="editForm" label-width="110px">
-      <el-form-item label="活动名称"><el-input v-model="editForm.name" /></el-form-item>
-      <el-form-item label="活动描述"><el-input v-model="editForm.description" type="textarea" /></el-form-item>
-      <el-form-item label="状态">
-        <el-select v-model="editForm.status">
-          <el-option label="待机中" value="pending" />
-          <el-option label="进行中" value="in_progress" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="流程ID" prop="process_id">
-        <el-select 
-          v-model="editForm.process_id" 
-          placeholder="请选择所属流程ID" 
-          style="width: 100%"
-          @change="handleProcessIdChange"
-        >
-          <el-option
-            v-for="item in processOptions"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="前置活动">
-        <el-select
-          v-model="editForm.predecessor_ids"
-          placeholder="输入活动名称进行搜索"
-          clearable
-          multiple
-          filterable
-          style="width: 100%"
-        >
-          <el-option
-            v-for="item in predecessorOptions"
-            :key="item.id"
-            :label="item.name"
-            :value="item.id"
-          />
-        </el-select>
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <div style="display: flex; justify-content: space-between; width: 100%;">
-        <el-button type="danger" @click="handleDeleteActivity">删除该活动</el-button>
-        <div>
-          <el-button @click="editDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="saveActivityEdit">保存</el-button>
+  <el-dialog
+    v-model="editDialogVisible"
+    width="500px"
+    :show-close="false"
+    :align-center="true"
+    append-to-body
+    class="add-entity-dialog edit-activity-dialog rounded-2xl overflow-hidden"
+    header-class="!p-0 !m-0 !border-0"
+    body-class="!p-0"
+    footer-class="!p-0"
+  >
+    <template #header>
+      <div class="flex items-center justify-between border-b border-indigo-100 bg-indigo-50/50 px-6 py-4">
+        <div class="flex items-center space-x-3">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+            <el-icon :size="18"><Edit /></el-icon>
+          </div>
+          <h3 class="text-lg font-bold tracking-tight text-slate-800">修改活动</h3>
         </div>
+        <el-button link class="text-slate-400 hover:text-slate-600" @click="editDialogVisible = false">
+          <el-icon :size="20"><Close /></el-icon>
+        </el-button>
+      </div>
+    </template>
+
+    <div class="bg-white p-6">
+      <div class="grid grid-cols-1 gap-5">
+        <div class="flex flex-col space-y-1.5">
+          <label class="text-[13px] font-bold text-slate-700">
+            <span class="mr-1 text-red-500">*</span>活动名称
+          </label>
+          <el-input v-model="editForm.name" placeholder="请输入活动名称" class="custom-input-indigo w-full" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-5">
+          <div class="flex flex-col space-y-1.5">
+            <label class="text-[13px] font-bold text-slate-700">
+              <span class="mr-1 text-red-500">*</span>流程 ID
+            </label>
+            <el-select
+              v-model="editForm.process_id"
+              placeholder="请选择所属流程ID"
+              class="custom-input-indigo w-full"
+              @change="handleProcessIdChange"
+            >
+              <el-option
+                v-for="item in processOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </div>
+          <div class="flex flex-col space-y-1.5">
+            <label class="text-[13px] font-bold text-slate-700">状态</label>
+            <el-select v-model="editForm.status" class="custom-input-indigo w-full">
+              <el-option label="待机中" value="pending" />
+              <el-option label="进行中" value="in_progress" />
+            </el-select>
+          </div>
+        </div>
+
+        <div class="flex flex-col space-y-1.5">
+          <label class="text-[13px] font-bold text-slate-700">前置活动</label>
+          <el-select
+            v-model="editForm.predecessor_ids"
+            placeholder="输入活动名称进行搜索"
+            class="custom-input-indigo w-full"
+            clearable
+            multiple
+            filterable
+          >
+            <el-option
+              v-for="item in predecessorOptions"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </el-select>
+        </div>
+
+        <div class="flex flex-col space-y-1.5">
+          <label class="text-[13px] font-bold text-slate-700">活动描述</label>
+          <el-input
+            v-model="editForm.description"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入活动描述"
+            class="custom-input-indigo"
+          />
+        </div>
+      </div>
+    </div>
+
+    <template #footer>
+      <div class="flex justify-end space-x-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+        <button
+          type="button"
+          class="rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
+          @click="editDialogVisible = false"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          class="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-indigo-700"
+          @click="saveActivityEdit"
+        >
+          保存
+        </button>
       </div>
     </template>
   </el-dialog>
@@ -1649,5 +1709,37 @@ const handleDeleteActivity = async () => {
 
 .replenish-tip {
   margin-bottom: 12px;
+}
+
+:deep(.edit-activity-dialog.el-dialog) {
+  border-radius: 16px;
+  padding: 0;
+  overflow: hidden;
+}
+
+:deep(.edit-activity-dialog .el-dialog__header) {
+  padding: 0;
+  margin: 0;
+}
+
+:deep(.custom-input-indigo .el-input__wrapper),
+:deep(.custom-input-indigo .el-textarea__inner) {
+  background-color: #f8fafc !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 0 0 1px #e2e8f0 inset !important;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  transition: all 0.2s;
+}
+
+:deep(.custom-input-indigo .el-input__wrapper.is-focus),
+:deep(.custom-input-indigo .el-textarea__inner:focus) {
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 1px #6366f1 inset, 0 0 0 4px #e0e7ff !important;
+}
+
+:deep(.custom-input-indigo .el-select .el-input__wrapper.is-focus) {
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 1px #6366f1 inset, 0 0 0 4px #e0e7ff !important;
 }
 </style>

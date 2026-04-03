@@ -128,44 +128,6 @@
       </div>
     </el-collapse-item>
 
-    <!-- 编辑弹窗 -->
-    <el-dialog
-      v-model="isEditModalVisible"
-      title="编辑设备"
-      width="500px"
-      append-to-body
-    >
-      <el-form :model="editForm" label-width="100px" size="default">
-        <el-form-item label="设备名称" required>
-          <el-input v-model="editForm.name" />
-        </el-form-item>
-        <el-form-item label="设备种类" required>
-          <el-input v-model="editForm.specification" />
-        </el-form-item>
-        <el-form-item label="生产厂家">
-          <el-input v-model="editForm.manufacturer" />
-        </el-form-item>
-        <el-form-item label="生产时间">
-          <el-date-picker
-            v-model="editForm.production_date"
-            type="date"
-            placeholder="选择日期"
-            value-format="YYYY-MM-DD"
-            style="width: 100%"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <div style="display: flex; justify-content: space-between; width: 100%;">
-          <el-button type="danger" @click="handleDeleteEquipment">删除该设备</el-button>
-          <div>
-            <el-button @click="isEditModalVisible = false">取消</el-button>
-            <el-button type="primary" @click="submitEdit" :loading="isSubmitting">保存</el-button>
-          </div>
-        </div>
-      </template>
-    </el-dialog>
-
     <!-- 检修弹窗 -->
     <el-dialog
       v-model="isMaintenanceModalVisible"
@@ -203,7 +165,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Edit, Delete, Monitor, Calendar, Clock, Share, Connection } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -221,17 +183,12 @@ const props = withDefaults(
   }
 )
 
-const emit = defineEmits(['update'])
+const emit = defineEmits<{
+  update: []
+  'edit-equipment': [equipment: any]
+  'close-edit-equipment': []
+}>()
 const router = useRouter()
-
-const isEditModalVisible = ref(false)
-const isSubmitting = ref(false)
-const editForm = reactive({
-  name: '',
-  specification: '',
-  manufacturer: '',
-  production_date: ''
-})
 
 const isMaintenanceModalVisible = ref(false)
 const isSubmittingMaintenance = ref(false)
@@ -294,11 +251,7 @@ const goToActivityDetail = (task: any) => {
 }
 
 const openEditModal = () => {
-  editForm.name = props.equipment.name || ''
-  editForm.specification = props.equipment.specification || ''
-  editForm.manufacturer = props.equipment.manufacturer || ''
-  editForm.production_date = props.equipment.production_date || ''
-  isEditModalVisible.value = true
+  emit('edit-equipment', props.equipment)
 }
 
 const openMaintenanceModal = () => {
@@ -334,45 +287,6 @@ const submitMaintenance = async () => {
   }
 }
 
-const submitEdit = async () => {
-  if (!editForm.name.trim()) {
-    ElMessage.warning('设备名称不能为空')
-    return
-  }
-  if (!editForm.specification.trim()) {
-    ElMessage.warning('请输入或选择设备种类')
-    return
-  }
-  isSubmitting.value = true
-  try {
-    const response = await fetch(`http://localhost:8000/api/resources/${props.equipment._id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        name: editForm.name,
-        specification: editForm.specification,
-        manufacturer: editForm.manufacturer,
-        production_date: editForm.production_date
-      })
-    })
-    
-    if (!response.ok) {
-      throw new Error('更新失败')
-    }
-    
-    ElMessage.success('设备信息更新成功')
-    isEditModalVisible.value = false
-    emit('update')
-  } catch (error) {
-    console.error('Failed to update equipment:', error)
-    ElMessage.error('更新失败，请重试')
-  } finally {
-    isSubmitting.value = false
-  }
-}
-
 const handleDeleteEquipment = async () => {
   const id = props.equipment._id || props.equipment.id
   if (!id) return
@@ -384,7 +298,7 @@ const handleDeleteEquipment = async () => {
     )
     await deleteResource(id)
     ElMessage.success('设备已删除')
-    isEditModalVisible.value = false
+    emit('close-edit-equipment')
     emit('update')
   } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('删除失败')

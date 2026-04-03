@@ -68,6 +68,8 @@
           :anchor-id="'equipment-row-' + String(equipment._id || equipment.id || '')"
           :highlighted="highlightedEquipmentId === String(equipment._id || equipment.id || '')"
           @update="fetchEquipments"
+          @edit-equipment="openEditEquipmentDialog"
+          @close-edit-equipment="editEquipmentDialogVisible = false"
         />
       </el-collapse>
       <el-empty v-else description="暂无匹配的设备数据" />
@@ -174,6 +176,86 @@
       </template>
     </el-dialog>
 
+    <!-- 编辑设备弹窗（与添加弹窗同页挂载，避免子组件内 Teleport 导致样式不生效） -->
+    <el-dialog
+      v-model="editEquipmentDialogVisible"
+      width="500px"
+      :show-close="false"
+      :align-center="true"
+      class="add-entity-dialog add-equipment-dialog rounded-2xl overflow-hidden"
+      header-class="!p-0 !m-0 !border-0"
+      body-class="!p-0"
+      footer-class="!p-0"
+    >
+      <template #header>
+        <div class="flex items-center justify-between border-b border-amber-100 bg-amber-50/50 px-6 py-4">
+          <div class="flex items-center space-x-3">
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+              <el-icon :size="18"><Edit /></el-icon>
+            </div>
+            <h3 class="text-lg font-bold tracking-tight text-slate-800">编辑设备</h3>
+          </div>
+          <el-button link class="text-slate-400 hover:text-slate-600" @click="editEquipmentDialogVisible = false">
+            <el-icon :size="20"><Close /></el-icon>
+          </el-button>
+        </div>
+      </template>
+
+      <div class="bg-white p-6">
+        <div class="grid grid-cols-2 gap-5">
+          <div class="col-span-2 flex flex-col space-y-1.5">
+            <label class="text-[13px] font-bold text-slate-700">
+              <span class="mr-1 text-red-500">*</span>设备名称
+            </label>
+            <el-input v-model="editEquipmentForm.name" placeholder="如：巴氏消毒机-001" class="custom-input-amber w-full" />
+          </div>
+
+          <div class="col-span-2 flex flex-col space-y-1.5">
+            <label class="text-[13px] font-bold text-slate-700">
+              <span class="mr-1 text-red-500">*</span>设备种类
+            </label>
+            <el-input v-model="editEquipmentForm.specification" placeholder="如：巴氏消毒机" class="custom-input-amber w-full" />
+          </div>
+
+          <div class="col-span-2 flex flex-col space-y-1.5">
+            <label class="text-[13px] font-bold text-slate-700">生产厂家</label>
+            <el-input v-model="editEquipmentForm.manufacturer" placeholder="生产厂家" class="custom-input-amber w-full" />
+          </div>
+
+          <div class="col-span-2 flex flex-col space-y-1.5">
+            <label class="text-[13px] font-bold text-slate-700">生产时间</label>
+            <el-date-picker
+              v-model="editEquipmentForm.production_date"
+              type="date"
+              placeholder="选择日期"
+              value-format="YYYY-MM-DD"
+              class="custom-input-amber equipment-date-picker w-full"
+            />
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="flex justify-end space-x-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button
+            type="button"
+            class="rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
+            @click="editEquipmentDialogVisible = false"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="rounded-xl bg-amber-500 px-5 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-amber-600"
+            :disabled="editEquipmentSubmitting"
+            @click="submitEditEquipment"
+          >
+            {{ editEquipmentSubmitting ? '提交中…' : '保存' }}
+          </button>
+        </div>
+      </template>
+    </el-dialog>
+
     <!-- 七天检修预警弹窗 -->
     <el-dialog
       v-model="isMaintenanceModalVisible"
@@ -232,9 +314,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Search, Tools, Plus, Box, Close } from '@element-plus/icons-vue'
+import { Search, Tools, Plus, Box, Close, Edit } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import EquipmentAccordionItem from '../components/EquipmentAccordionItem.vue'
@@ -325,6 +407,69 @@ const addEquipmentForm = ref(defaultAddEquipmentForm())
 const openAddEquipmentDialog = () => {
   addEquipmentForm.value = defaultAddEquipmentForm()
   addEquipmentDialogVisible.value = true
+}
+
+const editEquipmentDialogVisible = ref(false)
+const editEquipmentSubmitting = ref(false)
+const editingEquipmentId = ref('')
+const editEquipmentForm = reactive({
+  name: '',
+  specification: '',
+  manufacturer: '',
+  production_date: ''
+})
+
+const openEditEquipmentDialog = (equipment: any) => {
+  editingEquipmentId.value = String(equipment._id || equipment.id || '')
+  editEquipmentForm.name = equipment.name || ''
+  editEquipmentForm.specification = equipment.specification || ''
+  editEquipmentForm.manufacturer = equipment.manufacturer || ''
+  editEquipmentForm.production_date = equipment.production_date || ''
+  editEquipmentDialogVisible.value = true
+}
+
+const submitEditEquipment = async () => {
+  if (!editEquipmentForm.name.trim()) {
+    ElMessage.warning('设备名称不能为空')
+    return
+  }
+  if (!editEquipmentForm.specification.trim()) {
+    ElMessage.warning('请输入或选择设备种类')
+    return
+  }
+  const id = editingEquipmentId.value
+  if (!id) {
+    ElMessage.warning('设备 ID 缺失')
+    return
+  }
+  editEquipmentSubmitting.value = true
+  try {
+    const response = await fetch(`http://localhost:8000/api/resources/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: editEquipmentForm.name,
+        specification: editEquipmentForm.specification,
+        manufacturer: editEquipmentForm.manufacturer,
+        production_date: editEquipmentForm.production_date
+      })
+    })
+
+    if (!response.ok) {
+      throw new Error('更新失败')
+    }
+
+    ElMessage.success('设备信息更新成功')
+    editEquipmentDialogVisible.value = false
+    await fetchEquipments()
+  } catch (error) {
+    console.error('Failed to update equipment:', error)
+    ElMessage.error('更新失败，请重试')
+  } finally {
+    editEquipmentSubmitting.value = false
+  }
 }
 
 const submitAddEquipment = async () => {

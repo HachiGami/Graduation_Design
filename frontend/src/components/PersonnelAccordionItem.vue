@@ -149,55 +149,161 @@
     </div>
 
     <!-- 编辑弹窗 -->
-    <el-dialog v-model="editDialogVisible" title="编辑员工信息" width="500px" append-to-body>
-      <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="100px" size="default">
-        <el-form-item label="姓名" prop="name">
-          <el-input v-model="editForm.name" />
-        </el-form-item>
-        <el-form-item label="角色" prop="role">
-          <el-input v-model="editForm.role" />
-        </el-form-item>
-        <el-form-item label="职责(部门)" prop="responsibility">
-          <el-input v-model="editForm.responsibility" />
-        </el-form-item>
-        <el-form-item label="状态" prop="status">
-          <el-select v-model="editForm.status" placeholder="请选择状态">
-            <el-option label="在职" value="active" />
-            <el-option label="离职" value="resigned" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="年龄">
-          <el-input-number v-model="editForm.age" :min="18" :max="100" />
-        </el-form-item>
-        <el-form-item label="性别">
-          <el-select v-model="editForm.gender" placeholder="请选择性别">
-            <el-option label="男" value="男" />
-            <el-option label="女" value="女" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="籍贯">
-          <el-input v-model="editForm.native_place" />
-        </el-form-item>
-        <el-form-item label="入职日期">
-          <el-date-picker v-model="editForm.hire_date" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" />
-        </el-form-item>
-        <el-form-item label="学历">
-          <el-select v-model="editForm.education" placeholder="请选择学历">
-            <el-option label="初中" value="初中" />
-            <el-option label="高中" value="高中" />
-            <el-option label="大专" value="大专" />
-            <el-option label="本科" value="本科" />
-            <el-option label="硕士及以上" value="硕士及以上" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="薪资(元/月)">
-          <el-input-number v-model="editForm.salary" :min="0" :step="100" />
-        </el-form-item>
+    <el-dialog
+      v-model="editDialogVisible"
+      width="600px"
+      :show-close="false"
+      :align-center="true"
+      append-to-body
+      class="add-entity-dialog edit-personnel-dialog rounded-2xl overflow-hidden"
+      header-class="!p-0 !m-0 !border-0"
+      body-class="!p-0"
+      footer-class="!p-0"
+    >
+      <template #header>
+        <div class="flex items-center justify-between border-b border-blue-100 bg-blue-50/50 px-6 py-4">
+          <div class="flex items-center space-x-3">
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+              <el-icon :size="18"><Edit /></el-icon>
+            </div>
+            <h3 class="text-lg font-bold tracking-tight text-slate-800">编辑员工信息</h3>
+          </div>
+          <el-button link class="text-slate-400 hover:text-slate-600" @click="editDialogVisible = false">
+            <el-icon :size="20"><Close /></el-icon>
+          </el-button>
+        </div>
+      </template>
+
+      <el-form
+        ref="editFormRef"
+        :model="editForm"
+        :rules="editRules"
+        label-width="0"
+        class="edit-personnel-inline-form"
+        hide-required-asterisk
+      >
+        <div class="grid grid-cols-2 gap-x-5 gap-y-4 bg-white p-6">
+          <el-form-item prop="name" class="!mb-0">
+            <div class="flex w-full flex-col space-y-1.5">
+              <label class="text-[13px] font-bold text-slate-700">
+                <span class="mr-1 text-red-500">*</span>姓名
+              </label>
+              <el-input v-model="editForm.name" placeholder="请输入姓名" class="custom-input-blue w-full" />
+            </div>
+          </el-form-item>
+          <el-form-item prop="status" class="!mb-0">
+            <div class="flex w-full flex-col space-y-1.5">
+              <label class="text-[13px] font-bold text-slate-700">状态</label>
+              <el-select v-model="editForm.status" placeholder="请选择状态" class="custom-input-blue w-full">
+                <el-option label="在职" value="active" />
+                <el-option label="离职" value="resigned" />
+              </el-select>
+            </div>
+          </el-form-item>
+
+          <el-form-item prop="role" class="!mb-0">
+            <div class="flex w-full flex-col space-y-1.5">
+              <label class="text-[13px] font-bold text-slate-700">
+                <span class="mr-1 text-red-500">*</span>角色
+              </label>
+              <el-input v-model="editForm.role" placeholder="如：操作员、班长" class="custom-input-blue w-full" />
+            </div>
+          </el-form-item>
+          <el-form-item prop="responsibility" class="!mb-0">
+            <div class="flex w-full flex-col space-y-1.5">
+              <label class="text-[13px] font-bold text-slate-700">
+                <span class="mr-1 text-red-500">*</span>职责(部门)
+              </label>
+              <el-input v-model="editForm.responsibility" placeholder="如：生产部" class="custom-input-blue w-full" />
+            </div>
+          </el-form-item>
+
+          <el-form-item class="!mb-0">
+            <div class="flex w-full flex-col space-y-1.5">
+              <label class="text-[13px] font-bold text-slate-700">年龄</label>
+              <el-input-number
+                v-model="editForm.age"
+                :min="18"
+                :max="100"
+                class="custom-input-blue personnel-edit-input-number w-full"
+                controls-position="right"
+              />
+            </div>
+          </el-form-item>
+          <el-form-item class="!mb-0">
+            <div class="flex w-full flex-col space-y-1.5">
+              <label class="text-[13px] font-bold text-slate-700">性别</label>
+              <el-select v-model="editForm.gender" placeholder="请选择性别" class="custom-input-blue w-full">
+                <el-option label="男" value="男" />
+                <el-option label="女" value="女" />
+              </el-select>
+            </div>
+          </el-form-item>
+
+          <el-form-item class="!mb-0">
+            <div class="flex w-full flex-col space-y-1.5">
+              <label class="text-[13px] font-bold text-slate-700">学历</label>
+              <el-select v-model="editForm.education" placeholder="请选择学历" class="custom-input-blue w-full">
+                <el-option label="初中" value="初中" />
+                <el-option label="高中" value="高中" />
+                <el-option label="大专" value="大专" />
+                <el-option label="本科" value="本科" />
+                <el-option label="硕士及以上" value="硕士及以上" />
+              </el-select>
+            </div>
+          </el-form-item>
+          <el-form-item class="!mb-0">
+            <div class="flex w-full flex-col space-y-1.5">
+              <label class="text-[13px] font-bold text-slate-700">入职日期</label>
+              <el-date-picker
+                v-model="editForm.hire_date"
+                type="date"
+                placeholder="选择日期"
+                value-format="YYYY-MM-DD"
+                class="custom-input-blue personnel-edit-date-picker w-full"
+              />
+            </div>
+          </el-form-item>
+
+          <el-form-item class="!mb-0 col-span-2">
+            <div class="flex w-full flex-col space-y-1.5">
+              <label class="text-[13px] font-bold text-slate-700">籍贯</label>
+              <el-input v-model="editForm.native_place" placeholder="例如：北京" class="custom-input-blue w-full" />
+            </div>
+          </el-form-item>
+
+          <el-form-item class="!mb-0 col-span-2">
+            <div class="flex w-full flex-col space-y-1.5">
+              <label class="text-[13px] font-bold text-slate-700">薪资 (元/月)</label>
+              <el-input-number
+                v-model="editForm.salary"
+                :min="0"
+                :step="100"
+                class="custom-input-blue personnel-edit-input-number w-full"
+                controls-position="right"
+              />
+            </div>
+          </el-form-item>
+        </div>
       </el-form>
+
       <template #footer>
-        <div class="flex justify-end gap-2">
-          <el-button @click="editDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitEdit" :loading="submitting">保存</el-button>
+        <div class="flex justify-end space-x-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button
+            type="button"
+            class="rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
+            @click="editDialogVisible = false"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
+            :disabled="submitting"
+            @click="submitEdit"
+          >
+            {{ submitting ? '提交中…' : '保存' }}
+          </button>
         </div>
       </template>
     </el-dialog>
@@ -237,7 +343,7 @@
 <script setup lang="ts">
 import { ref, PropType } from 'vue'
 import { useRouter } from 'vue-router'
-import { Calendar, Edit, Delete } from '@element-plus/icons-vue'
+import { Calendar, Edit, Delete, Close } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { updatePersonnel, deletePersonnel } from '@/api/personnel'
 import type { Personnel } from '@/types'
@@ -447,5 +553,66 @@ const handleDeletePersonnel = async () => {
   60% {
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
   }
+}
+
+:deep(.edit-personnel-dialog.el-dialog) {
+  border-radius: 16px;
+  padding: 0;
+  overflow: hidden;
+}
+
+:deep(.edit-personnel-dialog .el-dialog__header) {
+  padding: 0;
+  margin: 0;
+}
+
+:deep(.edit-personnel-inline-form .el-form-item__content) {
+  margin-left: 0 !important;
+  line-height: normal;
+}
+
+:deep(.custom-input-blue .el-input__wrapper),
+:deep(.custom-input-blue .el-textarea__inner) {
+  background-color: #f8fafc !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 0 0 1px #e2e8f0 inset !important;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  transition: all 0.2s;
+}
+
+:deep(.custom-input-blue .el-input__wrapper.is-focus),
+:deep(.custom-input-blue .el-textarea__inner:focus) {
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 1px #2563eb inset, 0 0 0 4px #dbeafe !important;
+}
+
+:deep(.custom-input-blue .el-select .el-input__wrapper.is-focus) {
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 1px #2563eb inset, 0 0 0 4px #dbeafe !important;
+}
+
+:deep(.personnel-edit-date-picker.el-date-editor .el-input__wrapper) {
+  background-color: #f8fafc !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 0 0 1px #e2e8f0 inset !important;
+  transition: all 0.2s;
+}
+
+:deep(.personnel-edit-date-picker.el-date-editor .el-input__wrapper.is-focus) {
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 1px #2563eb inset, 0 0 0 4px #dbeafe !important;
+}
+
+:deep(.personnel-edit-input-number.el-input-number .el-input__wrapper) {
+  background-color: #f8fafc !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 0 0 1px #e2e8f0 inset !important;
+  transition: all 0.2s;
+}
+
+:deep(.personnel-edit-input-number.el-input-number .el-input__wrapper.is-focus) {
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 1px #2563eb inset, 0 0 0 4px #dbeafe !important;
 }
 </style>

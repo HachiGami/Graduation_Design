@@ -91,22 +91,62 @@
     </el-dialog>
 
     <!-- 编辑弹窗 -->
-    <el-dialog v-model="editDialogVisible" title="编辑原料信息" width="500px">
-      <el-form :model="editForm" label-width="100px">
-        <el-form-item label="原料名称">
-          <el-input v-model="editForm.name" />
-        </el-form-item>
-        <el-form-item label="单位">
-          <el-input v-model="editForm.unit" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <div class="w-full flex justify-between">
-          <el-button type="danger" @click="handleDeleteMaterial">删除该原料</el-button>
-          <div>
-            <el-button @click="editDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="submitEdit" :loading="submitting">保存修改</el-button>
+    <el-dialog
+      v-model="editDialogVisible"
+      width="450px"
+      :show-close="false"
+      :align-center="true"
+      class="add-entity-dialog edit-material-dialog rounded-2xl overflow-hidden"
+      header-class="!p-0 !m-0 !border-0"
+      body-class="!p-0"
+      footer-class="!p-0"
+    >
+      <template #header>
+        <div class="flex items-center justify-between border-b border-emerald-100 bg-emerald-50/50 px-6 py-4">
+          <div class="flex items-center space-x-3">
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+              <el-icon :size="18"><Edit /></el-icon>
+            </div>
+            <h3 class="text-lg font-bold tracking-tight text-slate-800">编辑原料信息</h3>
           </div>
+          <el-button link class="text-slate-400 hover:text-slate-600" @click="editDialogVisible = false">
+            <el-icon :size="20"><Close /></el-icon>
+          </el-button>
+        </div>
+      </template>
+
+      <div class="bg-white p-6">
+        <div class="grid grid-cols-1 gap-5">
+          <div class="flex flex-col space-y-1.5">
+            <label class="text-[13px] font-bold text-slate-700">
+              <span class="mr-1 text-red-500">*</span>原料名称
+            </label>
+            <el-input v-model="editForm.name" placeholder="如：包装材料-1L纸盒" class="custom-input-emerald w-full" />
+          </div>
+          <div class="flex flex-col space-y-1.5">
+            <label class="text-[13px] font-bold text-slate-700">单位</label>
+            <el-input v-model="editForm.unit" placeholder="如：个" class="custom-input-emerald w-full" />
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="flex justify-end space-x-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button
+            type="button"
+            class="rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
+            @click="editDialogVisible = false"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="rounded-xl bg-emerald-500 px-5 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-600"
+            :disabled="submitting"
+            @click="submitEdit"
+          >
+            {{ submitting ? '提交中…' : '保存修改' }}
+          </button>
         </div>
       </template>
     </el-dialog>
@@ -190,12 +230,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Search, Goods, Close } from '@element-plus/icons-vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { Search, Goods, Close, Edit } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
 import MaterialAccordionItem from '../components/MaterialAccordionItem.vue';
 import axios from 'axios';
-import { createResource, deleteResource } from '@/api/resource';
+import { createResource } from '@/api/resource';
 
 const processMap: Record<string, string> = {
   'P001': '主生产线',
@@ -388,23 +428,6 @@ const submitEdit = async () => {
     ElMessage.error('修改失败');
   } finally {
     submitting.value = false;
-  }
-};
-
-const handleDeleteMaterial = async () => {
-  if (!currentMaterial.value?._id) return;
-  try {
-    await ElMessageBox.confirm(
-      '此操作将从数据库和图谱中永久删除该原料数据，是否继续？',
-      '警告',
-      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
-    );
-    await deleteResource(currentMaterial.value._id);
-    ElMessage.success('原料已删除');
-    editDialogVisible.value = false;
-    fetchMaterials();
-  } catch (error: any) {
-    if (error !== 'cancel') ElMessage.error('删除失败');
   }
 };
 
