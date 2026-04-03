@@ -43,7 +43,7 @@
       </div>
       
       <div class="flex items-center gap-3">
-        <el-badge :value="maintenanceEquipments.length" :hidden="maintenanceEquipments.length === 0" class="item">
+        <el-badge :value="maintenanceWarningList.length" :hidden="maintenanceWarningList.length === 0" class="item">
           <el-button type="danger" @click="isMaintenanceModalVisible = true">
             <el-icon><Tools /></el-icon> 七天检修预警
           </el-button>
@@ -284,7 +284,7 @@
         <div class="bg-red-50/80 border-b border-red-100 p-4 shrink-0 flex items-start">
           <el-icon class="text-red-500 mt-0.5 mr-3 shrink-0" style="animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;" :size="20"><WarningFilled /></el-icon>
           <div class="text-sm font-bold text-red-800 leading-relaxed">
-            未来 7 天内共有 <span class="text-red-600 text-base mx-1 font-black">{{ maintenanceWarningList.length }}</span> 台设备需要检修，
+            未来 7 天内共有 <span class="text-red-600 text-base mx-1 font-black">{{ maintenanceWarningList.length }}</span> 条检修安排，
             其中 <span class="text-red-600 text-base mx-1 font-black bg-red-200 px-1 rounded">{{ maintenanceWarningList.filter(item => item.affectedActivity).length }}</span> 项生产活动面临设备停机风险，请及时调配资源！
           </div>
         </div>
