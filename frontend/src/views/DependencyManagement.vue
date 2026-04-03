@@ -529,7 +529,7 @@ import DashboardPanel from '@/components/DashboardPanel.vue'
 import { analyzeGraph, type AnalysisScope } from '@/utils/graphAnalyzer'
 import { checkResources } from '@/utils/resourceChecker'
 import { getRisks, type RiskItem } from '@/api/analytics'
-import { sumSopStepDurations } from '@/utils/sopDuration'
+import { resolveActivityDurationMinutes, sumSopStepDurations } from '@/utils/sopDuration'
 import { shortestDirectedPath } from '@/utils/graphPath'
 
 type PathAnalysisDashboardPayload = {
@@ -783,7 +783,7 @@ const runPathAnalysisHighlight = (sourceId: string, targetId: string) => {
   const nodeMap = new Map<string, any>((graphData.value.nodes || []).map((n: any) => [n.id, n]))
   const orderedActivities = res.nodeIds.map((id, idx) => {
     const n = nodeMap.get(id)
-    const duration = n ? sumSopStepDurations(n.sop_steps) : 0
+    const duration = n ? resolveActivityDurationMinutes(n) : 0
     return {
       id,
       name: n?.name || id,

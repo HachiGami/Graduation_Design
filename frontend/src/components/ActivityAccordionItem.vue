@@ -644,34 +644,105 @@
     </template>
   </el-dialog>
 
-  <el-dialog v-model="sopDialogVisible" title="编辑活动 SOP 与详情" width="700px">
-    <el-form :model="sopEditForm" label-width="100px">
-      <el-form-item label="活动描述">
-        <el-input type="textarea" v-model="sopEditForm.description" :rows="3" />
-      </el-form-item>
-      
-      <div class="sop-edit-section">
-        <div class="section-title">
-          <span>SOP 步骤列表</span>
-          <span class="total-hint">当前总耗时: {{ currentSopTotalDuration }} 分钟</span>
+  <el-dialog
+    v-model="sopDialogVisible"
+    :show-close="false"
+    custom-class="rounded-2xl overflow-hidden"
+    width="650px"
+    header-class="!p-0 !m-0 !border-0"
+    body-class="!p-0"
+    footer-class="!p-0"
+  >
+    <div class="shrink-0 flex items-center justify-between border-b border-indigo-100 bg-indigo-50/50 px-6 py-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600">
+          <el-icon :size="18"><List /></el-icon>
         </div>
-        
-        <div v-for="(step, index) in sopEditForm.sop_steps" :key="index" class="sop-step-item">
-          <el-tag type="info" class="step-tag">步骤 {{ index + 1 }}</el-tag>
-          <el-input v-model="step.content" placeholder="请输入步骤详情" class="flex-1" />
-          <el-input-number v-model="step.duration" :min="0" placeholder="耗时(分)" class="duration-input" />
-          <el-button type="danger" icon="Delete" circle @click="removeSopStep(index)" />
-        </div>
-        
-        <el-button type="primary" plain class="w-full mt-4" @click="addSopStep">
-          + 添加新步骤
-        </el-button>
+        <h3 class="text-lg font-bold text-slate-800 tracking-tight">编辑活动 SOP 与详情</h3>
       </div>
-    </el-form>
-    <template #footer>
-      <el-button @click="sopDialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="saveSopEdit">保存 SOP</el-button>
-    </template>
+      <button
+        @click="sopDialogVisible = false"
+        class="p-1.5 text-slate-400 hover:bg-slate-200/50 hover:text-slate-600 rounded-lg transition-colors"
+      >
+        <el-icon :size="20"><Close /></el-icon>
+      </button>
+    </div>
+
+    <div class="p-6 bg-white flex flex-col gap-6 max-h-[70vh] overflow-y-auto">
+      <div class="flex flex-col space-y-1.5">
+        <label class="text-[13px] font-bold text-slate-700">活动描述</label>
+        <el-input
+          type="textarea"
+          :rows="3"
+          v-model="sopEditForm.description"
+          placeholder="请输入活动描述..."
+          class="custom-input-indigo"
+        />
+      </div>
+
+      <div>
+        <div class="flex items-center justify-between mb-3">
+          <label class="text-[13px] font-bold text-slate-700 flex items-center">
+            <div class="w-1.5 h-3 bg-indigo-500 rounded-full mr-2"></div>SOP 执行步骤
+          </label>
+          <div class="flex items-center text-xs font-bold bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg border border-indigo-100 shadow-sm">
+            <el-icon class="mr-1.5"><Clock /></el-icon> 当前总耗时:
+            <span class="text-sm font-black mx-1">{{ currentSopTotalDuration }}</span> 分钟
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <div
+            v-for="(step, index) in sopEditForm.sop_steps"
+            :key="index"
+            class="group flex items-center gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:border-indigo-300 hover:shadow-sm transition-all"
+          >
+            <div class="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-xs font-black text-slate-500 shadow-sm shrink-0">
+              {{ index + 1 }}
+            </div>
+
+            <div class="flex-1">
+              <el-input v-model="step.content" placeholder="输入步骤名称/操作详情" class="custom-input-indigo w-full" />
+            </div>
+
+            <div class="w-36 flex items-center relative">
+              <el-input-number v-model="step.duration" :min="0" class="w-full custom-input-indigo" />
+              <span class="absolute right-9 text-[11px] font-bold text-slate-400 pointer-events-none">分钟</span>
+            </div>
+
+            <button
+              @click="removeSopStep(index)"
+              class="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+              title="删除该步骤"
+            >
+              <el-icon :size="18"><Delete /></el-icon>
+            </button>
+          </div>
+        </div>
+
+        <button
+          @click="addSopStep"
+          class="w-full mt-3 py-3 flex items-center justify-center text-sm font-bold text-indigo-600 bg-indigo-50/50 border-2 border-dashed border-indigo-200 rounded-xl hover:bg-indigo-50 hover:border-indigo-300 hover:shadow-sm transition-all"
+        >
+          <el-icon class="mr-1.5"><Plus /></el-icon> 添加新步骤
+        </button>
+      </div>
+    </div>
+
+    <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end space-x-3 shrink-0">
+      <button
+        @click="sopDialogVisible = false"
+        class="px-5 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors"
+      >
+        取消
+      </button>
+      <button
+        @click="saveSopEdit"
+        class="px-5 py-2 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 shadow-sm transition-colors"
+      >
+        保存 SOP
+      </button>
+    </div>
   </el-dialog>
   <div v-show="false" class="hidden">
     {{ workingHoursText }}
@@ -687,7 +758,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { WarningFilled, User, Setting, Box, Calendar, Tools, Clock, Document, Edit, Delete, Plus, Check as CheckIcon, Close } from '@element-plus/icons-vue'
+import { WarningFilled, User, Setting, Box, Calendar, Tools, Clock, Document, Edit, Delete, Plus, Check as CheckIcon, Close, List } from '@element-plus/icons-vue'
 import type { Activity } from '@/types'
 import ActivityResourcesPanel from './ActivityResourcesPanel.vue'
 import {
