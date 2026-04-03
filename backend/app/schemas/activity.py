@@ -70,7 +70,7 @@ class ActivityUpdate(BaseModel):
     status: Optional[Literal["pending", "in_progress"]] = None
     domain: Optional[str] = None
     process_id: Optional[str] = None
-    predecessor_ids: Optional[List[str]] = []
+    predecessor_ids: Optional[List[str]] = None
     version: Optional[int] = None
     is_active: Optional[bool] = None
     working_hours: Optional[List[TimeWindow]] = None

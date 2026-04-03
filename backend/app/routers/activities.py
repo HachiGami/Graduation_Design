@@ -548,7 +548,11 @@ async def update_activity(activity_id: str, activity: ActivityUpdate):
     if not existing_activity:
         raise HTTPException(status_code=404, detail="生产活动不存在")
 
-    update_data = {k: v for k, v in activity.model_dump().items() if v is not None}
+    update_data = {
+        k: v
+        for k, v in activity.model_dump(exclude_unset=True).items()
+        if v is not None
+    }
     predecessor_ids_in_payload = "predecessor_ids" in update_data
     if predecessor_ids_in_payload:
         predecessor_ids = update_data.get("predecessor_ids") or []
