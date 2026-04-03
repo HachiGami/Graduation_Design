@@ -3,7 +3,9 @@
     <el-container>
       <el-aside width="256px" class="bg-white border-r border-slate-100 shadow-sm">
         <div class="logo-area">
-          <div class="logo-icon"></div>
+          <div class="w-8 h-8 bg-blue-50 border border-blue-100 rounded-lg flex items-center justify-center mr-3 shrink-0 transition-colors hover:bg-blue-100 cursor-default">
+            <el-icon :size="18" class="text-blue-600"><Platform /></el-icon>
+          </div>
           <span class="logo-text">乳业生产与调度系统</span>
         </div>
         <el-menu
@@ -36,6 +38,7 @@
 </template>
 
 <script setup lang="ts">
+import { Platform } from '@element-plus/icons-vue'
 </script>
 
 <style>
@@ -60,13 +63,6 @@
   padding: 0 20px;
   gap: 12px;
   border-bottom: 1px solid #f1f5f9;
-}
-
-.logo-icon {
-  width: 32px;
-  height: 32px;
-  background-color: #3b82f6;
-  border-radius: 8px;
 }
 
 .logo-text {
