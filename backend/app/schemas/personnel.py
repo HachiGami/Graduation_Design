@@ -5,7 +5,8 @@ from datetime import datetime
 class PersonnelBase(BaseModel):
     name: str = Field(..., description="姓名")
     role: str = Field(..., description="角色")
-    responsibility: str = Field(..., description="职责")
+    department: Optional[str] = Field(None, description="所属部门")
+    responsibility: str = Field(default="", description="职责（可与部门同步，兼容旧数据）")
     skills: List[str] = Field(default=[], description="技能列表")
     status: str = Field(default="active", description="状态")
     upcoming_leaves: List[str] = Field(
@@ -25,6 +26,7 @@ class PersonnelCreate(PersonnelBase):
 class PersonnelUpdate(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
+    department: Optional[str] = None
     responsibility: Optional[str] = None
     skills: Optional[List[str]] = None
     status: Optional[str] = None

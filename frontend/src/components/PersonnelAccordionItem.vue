@@ -183,72 +183,63 @@
         hide-required-asterisk
       >
         <div class="grid grid-cols-2 gap-x-5 gap-y-4 bg-white p-6">
+          <!-- 第1排 -->
           <el-form-item prop="name" class="!mb-0">
             <div class="flex w-full flex-col space-y-1.5">
-              <label class="text-[13px] font-bold text-slate-700">
-                <span class="mr-1 text-red-500">*</span>姓名
-              </label>
-              <el-input v-model="editForm.name" placeholder="请输入姓名" class="custom-input-blue w-full" />
+              <label class="text-[13px] font-bold text-slate-700"><span class="text-red-500 mr-1">*</span>姓名</label>
+              <el-input v-model="editForm.name" placeholder="请输入姓名" class="custom-input-blue" />
             </div>
           </el-form-item>
           <el-form-item prop="status" class="!mb-0">
             <div class="flex w-full flex-col space-y-1.5">
               <label class="text-[13px] font-bold text-slate-700">状态</label>
-              <el-select v-model="editForm.status" placeholder="请选择状态" class="custom-input-blue w-full">
+              <el-select v-model="editForm.status" class="custom-input-blue">
                 <el-option label="在职" value="active" />
                 <el-option label="离职" value="resigned" />
               </el-select>
             </div>
           </el-form-item>
 
-          <el-form-item prop="role" class="!mb-0">
+          <!-- 第2排 (部门与岗位) -->
+          <el-form-item prop="department" class="!mb-0">
             <div class="flex w-full flex-col space-y-1.5">
-              <label class="text-[13px] font-bold text-slate-700">
-                <span class="mr-1 text-red-500">*</span>角色
-              </label>
-              <el-input v-model="editForm.role" placeholder="如：操作员、班长" class="custom-input-blue w-full" />
+              <label class="text-[13px] font-bold text-slate-700"><span class="text-red-500 mr-1">*</span>部门</label>
+              <el-input v-model="editForm.department" placeholder="如：生产部、仓储部" class="custom-input-blue" />
             </div>
           </el-form-item>
-          <el-form-item prop="responsibility" class="!mb-0">
+          <el-form-item prop="role" class="!mb-0">
             <div class="flex w-full flex-col space-y-1.5">
-              <label class="text-[13px] font-bold text-slate-700">
-                <span class="mr-1 text-red-500">*</span>职责(部门)
-              </label>
-              <el-input v-model="editForm.responsibility" placeholder="如：生产部" class="custom-input-blue w-full" />
+              <label class="text-[13px] font-bold text-slate-700"><span class="text-red-500 mr-1">*</span>岗位</label>
+              <el-input v-model="editForm.role" placeholder="如：操作工、班长" class="custom-input-blue" />
             </div>
           </el-form-item>
 
+          <!-- 第3排 -->
           <el-form-item class="!mb-0">
             <div class="flex w-full flex-col space-y-1.5">
               <label class="text-[13px] font-bold text-slate-700">年龄</label>
-              <el-input-number
-                v-model="editForm.age"
-                :min="18"
-                :max="100"
-                class="custom-input-blue personnel-edit-input-number w-full"
-                controls-position="right"
-              />
+              <el-input-number v-model="editForm.age" :min="18" :max="100" class="custom-input-blue w-full" />
             </div>
           </el-form-item>
           <el-form-item class="!mb-0">
             <div class="flex w-full flex-col space-y-1.5">
               <label class="text-[13px] font-bold text-slate-700">性别</label>
-              <el-select v-model="editForm.gender" placeholder="请选择性别" class="custom-input-blue w-full">
+              <el-select v-model="editForm.gender" class="custom-input-blue">
                 <el-option label="男" value="男" />
                 <el-option label="女" value="女" />
               </el-select>
             </div>
           </el-form-item>
 
+          <!-- 第4排 -->
           <el-form-item class="!mb-0">
             <div class="flex w-full flex-col space-y-1.5">
               <label class="text-[13px] font-bold text-slate-700">学历</label>
-              <el-select v-model="editForm.education" placeholder="请选择学历" class="custom-input-blue w-full">
+              <el-select v-model="editForm.education" class="custom-input-blue">
                 <el-option label="初中" value="初中" />
-                <el-option label="高中" value="高中" />
+                <el-option label="中专/高中" value="中专/高中" />
                 <el-option label="大专" value="大专" />
                 <el-option label="本科" value="本科" />
-                <el-option label="硕士及以上" value="硕士及以上" />
               </el-select>
             </div>
           </el-form-item>
@@ -259,29 +250,23 @@
                 v-model="editForm.hire_date"
                 type="date"
                 placeholder="选择日期"
+                class="custom-input-blue w-full"
                 value-format="YYYY-MM-DD"
-                class="custom-input-blue personnel-edit-date-picker w-full"
               />
             </div>
           </el-form-item>
 
-          <el-form-item class="!mb-0 col-span-2">
+          <!-- 第5排 (籍贯与薪资) -->
+          <el-form-item class="!mb-0">
             <div class="flex w-full flex-col space-y-1.5">
               <label class="text-[13px] font-bold text-slate-700">籍贯</label>
-              <el-input v-model="editForm.native_place" placeholder="例如：北京" class="custom-input-blue w-full" />
+              <el-input v-model="editForm.native_place" placeholder="例如：山东青岛" class="custom-input-blue" />
             </div>
           </el-form-item>
-
-          <el-form-item class="!mb-0 col-span-2">
+          <el-form-item class="!mb-0">
             <div class="flex w-full flex-col space-y-1.5">
               <label class="text-[13px] font-bold text-slate-700">薪资 (元/月)</label>
-              <el-input-number
-                v-model="editForm.salary"
-                :min="0"
-                :step="100"
-                class="custom-input-blue personnel-edit-input-number w-full"
-                controls-position="right"
-              />
+              <el-input-number v-model="editForm.salary" :min="0" :precision="2" class="custom-input-blue w-full" />
             </div>
           </el-form-item>
         </div>
@@ -373,8 +358,8 @@ const editForm = ref<Partial<Personnel>>({})
 const editFormRef = ref<FormInstance>()
 const editRules: FormRules = {
   name: [{ required: true, message: '姓名不能为空', trigger: 'blur' }],
-  role: [{ required: true, message: '角色不能为空', trigger: 'blur' }],
-  responsibility: [{ required: true, message: '职责不能为空', trigger: 'blur' }],
+  role: [{ required: true, message: '岗位不能为空', trigger: 'blur' }],
+  department: [{ required: true, message: '部门不能为空', trigger: 'blur' }],
   status: [{ required: true, message: '请选择状态', trigger: 'change' }]
 }
 
@@ -448,7 +433,11 @@ const goToActivityDetail = (task: any) => {
 }
 
 const handleEdit = () => {
-  editForm.value = { ...props.personnel }
+  const p = props.personnel
+  editForm.value = {
+    ...p,
+    department: p.department || p.responsibility || ''
+  }
   editDialogVisible.value = true
 }
 
@@ -490,12 +479,13 @@ const submitEdit = async () => {
   }
 
   const { id, work_hours, assigned_tasks, created_at, updated_at, ...rest } = editForm.value as Personnel
+  const dep = (rest.department ?? rest.responsibility ?? '').trim()
   const payload = {
     ...rest,
-    // 后端 PersonnelUpdate 接受的字段，不发送废弃字段
     name: rest.name,
     role: rest.role,
-    responsibility: rest.responsibility,
+    department: dep || undefined,
+    responsibility: dep,
     skills: rest.skills,
     status: rest.status,
     upcoming_leaves: rest.upcoming_leaves,

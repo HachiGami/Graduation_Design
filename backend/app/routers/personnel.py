@@ -35,6 +35,8 @@ async def create_personnel(personnel: PersonnelCreate):
     driver = get_neo4j_driver()
     
     personnel_dict = personnel.model_dump()
+    if personnel_dict.get("department") and not (personnel_dict.get("responsibility") or "").strip():
+        personnel_dict["responsibility"] = personnel_dict["department"]
     personnel_dict["created_at"] = datetime.utcnow()
     personnel_dict["updated_at"] = datetime.utcnow()
     

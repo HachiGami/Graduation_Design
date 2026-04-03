@@ -138,59 +138,50 @@
 
       <div class="bg-white p-6">
         <div class="grid grid-cols-2 gap-x-5 gap-y-4">
+          <!-- 第1排 -->
           <div class="flex flex-col space-y-1.5">
-            <label class="text-[13px] font-bold text-slate-700">
-              <span class="mr-1 text-red-500">*</span>姓名
-            </label>
-            <el-input v-model="addPersonnelForm.name" placeholder="请输入姓名" class="custom-input-blue w-full" />
+            <label class="text-[13px] font-bold text-slate-700"><span class="text-red-500 mr-1">*</span>姓名</label>
+            <el-input v-model="addPersonnelForm.name" placeholder="请输入姓名" class="custom-input-blue" />
           </div>
           <div class="flex flex-col space-y-1.5">
             <label class="text-[13px] font-bold text-slate-700">状态</label>
-            <el-select v-model="addPersonnelForm.status" placeholder="状态" class="custom-input-blue w-full">
+            <el-select v-model="addPersonnelForm.status" class="custom-input-blue">
               <el-option label="在职" value="active" />
               <el-option label="离职" value="resigned" />
             </el-select>
           </div>
 
+          <!-- 第2排 (部门与岗位) -->
           <div class="flex flex-col space-y-1.5">
-            <label class="text-[13px] font-bold text-slate-700">
-              <span class="mr-1 text-red-500">*</span>角色
-            </label>
-            <el-input v-model="addPersonnelForm.role" placeholder="如：操作员、班长" class="custom-input-blue w-full" />
+            <label class="text-[13px] font-bold text-slate-700"><span class="text-red-500 mr-1">*</span>部门</label>
+            <el-input v-model="addPersonnelForm.department" placeholder="如：生产部、仓储部" class="custom-input-blue" />
           </div>
           <div class="flex flex-col space-y-1.5">
-            <label class="text-[13px] font-bold text-slate-700">
-              <span class="mr-1 text-red-500">*</span>职责/部门
-            </label>
-            <el-input v-model="addPersonnelForm.responsibility" placeholder="如：生产部" class="custom-input-blue w-full" />
+            <label class="text-[13px] font-bold text-slate-700"><span class="text-red-500 mr-1">*</span>岗位</label>
+            <el-input v-model="addPersonnelForm.role" placeholder="如：操作工、班长" class="custom-input-blue" />
           </div>
 
+          <!-- 第3排 -->
           <div class="flex flex-col space-y-1.5">
             <label class="text-[13px] font-bold text-slate-700">年龄</label>
-            <el-input-number
-              v-model="addPersonnelForm.age"
-              :min="18"
-              :max="100"
-              class="custom-input-blue personnel-input-number w-full"
-              controls-position="right"
-            />
+            <el-input-number v-model="addPersonnelForm.age" :min="18" :max="100" class="custom-input-blue w-full" />
           </div>
           <div class="flex flex-col space-y-1.5">
             <label class="text-[13px] font-bold text-slate-700">性别</label>
-            <el-select v-model="addPersonnelForm.gender" placeholder="请选择" class="custom-input-blue w-full">
+            <el-select v-model="addPersonnelForm.gender" class="custom-input-blue">
               <el-option label="男" value="男" />
               <el-option label="女" value="女" />
             </el-select>
           </div>
 
+          <!-- 第4排 -->
           <div class="flex flex-col space-y-1.5">
             <label class="text-[13px] font-bold text-slate-700">学历</label>
-            <el-select v-model="addPersonnelForm.education" placeholder="请选择" class="custom-input-blue w-full">
+            <el-select v-model="addPersonnelForm.education" class="custom-input-blue">
               <el-option label="初中" value="初中" />
-              <el-option label="高中" value="高中" />
+              <el-option label="中专/高中" value="中专/高中" />
               <el-option label="大专" value="大专" />
               <el-option label="本科" value="本科" />
-              <el-option label="硕士及以上" value="硕士及以上" />
             </el-select>
           </div>
           <div class="flex flex-col space-y-1.5">
@@ -199,20 +190,19 @@
               v-model="addPersonnelForm.hire_date"
               type="date"
               placeholder="选择日期"
+              class="custom-input-blue w-full"
               value-format="YYYY-MM-DD"
-              class="custom-input-blue personnel-date-picker w-full"
             />
           </div>
 
-          <div class="col-span-2 flex flex-col space-y-1.5">
+          <!-- 第5排 (籍贯与薪资) -->
+          <div class="flex flex-col space-y-1.5">
+            <label class="text-[13px] font-bold text-slate-700">籍贯</label>
+            <el-input v-model="addPersonnelForm.native_place" placeholder="例如：山东青岛" class="custom-input-blue" />
+          </div>
+          <div class="flex flex-col space-y-1.5">
             <label class="text-[13px] font-bold text-slate-700">薪资 (元/月)</label>
-            <el-input-number
-              v-model="addPersonnelForm.salary"
-              :min="0"
-              :step="100"
-              class="custom-input-blue personnel-input-number w-full"
-              controls-position="right"
-            />
+            <el-input-number v-model="addPersonnelForm.salary" :min="0" :precision="2" class="custom-input-blue w-full" />
           </div>
         </div>
       </div>
@@ -473,14 +463,15 @@ const addPersonnelSubmitting = ref(false)
 
 const defaultAddPersonnelForm = () => ({
   name: '',
+  department: '',
   role: '',
-  responsibility: '',
   status: 'active',
   skills: [] as string[],
   upcoming_leaves: [] as string[],
   age: undefined as number | undefined,
   gender: '',
   education: '',
+  native_place: '',
   salary: undefined as number | undefined,
   hire_date: ''
 })
@@ -497,17 +488,21 @@ const submitAddPersonnel = async () => {
     ElMessage.warning('姓名不能为空')
     return
   }
-  if (!addPersonnelForm.value.role.trim()) {
-    ElMessage.warning('角色不能为空')
+  if (!addPersonnelForm.value.department?.trim()) {
+    ElMessage.warning('部门不能为空')
     return
   }
-  if (!addPersonnelForm.value.responsibility.trim()) {
-    ElMessage.warning('职责/部门不能为空')
+  if (!addPersonnelForm.value.role.trim()) {
+    ElMessage.warning('岗位不能为空')
     return
   }
   addPersonnelSubmitting.value = true
   try {
-    await createPersonnel(addPersonnelForm.value as Personnel)
+    const dept = (addPersonnelForm.value.department || '').trim()
+    await createPersonnel({
+      ...addPersonnelForm.value,
+      responsibility: dept
+    } as Personnel)
     ElMessage.success('员工添加成功')
     addPersonnelDialogVisible.value = false
     await fetchData()
