@@ -24,7 +24,37 @@
             <el-option label="进行中" value="in_progress" />
           </el-select>
         </div>
-        <el-button type="primary" class="rounded-lg border-blue-500 bg-blue-500 px-5 py-2 font-medium" :icon="Plus" @click="openAddActivityDialog">添加活动</el-button>
+        <div class="flex items-center">
+          <!-- 批量操作区 -->
+          <div class="flex items-center space-x-3 mr-4">
+            <!-- 一键启动按钮 -->
+            <button
+              type="button"
+              class="flex items-center px-4 py-2 bg-emerald-50 text-emerald-600 text-sm font-bold border border-emerald-200 rounded-lg hover:bg-emerald-100 hover:shadow-sm transition-all"
+              title="一键启动当前列表中的所有活动"
+              @click="handleBatchStart"
+            >
+              <el-icon class="mr-1.5"><VideoPlay /></el-icon>
+              一键启动
+            </button>
+
+            <!-- 一键停机按钮 -->
+            <button
+              type="button"
+              class="flex items-center px-4 py-2 bg-red-50 text-red-600 text-sm font-bold border border-red-200 rounded-lg hover:bg-red-100 hover:shadow-sm transition-all"
+              title="一键停机当前列表中的所有活动"
+              @click="handleBatchStop"
+            >
+              <el-icon class="mr-1.5"><VideoPause /></el-icon>
+              一键停机
+            </button>
+          </div>
+
+          <!-- 竖向分割线 -->
+          <div class="w-px h-6 bg-slate-200 mr-4"></div>
+
+          <el-button type="primary" class="rounded-lg border-blue-500 bg-blue-500 px-5 py-2 font-medium" :icon="Plus" @click="openAddActivityDialog">添加活动</el-button>
+        </div>
       </div>
 
       <div class="flex items-center border-b border-slate-100 px-6 pb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -180,11 +210,11 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { getActivities, createActivity } from '@/api/activity'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getActivities, createActivity, updateActivity } from '@/api/activity'
 import type { Activity } from '@/types'
 import ActivityAccordionItem from '@/components/ActivityAccordionItem.vue'
-import { Plus, Search, VideoPlay, Close } from '@element-plus/icons-vue'
+import { Plus, Search, VideoPlay, VideoPause, Close } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const DOMAIN_LIST = ['production', 'transport', 'sales', 'quality', 'warehouse']
@@ -260,6 +290,81 @@ const filteredActivities = computed(() => {
 
   return result
 })
+
+const getActivityRowId = (a: Activity) => String(a.id ?? (a as any)._id ?? '')
+
+const handleBatchStart = async () => {
+  const targetActivities = filteredActivities.value.filter((a) => a.status !== 'in_progress')
+
+  if (targetActivities.length === 0) {
+    ElMessage.info('当前列表中没有需要启动的活动')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要一键启动当前筛选出的 ${targetActivities.length} 个活动吗？`,
+      '批量启动确认',
+      { confirmButtonText: '确定启动', cancelButtonText: '取消', type: 'warning' }
+    )
+
+    await Promise.all(
+      targetActivities.map((activity) => {
+        const id = getActivityRowId(activity)
+        const payload = { ...activity, status: 'in_progress' as const }
+        return updateActivity(id, payload)
+      })
+    )
+
+    ElMessage.success(`成功批量启动 ${targetActivities.length} 个活动`)
+    await loadAllActivities()
+  } catch (e) {
+    if (e !== 'cancel') {
+      console.error('批量启动失败:', e)
+      ElMessage.error('批量启动失败，请稍后重试')
+    }
+  }
+}
+
+const handleBatchStop = async () => {
+  const targetActivities = filteredActivities.value.filter(
+    (a) => a.status !== 'pending' && a.status !== 'paused'
+  )
+
+  if (targetActivities.length === 0) {
+    ElMessage.info('当前列表中没有需要停机的活动')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要一键停机当前筛选出的 ${targetActivities.length} 个活动吗？`,
+      '批量停机确认',
+      {
+        confirmButtonText: '确定停机',
+        cancelButtonText: '取消',
+        type: 'error',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+
+    await Promise.all(
+      targetActivities.map((activity) => {
+        const id = getActivityRowId(activity)
+        const payload = { ...activity, status: 'pending' as const }
+        return updateActivity(id, payload)
+      })
+    )
+
+    ElMessage.success(`成功批量停机 ${targetActivities.length} 个活动`)
+    await loadAllActivities()
+  } catch (e) {
+    if (e !== 'cancel') {
+      console.error('批量停机失败:', e)
+      ElMessage.error('批量停机失败，请稍后重试')
+    }
+  }
+}
 
 const loadAllActivities = async () => {
   try {
